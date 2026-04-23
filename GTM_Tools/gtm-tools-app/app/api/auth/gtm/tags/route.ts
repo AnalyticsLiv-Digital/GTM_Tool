@@ -1,98 +1,28 @@
-// import { NextResponse } from "next/server";
-// import { cookies } from "next/headers";
-
-// export async function GET(req: Request) {
-//   try {
-//     const cookieStore = await cookies();
-//     const accessToken = cookieStore.get("google_access_token")?.value;
-
-//     if (!accessToken) {
-//       return NextResponse.json(
-//         { error: "Google access token missing. Please login again." },
-//         { status: 401 }
-//       );
-//     }
-
-//     const url = new URL(req.url);
-//     const accountId = url.searchParams.get("accountId");
-//     const containerId = url.searchParams.get("containerId");
-//     const workspaceId = url.searchParams.get("workspaceId");
-
-//     if (!accountId || !containerId || !workspaceId) {
-//       return NextResponse.json(
-//         { error: "accountId, containerId, workspaceId are required" },
-//         { status: 400 }
-//       );
-//     }
-
-//     const parent = `accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}`;
-
-//     const res = await fetch(
-//       `https://tagmanager.googleapis.com/tagmanager/v2/${parent}/tags`,
-//       {
-//         headers: {
-//           Authorization: `Bearer ${accessToken}`,
-//         },
-//       }
-//     );
-
-//     const data = await res.json();
-
-//     if (!res.ok) {
-//       return NextResponse.json(
-//         { error: "Failed to fetch tags", details: data },
-//         { status: res.status }
-//       );
-//     }
-
-//     return NextResponse.json(data);
-//   } catch (error) {
-//     console.error("Tags API Error:", error);
-//     return NextResponse.json(
-//       { error: "Internal server error" },
-//       { status: 500 }
-//     );
-//   }
-// }
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { getValidGoogleAccessToken } from "@/lib/googleAuth";
 
-async function getAccessToken() {
-  return (await cookies()).get("google_access_token")?.value;
-}
-
-// --------------------
 // GET Tags
-// --------------------
 export async function GET(req: Request) {
   try {
-    const accessToken = await getAccessToken();
+    const { searchParams } = new URL(req.url);
 
-    if (!accessToken) {
-      return NextResponse.json(
-        { error: "Missing Google access token" },
-        { status: 401 }
-      );
-    }
-
-    const url = new URL(req.url);
-    const accountId = url.searchParams.get("accountId");
-    const containerId = url.searchParams.get("containerId");
-    const workspaceId = url.searchParams.get("workspaceId");
+    const accountId = searchParams.get("accountId");
+    const containerId = searchParams.get("containerId");
+    const workspaceId = searchParams.get("workspaceId");
 
     if (!accountId || !containerId || !workspaceId) {
       return NextResponse.json(
-        { error: "accountId, containerId, workspaceId required" },
+        { error: "accountId, containerId, workspaceId are required" },
         { status: 400 }
       );
     }
 
+    const accessToken = await getValidGoogleAccessToken();
+
     const apiUrl = `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/tags`;
 
     const res = await fetch(apiUrl, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
 
     const data = await res.json();
@@ -105,29 +35,18 @@ export async function GET(req: Request) {
     }
 
     return NextResponse.json({ tag: data.tag || [] });
-  } catch (err) {
-    console.error("Tags GET Error:", err);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } catch (err: any) {
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: err.message || "Internal server error" },
       { status: 500 }
     );
   }
 }
 
-// --------------------
 // CREATE Tag
-// --------------------
 export async function POST(req: Request) {
   try {
-    const accessToken = await getAccessToken();
-
-    if (!accessToken) {
-      return NextResponse.json(
-        { error: "Missing Google access token" },
-        { status: 401 }
-      );
-    }
-
     const body = await req.json();
     const { accountId, containerId, workspaceId, tag } = body;
 
@@ -137,6 +56,8 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
+
+    const accessToken = await getValidGoogleAccessToken();
 
     const apiUrl = `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/tags`;
 
@@ -158,30 +79,19 @@ export async function POST(req: Request) {
       );
     }
 
-    return NextResponse.json(data);
-  } catch (err) {
-    console.error("Tags POST Error:", err);
+    return NextResponse.json({ success: true, tag: data });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } catch (err: any) {
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: err.message || "Internal server error" },
       { status: 500 }
     );
   }
 }
 
-// --------------------
 // UPDATE Tag
-// --------------------
 export async function PUT(req: Request) {
   try {
-    const accessToken = await getAccessToken();
-
-    if (!accessToken) {
-      return NextResponse.json(
-        { error: "Missing Google access token" },
-        { status: 401 }
-      );
-    }
-
     const body = await req.json();
     const { accountId, containerId, workspaceId, tagId, tag } = body;
 
@@ -191,6 +101,8 @@ export async function PUT(req: Request) {
         { status: 400 }
       );
     }
+
+    const accessToken = await getValidGoogleAccessToken();
 
     const apiUrl = `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/tags/${tagId}`;
 
@@ -212,35 +124,25 @@ export async function PUT(req: Request) {
       );
     }
 
-    return NextResponse.json(data);
-  } catch (err) {
-    console.error("Tags PUT Error:", err);
+    return NextResponse.json({ success: true, tag: data });
+   
+  } catch (err: unknown) {
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: (err instanceof Error ? err.message : String(err)) || "Internal server error" },
       { status: 500 }
     );
   }
 }
 
-// --------------------
 // DELETE Tag
-// --------------------
 export async function DELETE(req: Request) {
   try {
-    const accessToken = await getAccessToken();
+    const { searchParams } = new URL(req.url);
 
-    if (!accessToken) {
-      return NextResponse.json(
-        { error: "Missing Google access token" },
-        { status: 401 }
-      );
-    }
-
-    const url = new URL(req.url);
-    const accountId = url.searchParams.get("accountId");
-    const containerId = url.searchParams.get("containerId");
-    const workspaceId = url.searchParams.get("workspaceId");
-    const tagId = url.searchParams.get("tagId");
+    const accountId = searchParams.get("accountId");
+    const containerId = searchParams.get("containerId");
+    const workspaceId = searchParams.get("workspaceId");
+    const tagId = searchParams.get("tagId");
 
     if (!accountId || !containerId || !workspaceId || !tagId) {
       return NextResponse.json(
@@ -249,13 +151,13 @@ export async function DELETE(req: Request) {
       );
     }
 
+    const accessToken = await getValidGoogleAccessToken();
+
     const apiUrl = `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/tags/${tagId}`;
 
     const res = await fetch(apiUrl, {
       method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
 
     if (!res.ok) {
@@ -267,10 +169,10 @@ export async function DELETE(req: Request) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (err) {
-    console.error("Tags DELETE Error:", err);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } catch (err: any) {
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: err.message || "Internal server error" },
       { status: 500 }
     );
   }

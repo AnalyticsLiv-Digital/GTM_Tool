@@ -1,31 +1,12 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-// import { getValidGoogleAccessToken } from "@/lib/googleAuth";
+import { getValidGoogleAccessToken } from "@/lib/googleAuth";
 
-
-async function getAccessToken() {
-  return (await cookies()).get("google_access_token")?.value;
-}
-
-// --------------------
-// GET Workspaces List
-// --------------------
+// GET Workspaces
 export async function GET(req: Request) {
   try {
-        // const accessToken = await getValidGoogleAccessToken();
-
-    const accessToken = await getAccessToken();
-
-    if (!accessToken) {
-      return NextResponse.json(
-        { error: "Google access token missing. Please login again." },
-        { status: 401 }
-      );
-    }
-
-    const url = new URL(req.url);
-    const accountId = url.searchParams.get("accountId");
-    const containerId = url.searchParams.get("containerId");
+    const { searchParams } = new URL(req.url);
+    const accountId = searchParams.get("accountId");
+    const containerId = searchParams.get("containerId");
 
     if (!accountId || !containerId) {
       return NextResponse.json(
@@ -34,14 +15,12 @@ export async function GET(req: Request) {
       );
     }
 
-    console.log("Fetching workspaces for accessToken:", accessToken);
+    const accessToken = await getValidGoogleAccessToken();
 
     const apiUrl = `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces`;
 
     const res = await fetch(apiUrl, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
 
     const data = await res.json();
@@ -54,116 +33,74 @@ export async function GET(req: Request) {
     }
 
     return NextResponse.json({ workspace: data.workspace || [] });
-  } catch (error) {
-    console.error("Workspaces GET Error:", error);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } catch (err: any) {
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: err.message || "Internal server error" },
       { status: 500 }
     );
   }
 }
 
-// --------------------
 // CREATE Workspace
-// --------------------
 export async function POST(req: Request) {
   try {
-    const accessToken = await getAccessToken();
-
-    if (!accessToken) {
-      return NextResponse.json(
-        { error: "Google access token missing. Please login again." },
-        { status: 401 }
-      );
-    }
-
     const body = await req.json();
     const { accountId, containerId, name } = body;
 
     if (!accountId || !containerId || !name) {
       return NextResponse.json(
-        { error: "accountId, containerId, and name are required" },
+        { error: "accountId, containerId and name are required" },
         { status: 400 }
       );
     }
 
-    // Check workspace count (max 3)
-    const listRes = await fetch(
-      `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces`,
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      }
-    );
+    const accessToken = await getValidGoogleAccessToken();
 
-    const listData = await listRes.json();
-    const workspaceCount = listData?.workspace?.length || 0;
+    const apiUrl = `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces`;
 
-    if (workspaceCount >= 3) {
+    const res = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ name }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
       return NextResponse.json(
-        { error: "You can only create maximum 3 workspaces (default + 2 custom)." },
-        { status: 400 }
+        { error: "Failed to create workspace", details: data },
+        { status: res.status }
       );
     }
 
-    // Create workspace
-    const createRes = await fetch(
-      `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          name,
-        }),
-      }
-    );
-
-    const createData = await createRes.json();
-
-    if (!createRes.ok) {
-      return NextResponse.json(
-        { error: "Failed to create workspace", details: createData },
-        { status: createRes.status }
-      );
-    }
-
-    return NextResponse.json(createData);
-  } catch (error) {
-    console.error("Workspaces POST Error:", error);
+    return NextResponse.json({ success: true, workspace: data });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } catch (err: any) {
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: err.message || "Internal server error" },
       { status: 500 }
     );
   }
 }
 
-// --------------------
 // UPDATE Workspace
-// --------------------
 export async function PUT(req: Request) {
   try {
-    const accessToken = await getAccessToken();
-
-    if (!accessToken) {
-      return NextResponse.json(
-        { error: "Google access token missing. Please login again." },
-        { status: 401 }
-      );
-    }
-
     const body = await req.json();
     const { accountId, containerId, workspaceId, name } = body;
 
     if (!accountId || !containerId || !workspaceId || !name) {
       return NextResponse.json(
-        { error: "accountId, containerId, workspaceId, and name are required" },
+        { error: "accountId, containerId, workspaceId, name are required" },
         { status: 400 }
       );
     }
+
+    const accessToken = await getValidGoogleAccessToken();
 
     const apiUrl = `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}`;
 
@@ -173,9 +110,7 @@ export async function PUT(req: Request) {
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        name,
-      }),
+      body: JSON.stringify({ name }),
     });
 
     const data = await res.json();
@@ -187,69 +122,38 @@ export async function PUT(req: Request) {
       );
     }
 
-    return NextResponse.json(data);
-  } catch (error) {
-    console.error("Workspaces PUT Error:", error);
+    return NextResponse.json({ success: true, workspace: data });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } catch (err: any) {
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: err.message || "Internal server error" },
       { status: 500 }
     );
   }
 }
 
-// --------------------
 // DELETE Workspace
-// --------------------
 export async function DELETE(req: Request) {
   try {
-    const accessToken = await getAccessToken();
-
-    if (!accessToken) {
-      return NextResponse.json(
-        { error: "Google access token missing. Please login again." },
-        { status: 401 }
-      );
-    }
-
-    const url = new URL(req.url);
-    const accountId = url.searchParams.get("accountId");
-    const containerId = url.searchParams.get("containerId");
-    const workspaceId = url.searchParams.get("workspaceId");
+    const { searchParams } = new URL(req.url);
+    const accountId = searchParams.get("accountId");
+    const containerId = searchParams.get("containerId");
+    const workspaceId = searchParams.get("workspaceId");
 
     if (!accountId || !containerId || !workspaceId) {
       return NextResponse.json(
-        { error: "accountId, containerId and workspaceId are required" },
+        { error: "accountId, containerId, workspaceId are required" },
         { status: 400 }
       );
     }
 
-    // Prevent deleting if only 1 workspace exists
-    const listRes = await fetch(
-      `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces`,
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      }
-    );
-
-    const listData = await listRes.json();
-    const workspaceCount = listData?.workspace?.length || 0;
-
-    if (workspaceCount <= 1) {
-      return NextResponse.json(
-        { error: "You cannot delete the default workspace. At least 1 workspace must exist." },
-        { status: 400 }
-      );
-    }
+    const accessToken = await getValidGoogleAccessToken();
 
     const apiUrl = `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}`;
 
     const res = await fetch(apiUrl, {
       method: "DELETE",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
 
     if (!res.ok) {
@@ -261,10 +165,10 @@ export async function DELETE(req: Request) {
     }
 
     return NextResponse.json({ success: true });
-  } catch (error) {
-    console.error("Workspaces DELETE Error:", error);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } catch (err: any) {
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: err.message || "Internal server error" },
       { status: 500 }
     );
   }

@@ -40,6 +40,12 @@ const NAV_ITEMS = [
     icon: BarChart2,
     accent: "#f87171",
   },
+  {
+    label: "Templates",
+    href: "/dashboard/templates",
+    icon: BarChart2,
+    accent: "#f87171",
+  },
 ];
 
 export default function Sidebar() {

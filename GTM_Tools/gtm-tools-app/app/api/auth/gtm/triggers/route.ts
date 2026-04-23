@@ -1,23 +1,23 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { getValidGoogleAccessToken } from "@/lib/googleAuth";
 
-async function getAccessToken() {
-  return (await cookies()).get("google_access_token")?.value;
-}
-
+// GET Triggers
 export async function GET(req: Request) {
   try {
-    const accessToken = await getAccessToken();
-    if (!accessToken) return NextResponse.json({ error: "Missing token" }, { status: 401 });
+    const { searchParams } = new URL(req.url);
 
-    const url = new URL(req.url);
-    const accountId = url.searchParams.get("accountId");
-    const containerId = url.searchParams.get("containerId");
-    const workspaceId = url.searchParams.get("workspaceId");
+    const accountId = searchParams.get("accountId");
+    const containerId = searchParams.get("containerId");
+    const workspaceId = searchParams.get("workspaceId");
 
     if (!accountId || !containerId || !workspaceId) {
-      return NextResponse.json({ error: "Missing params" }, { status: 400 });
+      return NextResponse.json(
+        { error: "accountId, containerId, workspaceId required" },
+        { status: 400 }
+      );
     }
+
+    const accessToken = await getValidGoogleAccessToken();
 
     const apiUrl = `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/triggers`;
 
@@ -28,27 +28,36 @@ export async function GET(req: Request) {
     const data = await res.json();
 
     if (!res.ok) {
-      return NextResponse.json({ error: "Failed to fetch triggers", details: data }, { status: res.status });
+      return NextResponse.json(
+        { error: "Failed to fetch triggers", details: data },
+        { status: res.status }
+      );
     }
 
     return NextResponse.json({ trigger: data.trigger || [] });
-  } catch (err) {
-    console.error("Triggers GET Error:", err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } catch (err: any) {
+    return NextResponse.json(
+      { error: err.message || "Internal server error" },
+      { status: 500 }
+    );
   }
 }
 
+// CREATE Trigger
 export async function POST(req: Request) {
   try {
-    const accessToken = await getAccessToken();
-    if (!accessToken) return NextResponse.json({ error: "Missing token" }, { status: 401 });
-
     const body = await req.json();
     const { accountId, containerId, workspaceId, trigger } = body;
 
     if (!accountId || !containerId || !workspaceId || !trigger) {
-      return NextResponse.json({ error: "Missing fields" }, { status: 400 });
+      return NextResponse.json(
+        { error: "accountId, containerId, workspaceId, trigger required" },
+        { status: 400 }
+      );
     }
+
+    const accessToken = await getValidGoogleAccessToken();
 
     const apiUrl = `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/triggers`;
 
@@ -64,27 +73,36 @@ export async function POST(req: Request) {
     const data = await res.json();
 
     if (!res.ok) {
-      return NextResponse.json({ error: "Failed to create trigger", details: data }, { status: res.status });
+      return NextResponse.json(
+        { error: "Failed to create trigger", details: data },
+        { status: res.status }
+      );
     }
 
-    return NextResponse.json(data);
-  } catch (err) {
-    console.error("Triggers POST Error:", err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ success: true, trigger: data });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } catch (err: any) {
+    return NextResponse.json(
+      { error: err.message || "Internal server error" },
+      { status: 500 }
+    );
   }
 }
 
+// UPDATE Trigger
 export async function PUT(req: Request) {
   try {
-    const accessToken = await getAccessToken();
-    if (!accessToken) return NextResponse.json({ error: "Missing token" }, { status: 401 });
-
     const body = await req.json();
     const { accountId, containerId, workspaceId, triggerId, trigger } = body;
 
     if (!accountId || !containerId || !workspaceId || !triggerId || !trigger) {
-      return NextResponse.json({ error: "Missing fields" }, { status: 400 });
+      return NextResponse.json(
+        { error: "accountId, containerId, workspaceId, triggerId, trigger required" },
+        { status: 400 }
+      );
     }
+
+    const accessToken = await getValidGoogleAccessToken();
 
     const apiUrl = `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/triggers/${triggerId}`;
 
@@ -100,30 +118,40 @@ export async function PUT(req: Request) {
     const data = await res.json();
 
     if (!res.ok) {
-      return NextResponse.json({ error: "Failed to update trigger", details: data }, { status: res.status });
+      return NextResponse.json(
+        { error: "Failed to update trigger", details: data },
+        { status: res.status }
+      );
     }
 
-    return NextResponse.json(data);
-  } catch (err) {
-    console.error("Triggers PUT Error:", err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ success: true, trigger: data });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } catch (err: any) {
+    return NextResponse.json(
+      { error: err.message || "Internal server error" },
+      { status: 500 }
+    );
   }
 }
 
+// DELETE Trigger
 export async function DELETE(req: Request) {
   try {
-    const accessToken = await getAccessToken();
-    if (!accessToken) return NextResponse.json({ error: "Missing token" }, { status: 401 });
+    const { searchParams } = new URL(req.url);
 
-    const url = new URL(req.url);
-    const accountId = url.searchParams.get("accountId");
-    const containerId = url.searchParams.get("containerId");
-    const workspaceId = url.searchParams.get("workspaceId");
-    const triggerId = url.searchParams.get("triggerId");
+    const accountId = searchParams.get("accountId");
+    const containerId = searchParams.get("containerId");
+    const workspaceId = searchParams.get("workspaceId");
+    const triggerId = searchParams.get("triggerId");
 
     if (!accountId || !containerId || !workspaceId || !triggerId) {
-      return NextResponse.json({ error: "Missing params" }, { status: 400 });
+      return NextResponse.json(
+        { error: "accountId, containerId, workspaceId, triggerId required" },
+        { status: 400 }
+      );
     }
+
+    const accessToken = await getValidGoogleAccessToken();
 
     const apiUrl = `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/triggers/${triggerId}`;
 
@@ -134,12 +162,18 @@ export async function DELETE(req: Request) {
 
     if (!res.ok) {
       const data = await res.json();
-      return NextResponse.json({ error: "Failed to delete trigger", details: data }, { status: res.status });
+      return NextResponse.json(
+        { error: "Failed to delete trigger", details: data },
+        { status: res.status }
+      );
     }
 
     return NextResponse.json({ success: true });
-  } catch (err) {
-    console.error("Triggers DELETE Error:", err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } catch (err: any) {
+    return NextResponse.json(
+      { error: err.message || "Internal server error" },
+      { status: 500 }
+    );
   }
 }

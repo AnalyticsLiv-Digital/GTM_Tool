@@ -1,14 +1,9 @@
-
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
-
-async function getAccessToken() {
-  return (await cookies()).get("google_access_token")?.value;
-}
+import { getValidGoogleAccessToken } from "@/lib/googleAuth";
 
 export async function GET() {
   try {
-    const accessToken = await getAccessToken();
+    const accessToken = await getValidGoogleAccessToken();
 
     if (!accessToken) {
       return NextResponse.json(
@@ -20,7 +15,9 @@ export async function GET() {
     const apiUrl = `https://tagmanager.googleapis.com/tagmanager/v2/accounts`;
 
     const res = await fetch(apiUrl, {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
     });
 
     const data = await res.json();
@@ -33,14 +30,17 @@ export async function GET() {
     }
 
     return NextResponse.json({ account: data.account || [] });
-  } catch (err) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } catch (err: any) {
     console.error("Accounts GET Error:", err);
+
     return NextResponse.json(
-      { error: "Internal server error" },
+      { error: err.message || "Internal server error" },
       { status: 500 }
     );
   }
-}// import { NextResponse } from "next/server";
+}
+// import { NextResponse } from "next/server";
 // // import { cookies } from "next/headers";
 // import { getValidGoogleAccessToken } from "@/lib/googleAuth";
 

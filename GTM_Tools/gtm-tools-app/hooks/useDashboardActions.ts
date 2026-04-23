@@ -721,6 +721,134 @@ export function useDashboardActions() {
       store.setVariableCrudLoading(false);
     }
   };
+  // -----------------------------
+  // FETCH TEMPLATES
+  // -----------------------------
+  const fetchTemplates = async () => {
+    if (
+      !store.selectedAccountId ||
+      !store.selectedContainerId ||
+      !store.selectedWorkspaceId
+    )
+      return;
+
+    try {
+      store.setTemplatesLoading(true);
+      store.setTemplatesError("");
+
+      const res = await fetch(
+        `/api/auth/gtm/templates/export?accountId=${store.selectedAccountId}&containerId=${store.selectedContainerId}&workspaceId=${store.selectedWorkspaceId}`
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) throw new Error(data?.error || "Failed to fetch templates");
+
+      store.setTemplates(data.template || []);
+    } catch (err: any) {
+      store.setTemplatesError(err.message);
+    } finally {
+      store.setTemplatesLoading(false);
+    }
+  };
+
+  // ============================================================
+  // TEMPLATE CRUD
+  // ============================================================
+
+  const handleSaveTemplate = async () => {
+    if (
+      !store.selectedAccountId ||
+      !store.selectedContainerId ||
+      !store.selectedWorkspaceId
+    )
+      return alert("Select workspace first");
+
+    if (!store.templateNameInput.trim())
+      return alert("Template name required");
+
+    try {
+      store.setTemplateCrudLoading(true);
+
+      if (store.templateModalMode === "create") {
+        const res = await fetch("/api/auth/gtm/templates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            accountId: store.selectedAccountId,
+            containerId: store.selectedContainerId,
+            workspaceId: store.selectedWorkspaceId,
+            template: {
+              name: store.templateNameInput.trim(),
+            },
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || "Create template failed");
+      }
+
+      if (store.templateModalMode === "edit") {
+        const res = await fetch("/api/auth/gtm/templates", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            accountId: store.selectedAccountId,
+            containerId: store.selectedContainerId,
+            workspaceId: store.selectedWorkspaceId,
+            templateId: store.selectedTemplateId,
+            template: {
+              name: store.templateNameInput.trim(),
+            },
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || "Update template failed");
+      }
+
+      store.setShowTemplateModal(false);
+      store.setTemplateNameInput("");
+      await fetchTemplates();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      store.setTemplateCrudLoading(false);
+    }
+  };
+
+  const handleDeleteTemplate = async () => {
+    if (
+      !store.selectedAccountId ||
+      !store.selectedContainerId ||
+      !store.selectedWorkspaceId
+    )
+      return alert("Select workspace first");
+
+    if (!store.selectedTemplateId)
+      return alert("Select template first");
+
+    if (!confirm("Delete this template?")) return;
+
+    try {
+      store.setTemplateCrudLoading(true);
+
+      const res = await fetch(
+        `/api/auth/gtm/templates?accountId=${store.selectedAccountId}&containerId=${store.selectedContainerId}&workspaceId=${store.selectedWorkspaceId}&templateId=${store.selectedTemplateId}`,
+        { method: "DELETE" }
+      );
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Delete template failed");
+
+      store.setSelectedTemplateId("");
+      await fetchTemplates();
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      store.setTemplateCrudLoading(false);
+    }
+  };
 
   return {
     // fetch
@@ -760,5 +888,10 @@ export function useDashboardActions() {
     openEditVariableModal,
     handleSaveVariable,
     handleDeleteVariable,
+
+    // templates
+    fetchTemplates,
+    handleSaveTemplate,
+    handleDeleteTemplate,
   };
 }
