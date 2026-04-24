@@ -266,20 +266,7 @@ export function useDashboardActions() {
     if (store.workspaces.length >= 3)
       return alert("You can only create maximum 3 workspaces.");
 
-    store.setWorkspaceModalMode("create");
     store.setWorkspaceNameInput("");
-    store.setShowWorkspaceModal(true);
-  };
-
-  const openEditWorkspaceModal = () => {
-    const ws = store.workspaces.find(
-      (w: any) => w.workspaceId === store.selectedWorkspaceId
-    );
-
-    if (!ws) return alert("Select workspace first");
-
-    store.setWorkspaceModalMode("edit");
-    store.setWorkspaceNameInput(ws.name || "");
     store.setShowWorkspaceModal(true);
   };
 
@@ -290,79 +277,27 @@ export function useDashboardActions() {
     if (!store.workspaceNameInput.trim())
       return alert("Workspace name required");
 
-    if (store.workspaceModalMode === "create" && store.workspaces.length >= 3)
+    if (store.workspaces.length >= 3)
       return alert("You can only create maximum 3 workspaces.");
 
     try {
       store.setWorkspaceCrudLoading(true);
 
-      if (store.workspaceModalMode === "create") {
-        const res = await fetch("/api/auth/gtm/workspaces", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            accountId: store.selectedAccountId,
-            containerId: store.selectedContainerId,
-            name: store.workspaceNameInput.trim(),
-          }),
-        });
-
-        const data = await res.json();
-        if (!res.ok) throw new Error(data?.error || "Create workspace failed");
-      }
-
-      if (store.workspaceModalMode === "edit") {
-        const res = await fetch("/api/auth/gtm/workspaces", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            accountId: store.selectedAccountId,
-            containerId: store.selectedContainerId,
-            workspaceId: store.selectedWorkspaceId,
-            name: store.workspaceNameInput.trim(),
-          }),
-        });
-
-        const data = await res.json();
-        if (!res.ok) throw new Error(data?.error || "Update workspace failed");
-      }
-
-      store.setShowWorkspaceModal(false);
-      await fetchWorkspaces();
-    } catch (err: any) {
-      alert(err.message);
-    } finally {
-      store.setWorkspaceCrudLoading(false);
-    }
-  };
-
-  const handleDeleteWorkspace = async () => {
-    if (
-      !store.selectedAccountId ||
-      !store.selectedContainerId ||
-      !store.selectedWorkspaceId
-    )
-      return alert("Select account, container and workspace first");
-
-    if (!confirm("Delete this workspace?")) return;
-
-    try {
-      store.setWorkspaceCrudLoading(true);
-
-      const res = await fetch(
-        `/api/auth/gtm/workspaces?accountId=${store.selectedAccountId}&containerId=${store.selectedContainerId}&workspaceId=${store.selectedWorkspaceId}`,
-        { method: "DELETE" }
-      );
+      const res = await fetch("/api/auth/gtm/workspaces", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accountId: store.selectedAccountId,
+          containerId: store.selectedContainerId,
+          name: store.workspaceNameInput.trim(),
+        }),
+      });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Delete workspace failed");
+      if (!res.ok) throw new Error(data?.error || "Failed to create workspace");
 
-      store.setSelectedWorkspaceId("");
-
-      store.setTags([]);
-      store.setTriggers([]);
-      store.setVariables([]);
-
+      store.setShowWorkspaceModal(false);
+      store.setWorkspaceNameInput("");
       await fetchWorkspaces();
     } catch (err: any) {
       alert(err.message);
@@ -370,6 +305,7 @@ export function useDashboardActions() {
       store.setWorkspaceCrudLoading(false);
     }
   };
+
 
   // ============================================================
   // TAG CRUD
@@ -867,9 +803,7 @@ export function useDashboardActions() {
 
     // workspace crud
     openCreateWorkspaceModal,
-    openEditWorkspaceModal,
     handleSaveWorkspace,
-    handleDeleteWorkspace,
 
     // tags crud
     openCreateTagModal,

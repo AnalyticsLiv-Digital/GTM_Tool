@@ -135,6 +135,7 @@ export async function GET(req: Request) {
     const accountId = url.searchParams.get("accountId");
     const containerId = url.searchParams.get("containerId");
     const workspaceId = url.searchParams.get("workspaceId");
+    const templateId = url.searchParams.get("templateId"); // OPTIONAL
 
     if (!accountId || !containerId || !workspaceId) {
       return NextResponse.json(
@@ -143,7 +144,10 @@ export async function GET(req: Request) {
       );
     }
 
-    const apiUrl = `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/templates`;
+    // If templateId exists => fetch single template
+    const apiUrl = templateId
+      ? `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/templates/${templateId}`
+      : `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/templates`;
 
     const res = await fetch(apiUrl, {
       headers: { Authorization: `Bearer ${accessToken}` },
@@ -158,10 +162,19 @@ export async function GET(req: Request) {
       );
     }
 
+    // If templateId exists return single template object
+    if (templateId) {
+      return NextResponse.json({ template: data });
+    }
+
+    // else return list
     return NextResponse.json({ template: data.template || [] });
   } catch (err) {
     console.error("Templates GET Error:", err);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
   }
 }
 

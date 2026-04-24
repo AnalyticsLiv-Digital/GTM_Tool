@@ -1,7 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 interface DashboardStore {
+  workspaceModalMode: string;
+
   // Selected IDs
   selectedAccountId: string;
   selectedContainerId: string;
@@ -10,6 +13,7 @@ interface DashboardStore {
   selectedTagId: string;
   selectedTriggerId: string;
   selectedVariableId: string;
+  selectedTemplateId: string;
 
   setSelectedAccountId: (id: string) => void;
   setSelectedContainerId: (id: string) => void;
@@ -18,6 +22,7 @@ interface DashboardStore {
   setSelectedTagId: (id: string) => void;
   setSelectedTriggerId: (id: string) => void;
   setSelectedVariableId: (id: string) => void;
+  setSelectedTemplateId: (id: string) => void;
 
   // Data
   containers: any[];
@@ -25,6 +30,7 @@ interface DashboardStore {
   tags: any[];
   triggers: any[];
   variables: any[];
+  templates: any[];
 
   // Loading & Errors
   containersLoading: boolean;
@@ -42,23 +48,29 @@ interface DashboardStore {
   variablesLoading: boolean;
   variablesError: string;
 
+  templatesLoading: boolean;
+  templatesError: string;
+
   setContainers: (data: any[]) => void;
   setWorkspaces: (data: any[]) => void;
   setTags: (data: any[]) => void;
   setTriggers: (data: any[]) => void;
   setVariables: (data: any[]) => void;
+  setTemplates: (data: any[]) => void;
 
   setContainersLoading: (val: boolean) => void;
   setWorkspacesLoading: (val: boolean) => void;
   setTagsLoading: (val: boolean) => void;
   setTriggersLoading: (val: boolean) => void;
   setVariablesLoading: (val: boolean) => void;
+  setTemplatesLoading: (val: boolean) => void;
 
   setContainersError: (msg: string) => void;
   setWorkspacesError: (msg: string) => void;
   setTagsError: (msg: string) => void;
   setTriggersError: (msg: string) => void;
   setVariablesError: (msg: string) => void;
+  setTemplatesError: (msg: string) => void;
 
   // Container Modal
   showContainerModal: boolean;
@@ -73,12 +85,10 @@ interface DashboardStore {
 
   // Workspace Modal
   showWorkspaceModal: boolean;
-  workspaceModalMode: "create" | "edit";
   workspaceNameInput: string;
   workspaceCrudLoading: boolean;
 
   setShowWorkspaceModal: (val: boolean) => void;
-  setWorkspaceModalMode: (mode: "create" | "edit") => void;
   setWorkspaceNameInput: (val: string) => void;
   setWorkspaceCrudLoading: (val: boolean) => void;
 
@@ -115,18 +125,6 @@ interface DashboardStore {
   setVariableNameInput: (val: string) => void;
   setVariableCrudLoading: (val: boolean) => void;
 
-    // Templates
-  selectedTemplateId: string;
-  setSelectedTemplateId: (id: string) => void;
-
-  templates: any[];
-  templatesLoading: boolean;
-  templatesError: string;
-
-  setTemplates: (data: any[]) => void;
-  setTemplatesLoading: (val: boolean) => void;
-  setTemplatesError: (msg: string) => void;
-
   // Template Modal
   showTemplateModal: boolean;
   templateModalMode: "create" | "edit";
@@ -139,171 +137,193 @@ interface DashboardStore {
   setTemplateCrudLoading: (val: boolean) => void;
 }
 
-export const useDashboardStore = create<DashboardStore>((set) => ({
-  // Selected IDs
-  selectedAccountId: "",
-  selectedContainerId: "",
-  selectedWorkspaceId: "",
+export const useDashboardStore = create<DashboardStore>()(
+  persist(
+    (set) => ({
+      workspaceModalMode: "create",
 
-  selectedTagId: "",
-  selectedTriggerId: "",
-  selectedVariableId: "",
-  selectedTemplateId: "",
+      // Selected IDs
+      selectedAccountId: "",
+      selectedContainerId: "",
+      selectedWorkspaceId: "",
 
-  setSelectedAccountId: (id) =>
-  set({
-    selectedAccountId: id,
-    selectedContainerId: "",
-    selectedWorkspaceId: "",
-    selectedTagId: "",
-    selectedTriggerId: "",
-    selectedVariableId: "",
-    selectedTemplateId: "",
+      selectedTagId: "",
+      selectedTriggerId: "",
+      selectedVariableId: "",
+      selectedTemplateId: "",
 
-    templates: [],
-    templatesLoading: false,
-    templatesError: "",
-  }),
+      setSelectedAccountId: (id) =>
+        set({
+          selectedAccountId: id,
+          selectedContainerId: "",
+          selectedWorkspaceId: "",
+          selectedTagId: "",
+          selectedTriggerId: "",
+          selectedVariableId: "",
+          selectedTemplateId: "",
 
-  setSelectedContainerId: (id) =>
-  set({
-    selectedContainerId: id,
-    selectedWorkspaceId: "",
-    selectedTagId: "",
-    selectedTriggerId: "",
-    selectedVariableId: "",
-    selectedTemplateId: "",
+          containers: [],
+          workspaces: [],
+          tags: [],
+          triggers: [],
+          variables: [],
+          templates: [],
+        }),
 
-    templates: [],
-    templatesLoading: false,
-    templatesError: "",
-  }),
+      setSelectedContainerId: (id) =>
+        set({
+          selectedContainerId: id,
+          selectedWorkspaceId: "",
+          selectedTagId: "",
+          selectedTriggerId: "",
+          selectedVariableId: "",
+          selectedTemplateId: "",
 
-  setSelectedWorkspaceId: (id) =>
-  set({
-    selectedWorkspaceId: id,
-    selectedTagId: "",
-    selectedTriggerId: "",
-    selectedVariableId: "",
-    selectedTemplateId: "",
+          workspaces: [],
+          tags: [],
+          triggers: [],
+          variables: [],
+          templates: [],
+        }),
 
-    templates: [],
-    templatesLoading: false,
-    templatesError: "",
-  }),
+      setSelectedWorkspaceId: (id) =>
+        set({
+          selectedWorkspaceId: id,
+          selectedTagId: "",
+          selectedTriggerId: "",
+          selectedVariableId: "",
+          selectedTemplateId: "",
 
-  setSelectedTagId: (id) => set({ selectedTagId: id }),
-  setSelectedTriggerId: (id) => set({ selectedTriggerId: id }),
-  setSelectedVariableId: (id) => set({ selectedVariableId: id }),
-   setSelectedTemplateId: (id) => set({ selectedTemplateId: id }),
+          tags: [],
+          triggers: [],
+          variables: [],
+          templates: [],
+        }),
 
-  // Data
-  containers: [],
-  workspaces: [],
-  tags: [],
-  triggers: [],
-  variables: [],
-  templates: [],
+      setSelectedTagId: (id) => set({ selectedTagId: id }),
+      setSelectedTriggerId: (id) => set({ selectedTriggerId: id }),
+      setSelectedVariableId: (id) => set({ selectedVariableId: id }),
+      setSelectedTemplateId: (id) => set({ selectedTemplateId: id }),
 
-  setContainers: (data) => set({ containers: data }),
-  setWorkspaces: (data) => set({ workspaces: data }),
-  setTags: (data) => set({ tags: data }),
-  setTriggers: (data) => set({ triggers: data }),
-  setVariables: (data) => set({ variables: data }),
-  setTemplates: (data) => set({ templates: data }),
+      // Data
+      containers: [],
+      workspaces: [],
+      tags: [],
+      triggers: [],
+      variables: [],
+      templates: [],
 
-  // Loading + Errors
-  containersLoading: false,
-  containersError: "",
-  workspacesLoading: false,
-  workspacesError: "",
-  tagsLoading: false,
-  tagsError: "",
-  triggersLoading: false,
-  triggersError: "",
-  variablesLoading: false,
-  variablesError: "",
-  templatesLoading: false,
-  templatesError: "",
+      setContainers: (data) => set({ containers: data }),
+      setWorkspaces: (data) => set({ workspaces: data }),
+      setTags: (data) => set({ tags: data }),
+      setTriggers: (data) => set({ triggers: data }),
+      setVariables: (data) => set({ variables: data }),
+      setTemplates: (data) => set({ templates: data }),
 
-  setContainersLoading: (val) => set({ containersLoading: val }),
-  setWorkspacesLoading: (val) => set({ workspacesLoading: val }),
-  setTagsLoading: (val) => set({ tagsLoading: val }),
-  setTriggersLoading: (val) => set({ triggersLoading: val }),
-  setVariablesLoading: (val) => set({ variablesLoading: val }),
-  setTemplatesLoading: (val) => set({ templatesLoading: val }),
+      // Loading + Errors
+      containersLoading: false,
+      containersError: "",
 
-  setContainersError: (msg) => set({ containersError: msg }),
-  setWorkspacesError: (msg) => set({ workspacesError: msg }),
-  setTagsError: (msg) => set({ tagsError: msg }),
-  setTriggersError: (msg) => set({ triggersError: msg }),
-  setVariablesError: (msg) => set({ variablesError: msg }),
-  setTemplatesError: (msg) => set({ templatesError: msg }),
+      workspacesLoading: false,
+      workspacesError: "",
 
-  // Container Modal
-  showContainerModal: false,
-  containerModalMode: "create",
-  containerNameInput: "",
-  containerCrudLoading: false,
+      tagsLoading: false,
+      tagsError: "",
 
-  setShowContainerModal: (val) => set({ showContainerModal: val }),
-  setContainerModalMode: (mode) => set({ containerModalMode: mode }),
-  setContainerNameInput: (val) => set({ containerNameInput: val }),
-  setContainerCrudLoading: (val) => set({ containerCrudLoading: val }),
+      triggersLoading: false,
+      triggersError: "",
 
-  // Workspace Modal
-  showWorkspaceModal: false,
-  workspaceModalMode: "create",
-  workspaceNameInput: "",
-  workspaceCrudLoading: false,
+      variablesLoading: false,
+      variablesError: "",
 
-  setShowWorkspaceModal: (val) => set({ showWorkspaceModal: val }),
-  setWorkspaceModalMode: (mode) => set({ workspaceModalMode: mode }),
-  setWorkspaceNameInput: (val) => set({ workspaceNameInput: val }),
-  setWorkspaceCrudLoading: (val) => set({ workspaceCrudLoading: val }),
+      templatesLoading: false,
+      templatesError: "",
 
-  // Tag Modal
-  showTagModal: false,
-  tagModalMode: "create",
-  tagNameInput: "",
-  tagCrudLoading: false,
+      setContainersLoading: (val) => set({ containersLoading: val }),
+      setWorkspacesLoading: (val) => set({ workspacesLoading: val }),
+      setTagsLoading: (val) => set({ tagsLoading: val }),
+      setTriggersLoading: (val) => set({ triggersLoading: val }),
+      setVariablesLoading: (val) => set({ variablesLoading: val }),
+      setTemplatesLoading: (val) => set({ templatesLoading: val }),
 
-  setShowTagModal: (val) => set({ showTagModal: val }),
-  setTagModalMode: (mode) => set({ tagModalMode: mode }),
-  setTagNameInput: (val) => set({ tagNameInput: val }),
-  setTagCrudLoading: (val) => set({ tagCrudLoading: val }),
+      setContainersError: (msg) => set({ containersError: msg }),
+      setWorkspacesError: (msg) => set({ workspacesError: msg }),
+      setTagsError: (msg) => set({ tagsError: msg }),
+      setTriggersError: (msg) => set({ triggersError: msg }),
+      setVariablesError: (msg) => set({ variablesError: msg }),
+      setTemplatesError: (msg) => set({ templatesError: msg }),
 
-  // Trigger Modal
-  showTriggerModal: false,
-  triggerModalMode: "create",
-  triggerNameInput: "",
-  triggerCrudLoading: false,
+      // Container Modal
+      showContainerModal: false,
+      containerModalMode: "create",
+      containerNameInput: "",
+      containerCrudLoading: false,
 
-  setShowTriggerModal: (val) => set({ showTriggerModal: val }),
-  setTriggerModalMode: (mode) => set({ triggerModalMode: mode }),
-  setTriggerNameInput: (val) => set({ triggerNameInput: val }),
-  setTriggerCrudLoading: (val) => set({ triggerCrudLoading: val }),
+      setShowContainerModal: (val) => set({ showContainerModal: val }),
+      setContainerModalMode: (mode) => set({ containerModalMode: mode }),
+      setContainerNameInput: (val) => set({ containerNameInput: val }),
+      setContainerCrudLoading: (val) => set({ containerCrudLoading: val }),
 
-  // Variable Modal
-  showVariableModal: false,
-  variableModalMode: "create",
-  variableNameInput: "",
-  variableCrudLoading: false,
+      // Workspace Modal
+      showWorkspaceModal: false,
+      workspaceNameInput: "",
+      workspaceCrudLoading: false,
 
-  setShowVariableModal: (val) => set({ showVariableModal: val }),
-  setVariableModalMode: (mode) => set({ variableModalMode: mode }),
-  setVariableNameInput: (val) => set({ variableNameInput: val }),
-  setVariableCrudLoading: (val) => set({ variableCrudLoading: val }),
+      setShowWorkspaceModal: (val) => set({ showWorkspaceModal: val }),
+      setWorkspaceNameInput: (val) => set({ workspaceNameInput: val }),
+      setWorkspaceCrudLoading: (val) => set({ workspaceCrudLoading: val }),
 
-    // Template Modal
-  showTemplateModal: false,
-  templateModalMode: "create",
-  templateNameInput: "",
-  templateCrudLoading: false,
+      // Tag Modal
+      showTagModal: false,
+      tagModalMode: "create",
+      tagNameInput: "",
+      tagCrudLoading: false,
 
-  setShowTemplateModal: (val) => set({ showTemplateModal: val }),
-  setTemplateModalMode: (mode) => set({ templateModalMode: mode }),
-  setTemplateNameInput: (val) => set({ templateNameInput: val }),
-  setTemplateCrudLoading: (val) => set({ templateCrudLoading: val }),
-}));
+      setShowTagModal: (val) => set({ showTagModal: val }),
+      setTagModalMode: (mode) => set({ tagModalMode: mode }),
+      setTagNameInput: (val) => set({ tagNameInput: val }),
+      setTagCrudLoading: (val) => set({ tagCrudLoading: val }),
 
+      // Trigger Modal
+      showTriggerModal: false,
+      triggerModalMode: "create",
+      triggerNameInput: "",
+      triggerCrudLoading: false,
+
+      setShowTriggerModal: (val) => set({ showTriggerModal: val }),
+      setTriggerModalMode: (mode) => set({ triggerModalMode: mode }),
+      setTriggerNameInput: (val) => set({ triggerNameInput: val }),
+      setTriggerCrudLoading: (val) => set({ triggerCrudLoading: val }),
+
+      // Variable Modal
+      showVariableModal: false,
+      variableModalMode: "create",
+      variableNameInput: "",
+      variableCrudLoading: false,
+
+      setShowVariableModal: (val) => set({ showVariableModal: val }),
+      setVariableModalMode: (mode) => set({ variableModalMode: mode }),
+      setVariableNameInput: (val) => set({ variableNameInput: val }),
+      setVariableCrudLoading: (val) => set({ variableCrudLoading: val }),
+
+      // Template Modal
+      showTemplateModal: false,
+      templateModalMode: "create",
+      templateNameInput: "",
+      templateCrudLoading: false,
+
+      setShowTemplateModal: (val) => set({ showTemplateModal: val }),
+      setTemplateModalMode: (mode) => set({ templateModalMode: mode }),
+      setTemplateNameInput: (val) => set({ templateNameInput: val }),
+      setTemplateCrudLoading: (val) => set({ templateCrudLoading: val }),
+    }),
+    {
+      name: "gtm-dashboard-store", // localStorage key
+      partialize: (state) => ({
+        selectedAccountId: state.selectedAccountId,
+        selectedContainerId: state.selectedContainerId,
+        selectedWorkspaceId: state.selectedWorkspaceId,
+      }),
+    }
+  )
+);

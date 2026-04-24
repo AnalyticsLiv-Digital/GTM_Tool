@@ -2,6 +2,7 @@
 
 import { Sparkles } from "lucide-react";
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export default function WelcomeSection({ user }: any) {
   return (
     <div className="mb-14 relative">
