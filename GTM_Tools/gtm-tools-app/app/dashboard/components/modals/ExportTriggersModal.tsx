@@ -7,11 +7,13 @@ import { useDashboardStore } from "@/app/store/useDashboardStore";
 export default function ExportTriggersModal({
   show,
   onClose,
-  triggerIds,
+  onExportSuccess,
+  selectedTriggers,
 }: {
   show: boolean;
   onClose: () => void;
-  triggerIds: string[];
+  onExportSuccess: () => void;
+  selectedTriggers: any[];
 }) {
   const store = useDashboardStore();
 
@@ -29,107 +31,205 @@ export default function ExportTriggersModal({
 
   const [exportLoading, setExportLoading] = useState(false);
 
+  // --------------------------------------
+  // FETCH ACCOUNTS WHEN MODAL OPENS
+  // --------------------------------------
   useEffect(() => {
     if (!show) return;
 
-    async function fetchAccounts() {
+    async function loadAccounts() {
       try {
         setLoadingAccounts(true);
+
         const res = await fetch("/api/auth/gtm/accounts");
         const data = await res.json();
 
+        if (!res.ok) throw new Error(data?.error || "Failed to fetch accounts");
+
         setAccounts(data.account || []);
-      } catch (err) {
-        console.error(err);
+      } catch (err: any) {
+        alert(err.message);
       } finally {
         setLoadingAccounts(false);
       }
     }
 
-    fetchAccounts();
+    loadAccounts();
   }, [show]);
 
+  // --------------------------------------
+  // FETCH CONTAINERS WHEN ACCOUNT SELECTED
+  // --------------------------------------
   useEffect(() => {
     if (!selectedAccountId) return;
 
-    async function fetchContainers() {
+    async function loadContainers() {
       try {
         setLoadingContainers(true);
+
         const res = await fetch(
           `/api/auth/gtm/containers?accountId=${selectedAccountId}`
         );
         const data = await res.json();
 
+        if (!res.ok)
+          throw new Error(data?.error || "Failed to fetch containers");
+
         setContainers(data.container || []);
-      } catch (err) {
-        console.error(err);
+
+        setSelectedContainerId("");
+        setSelectedWorkspaceId("");
+        setWorkspaces([]);
+      } catch (err: any) {
+        alert(err.message);
       } finally {
         setLoadingContainers(false);
       }
     }
 
-    fetchContainers();
+    loadContainers();
   }, [selectedAccountId]);
 
+  // --------------------------------------
+  // FETCH WORKSPACES WHEN CONTAINER SELECTED
+  // --------------------------------------
   useEffect(() => {
     if (!selectedAccountId || !selectedContainerId) return;
 
-    async function fetchWorkspaces() {
+    async function loadWorkspaces() {
       try {
         setLoadingWorkspaces(true);
+
         const res = await fetch(
           `/api/auth/gtm/workspaces?accountId=${selectedAccountId}&containerId=${selectedContainerId}`
         );
+
         const data = await res.json();
 
+        if (!res.ok)
+          throw new Error(data?.error || "Failed to fetch workspaces");
+
         setWorkspaces(data.workspace || []);
-      } catch (err) {
-        console.error(err);
+
+        setSelectedWorkspaceId("");
+      } catch (err: any) {
+        alert(err.message);
       } finally {
         setLoadingWorkspaces(false);
       }
     }
 
-    fetchWorkspaces();
+    loadWorkspaces();
   }, [selectedAccountId, selectedContainerId]);
 
-  async function handleExport() {
-    if (!selectedAccountId || !selectedContainerId || !selectedWorkspaceId) {
-      alert("Please select Account, Container, and Workspace");
+  // --------------------------------------
+  // EXPORT TRIGGERS FUNCTION (with retry logic)
+  // --------------------------------------
+  async function handleExportTriggers() {
+    if (!selectedAccountId) return alert("Please select an Account");
+    if (!selectedContainerId) return alert("Please select a Container");
+    if (!selectedWorkspaceId) return alert("Please select a Workspace");
+
+    if (!selectedTriggers || selectedTriggers.length === 0)
+      return alert("No triggers selected for export.");
+
+    if (
+      !confirm(
+        `Are you sure you want to export ${selectedTriggers.length} trigger(s) to selected workspace?`
+      )
+    )
       return;
-    }
 
     try {
       setExportLoading(true);
 
-      const res = await fetch("/api/auth/gtm/triggers/export", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sourceAccountId: store.selectedAccountId,
-          sourceContainerId: store.selectedContainerId,
-          sourceWorkspaceId: store.selectedWorkspaceId,
+      const failedTriggers: string[] = [];
 
-          destinationAccountId: selectedAccountId,
-          destinationContainerId: selectedContainerId,
-          destinationWorkspaceId: selectedWorkspaceId,
+      for (const trigger of selectedTriggers) {
+        try {
+          let exportSuccess = false;
+          let attempt = 0;
+          const maxAttempts = 5;
 
-          triggerIds,
-        }),
-      });
+          while (!exportSuccess && attempt < maxAttempts) {
+            const updatedName =
+              attempt === 0 ? trigger.name : `${trigger.name}_${attempt}`;
 
-      const data = await res.json();
+            const cleanedTrigger = {
+              name: updatedName,
+              type: trigger.type,
+              filter: trigger.filter || [],
+              autoEventFilter: trigger.autoEventFilter || [],
+              customEventFilter: trigger.customEventFilter || [],
+              parameter: trigger.parameter || [],
+              waitForTags: trigger.waitForTags,
+              waitForTagsTimeout: trigger.waitForTagsTimeout,
+              checkValidation: trigger.checkValidation,
+              uniqueTriggerId: trigger.uniqueTriggerId,
+            };
 
-      if (!res.ok) {
-        alert(data?.error || "Export failed");
-        return;
+            const res = await fetch("/api/auth/gtm/triggers", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                accountId: selectedAccountId,
+                containerId: selectedContainerId,
+                workspaceId: selectedWorkspaceId,
+                trigger: cleanedTrigger,
+              }),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+              const errorMsg =
+                data?.details?.error?.message ||
+                data?.error ||
+                "Failed to export trigger";
+
+              if (
+                errorMsg.toLowerCase().includes("already exists") ||
+                errorMsg.toLowerCase().includes("duplicate name")
+              ) {
+                attempt++;
+                continue;
+              } else {
+                throw new Error(errorMsg);
+              }
+            }
+
+            exportSuccess = true;
+          }
+
+          if (!exportSuccess) {
+            throw new Error("Failed after retries (duplicate name issue)");
+          }
+        } catch (err: any) {
+          console.error(
+            "Skipping trigger due to error:",
+            trigger?.name,
+            err?.message
+          );
+          failedTriggers.push(trigger?.name || "Unknown Trigger");
+          continue;
+        }
       }
 
-      alert("Triggers Exported Successfully!");
+      if (failedTriggers.length > 0) {
+        alert(
+          `Export finished with some failures.\n\nFailed Triggers:\n${failedTriggers.join(
+            "\n"
+          )}`
+        );
+      } else {
+        alert("Triggers exported successfully!");
+        onExportSuccess();
+      }
+
+      store.setSelectedTriggerId("");
       onClose();
-    } catch (err) {
-      console.error(err);
-      alert("Export failed");
+    } catch (err: any) {
+      alert(err.message);
     } finally {
       setExportLoading(false);
     }
@@ -139,11 +239,10 @@ export default function ExportTriggersModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white w-full max-w-2xl rounded-2xl shadow-xl overflow-hidden">
+      <div className="bg-white w-full max-w-3xl rounded-2xl shadow-xl overflow-hidden">
+        {/* HEADER */}
         <div className="flex justify-between items-center px-6 py-4 border-b">
-          <h2 className="text-lg font-bold text-gray-900">
-            Export Selected Triggers ({triggerIds.length})
-          </h2>
+          <h2 className="text-lg font-bold text-gray-900">Export Triggers</h2>
 
           <button
             onClick={onClose}
@@ -153,100 +252,136 @@ export default function ExportTriggersModal({
           </button>
         </div>
 
-        <div className="p-6 space-y-5">
-          {/* ACCOUNT */}
-          <div>
-            <label className="text-sm font-semibold text-gray-700">
-              Select Account
+        {/* BODY */}
+        <div className="grid grid-cols-12 min-h-90">
+          {/* LEFT: TRIGGERS LIST */}
+          <div className="col-span-5 border-r bg-gray-50 p-4">
+            <p className="text-sm font-semibold text-gray-700 mb-3">
+              Selected Triggers ({selectedTriggers.length})
+            </p>
+
+            <div className="bg-white border rounded-xl overflow-y-auto max-h-80">
+              {selectedTriggers.length === 0 ? (
+                <p className="text-xs text-gray-500 p-4">
+                  No triggers selected.
+                </p>
+              ) : (
+                selectedTriggers.map((trigger: any) => (
+                  <div
+                    key={trigger.triggerId}
+                    className="px-4 py-3 border-b last:border-none"
+                  >
+                    <p className="text-sm font-semibold text-gray-900">
+                      {trigger.name}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      Type: {trigger.type} | ID: {trigger.triggerId}
+                    </p>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* RIGHT: DESTINATION SELECT */}
+          <div className="col-span-7 p-6">
+            <h3 className="text-md font-bold text-gray-900 mb-5">
+              Select Destination
+            </h3>
+
+            {/* ACCOUNT */}
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Account
             </label>
             <select
               value={selectedAccountId}
-              onChange={(e) => {
-                setSelectedAccountId(e.target.value);
-                setSelectedContainerId("");
-                setSelectedWorkspaceId("");
-              }}
-              className="w-full mt-2 border rounded-xl px-4 py-3 text-sm"
+              onChange={(e) => setSelectedAccountId(e.target.value)}
+              disabled={loadingAccounts}
+              className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">-- Select Account --</option>
-              {loadingAccounts ? (
-                <option>Loading...</option>
-              ) : (
-                accounts.map((acc) => (
-                  <option key={acc.accountId} value={acc.accountId}>
-                    {acc.name}
-                  </option>
-                ))
-              )}
+              {accounts.map((acc: any) => (
+                <option key={acc.accountId} value={acc.accountId}>
+                  {acc.name}
+                </option>
+              ))}
             </select>
-          </div>
 
-          {/* CONTAINER */}
-          <div>
-            <label className="text-sm font-semibold text-gray-700">
-              Select Container
+            {loadingAccounts && (
+              <p className="text-xs text-gray-500 mt-2">Loading accounts...</p>
+            )}
+
+            {/* CONTAINER */}
+            <label className="block text-sm font-semibold text-gray-700 mt-5 mb-2">
+              Container
             </label>
             <select
               value={selectedContainerId}
-              onChange={(e) => {
-                setSelectedContainerId(e.target.value);
-                setSelectedWorkspaceId("");
-              }}
-              disabled={!selectedAccountId}
-              className="w-full mt-2 border rounded-xl px-4 py-3 text-sm disabled:bg-gray-100"
+              onChange={(e) => setSelectedContainerId(e.target.value)}
+              disabled={!selectedAccountId || loadingContainers}
+              className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">-- Select Container --</option>
-              {loadingContainers ? (
-                <option>Loading...</option>
-              ) : (
-                containers.map((c) => (
-                  <option key={c.containerId} value={c.containerId}>
-                    {c.name}
-                  </option>
-                ))
-              )}
+              {containers.map((c: any) => (
+                <option key={c.containerId} value={c.containerId}>
+                  {c.name}
+                </option>
+              ))}
             </select>
-          </div>
 
-          {/* WORKSPACE */}
-          <div>
-            <label className="text-sm font-semibold text-gray-700">
-              Select Workspace
+            {loadingContainers && (
+              <p className="text-xs text-gray-500 mt-2">
+                Loading containers...
+              </p>
+            )}
+
+            {/* WORKSPACE */}
+            <label className="block text-sm font-semibold text-gray-700 mt-5 mb-2">
+              Workspace
             </label>
             <select
               value={selectedWorkspaceId}
               onChange={(e) => setSelectedWorkspaceId(e.target.value)}
-              disabled={!selectedContainerId}
-              className="w-full mt-2 border rounded-xl px-4 py-3 text-sm disabled:bg-gray-100"
+              disabled={!selectedContainerId || loadingWorkspaces}
+              className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">-- Select Workspace --</option>
-              {loadingWorkspaces ? (
-                <option>Loading...</option>
-              ) : (
-                workspaces.map((ws) => (
-                  <option key={ws.workspaceId} value={ws.workspaceId}>
-                    {ws.name}
-                  </option>
-                ))
-              )}
+              {workspaces.map((w: any) => (
+                <option key={w.workspaceId} value={w.workspaceId}>
+                  {w.name}
+                </option>
+              ))}
             </select>
+
+            {loadingWorkspaces && (
+              <p className="text-xs text-gray-500 mt-2">
+                Loading workspaces...
+              </p>
+            )}
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 px-6 py-4 border-t bg-gray-50">
+        {/* FOOTER */}
+        <div className="px-6 py-4 border-t bg-white flex justify-between items-center">
           <button
             onClick={onClose}
-            className="px-5 py-2 rounded-xl border text-sm font-semibold hover:bg-gray-100"
+            className="px-4 py-2 text-sm font-semibold rounded-xl border border-gray-300 hover:bg-gray-100"
           >
             Cancel
           </button>
 
           <button
-            onClick={handleExport}
-            disabled={exportLoading}
-            className="px-5 py-2 rounded-xl bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:bg-gray-400"
+            onClick={handleExportTriggers}
+            disabled={
+              exportLoading ||
+              !selectedAccountId ||
+              !selectedContainerId ||
+              !selectedWorkspaceId ||
+              selectedTriggers.length === 0
+            }
+            className="px-5 py-2 text-sm font-semibold rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-300"
           >
-            {exportLoading ? "Exporting..." : "Export"}
+            {exportLoading ? "Exporting..." : "Export Selected Triggers"}
           </button>
         </div>
       </div>

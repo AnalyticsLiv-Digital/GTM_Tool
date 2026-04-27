@@ -12,7 +12,7 @@ import ExportTemplatesModal from "@/app/dashboard/components/modals/ExportTempla
 export default function TemplatesPage() {
   const store = useDashboardStore();
   const { fetchTemplates } = useDashboardActions();
-store.selectedWorkspaceId
+  store.selectedWorkspaceId
 
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>([]);
   const [showExportModal, setShowExportModal] = useState(false);
@@ -68,6 +68,10 @@ store.selectedWorkspaceId
       <ExportTemplatesModal
         show={showExportModal}
         onClose={() => setShowExportModal(false)}
+        onExportSuccess={() => {
+          setSelectedTemplateIds([]); // ✅ clear only on success
+          setShowExportModal(false);
+        }}
         selectedTemplates={selectedTemplates}
       />
 
@@ -144,9 +148,8 @@ store.selectedWorkspaceId
               return (
                 <tr
                   key={template.templateId}
-                  className={`border-b hover:bg-gray-50 ${
-                    isChecked ? "bg-blue-50" : ""
-                  }`}
+                  className={`border-b hover:bg-gray-50 ${isChecked ? "bg-blue-50" : ""
+                    }`}
                 >
                   {/* CHECKBOX */}
                   <td className="px-4 py-3">

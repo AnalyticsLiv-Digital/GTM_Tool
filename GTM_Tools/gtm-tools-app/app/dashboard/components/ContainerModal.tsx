@@ -1,3 +1,13 @@
+interface ContainerModalProps {
+  show: boolean;
+  mode: "create" | "edit";
+  name: string;
+  setName: (name: string) => void;
+  loading: boolean;
+  onClose: () => void;
+  onSave: () => void;
+}
+
 export default function ContainerModal({
   show,
   mode,
@@ -6,7 +16,7 @@ export default function ContainerModal({
   loading,
   onClose,
   onSave,
-}: any) {
+}: ContainerModalProps) {
   if (!show) return null;
 
   return (
