@@ -125,6 +125,7 @@ export default function DashboardPage() {
             tagsCount={store.tags.length}
             triggersCount={store.triggers.length}
             variablesCount={store.variables.length}
+            templatesCount={store.templates.length}
           />
         </div>
 
