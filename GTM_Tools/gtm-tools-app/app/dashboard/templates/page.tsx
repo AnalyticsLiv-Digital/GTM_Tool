@@ -17,7 +17,6 @@ export default function TemplatesPage() {
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>([]);
   const [showExportModal, setShowExportModal] = useState(false);
 
-  // ✅ NEW SEARCH STATE
   const [searchText, setSearchText] = useState("");
 
   // Fetch Templates only when workspace changes
@@ -33,7 +32,6 @@ export default function TemplatesPage() {
     setSelectedTemplateIds([]);
   }, [store.selectedWorkspaceId]);
 
-  // ✅ FILTERED TEMPLATES (NEW)
   const filteredTemplates = useMemo(() => {
     return store.templates.filter((template: any) =>
       template.name?.toLowerCase().includes(searchText.toLowerCase())
@@ -86,14 +84,19 @@ export default function TemplatesPage() {
       />
 
       {/* HEADER */}
-      <div className="flex justify-between items-center mb-5">
-        <h1 className="text-xl font-bold text-gray-900">Templates</h1>
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl font-extrabold text-slate-900">Templates</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Manage all GTM templates inside your selected workspace.
+          </p>
+        </div>
 
         <div className="flex gap-3">
           <button
             onClick={() => setShowExportModal(true)}
             disabled={selectedTemplateIds.length === 0}
-            className="px-4 py-2 rounded-xl bg-green-600 text-white text-sm font-semibold hover:bg-green-700 disabled:opacity-50"
+            className="px-5 py-2 rounded-xl bg-linear-to-r from-emerald-600 to-green-500 text-white text-sm font-semibold shadow hover:opacity-90 disabled:opacity-50"
           >
             Export Selected ({selectedTemplateIds.length})
           </button>
@@ -101,14 +104,14 @@ export default function TemplatesPage() {
           <button
             onClick={() => store.setShowTemplateModal(true)}
             disabled={!store.selectedWorkspaceId}
-            className="px-4 py-2 rounded-xl bg-purple-600 text-white text-sm font-semibold hover:bg-purple-700 disabled:opacity-50"
+            className="px-5 py-2 rounded-xl bg-linear-to-r from-indigo-600 to-purple-600 text-white text-sm font-semibold shadow hover:opacity-90 disabled:opacity-50"
           >
-            New Template
+            + New Template
           </button>
         </div>
       </div>
 
-      {/* ✅ SEARCH BAR (NEW) */}
+      {/* SEARCH */}
       <div className="mb-5">
         <input
           type="text"
@@ -121,14 +124,14 @@ export default function TemplatesPage() {
 
       {/* WORKSPACE WARNING */}
       {!store.selectedWorkspaceId && (
-        <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 px-4 py-3 rounded-xl text-sm">
+        <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 px-4 py-3 rounded-2xl text-sm">
           Please select a workspace first.
         </div>
       )}
 
       {/* LOADING / ERROR */}
       {store.templatesLoading && (
-        <p className="text-sm text-gray-500 mt-3">Loading templates...</p>
+        <p className="text-sm text-slate-500 mt-3">Loading templates...</p>
       )}
 
       {store.templatesError && (
@@ -136,12 +139,11 @@ export default function TemplatesPage() {
       )}
 
       {/* TABLE */}
-      <div className="mt-4 bg-white rounded-2xl shadow border overflow-hidden">
+      <div className="mt-4 bg-white rounded-2xl shadow-md border border-slate-200 overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b">
+          <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
-              {/* SELECT ALL */}
-              <th className="px-4 py-3 text-left w-12">
+              <th className="px-4 py-4 text-left w-12">
                 <input
                   type="checkbox"
                   checked={allSelected}
@@ -150,11 +152,11 @@ export default function TemplatesPage() {
                 />
               </th>
 
-              <th className="text-left px-4 py-3 font-semibold text-gray-700">
-                Name
+              <th className="text-left px-4 py-4 font-semibold text-slate-700">
+                Template Name
               </th>
 
-              <th className="text-left px-4 py-3 font-semibold text-gray-700">
+              <th className="text-left px-4 py-4 font-semibold text-slate-700">
                 Template ID
               </th>
             </tr>
@@ -169,12 +171,11 @@ export default function TemplatesPage() {
               return (
                 <tr
                   key={template.templateId}
-                  className={`border-b hover:bg-gray-50 ${
-                    isChecked ? "bg-blue-50" : ""
+                  className={`border-b border-slate-100 hover:bg-indigo-50/40 transition ${
+                    isChecked ? "bg-indigo-50" : ""
                   }`}
                 >
-                  {/* CHECKBOX */}
-                  <td className="px-4 py-3">
+                  <td className="px-4 py-4">
                     <input
                       type="checkbox"
                       checked={isChecked}
@@ -183,12 +184,16 @@ export default function TemplatesPage() {
                     />
                   </td>
 
-                  <td className="px-4 py-3 font-medium text-gray-900">
-                    {template.name || "Untitled Template"}
+                  <td className="px-4 py-4">
+                    <p className="font-semibold text-slate-900">
+                      {template.name || "Untitled Template"}
+                    </p>
                   </td>
 
-                  <td className="px-4 py-3 text-gray-600">
-                    {template.templateId || "-"}
+                  <td className="px-4 py-4">
+                    <span className="inline-flex px-3 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-700">
+                      {template.templateId || "-"}
+                    </span>
                   </td>
                 </tr>
               );
@@ -196,7 +201,7 @@ export default function TemplatesPage() {
 
             {filteredTemplates.length === 0 && !store.templatesLoading && (
               <tr>
-                <td colSpan={3} className="text-center py-8 text-gray-500">
+                <td colSpan={3} className="text-center py-10 text-slate-500">
                   No templates found.
                 </td>
               </tr>
@@ -206,7 +211,7 @@ export default function TemplatesPage() {
       </div>
 
       {/* FOOTER INFO */}
-      <div className="mt-4 text-xs text-gray-500">
+      <div className="mt-4 text-xs text-slate-500">
         Showing {filteredTemplates.length} template(s). Selected{" "}
         {selectedTemplateIds.length}.
       </div>
