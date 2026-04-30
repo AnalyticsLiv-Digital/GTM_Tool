@@ -29,12 +29,16 @@ export default function ExportTemplatesModal({
 
   const [exportLoading, setExportLoading] = useState(false);
 
-  // ✅ SEARCH STATE
-  const [searchText, setSearchText] = useState("");
+  // ----------------------------
+  // SAFE ARRAY (IMPORTANT FIX)
+  // ----------------------------
+  const safeTemplates = Array.isArray(selectedTemplates)
+    ? selectedTemplates
+    : [];
 
-  // --------------------------------------
-  // FETCH ACCOUNTS WHEN MODAL OPENS
-  // --------------------------------------
+  // ----------------------------
+  // FETCH ACCOUNTS
+  // ----------------------------
   useEffect(() => {
     if (!show) return;
 
@@ -48,7 +52,7 @@ export default function ExportTemplatesModal({
         if (!res.ok)
           throw new Error(data?.error || "Failed to fetch accounts");
 
-        setAccounts(data.account || []);
+        setAccounts(Array.isArray(data.account) ? data.account : []);
       } catch (err: any) {
         toast.error(err.message);
       } finally {
@@ -59,9 +63,9 @@ export default function ExportTemplatesModal({
     loadAccounts();
   }, [show]);
 
-  // --------------------------------------
-  // FETCH CONTAINERS WHEN ACCOUNT SELECTED
-  // --------------------------------------
+  // ----------------------------
+  // FETCH CONTAINERS
+  // ----------------------------
   useEffect(() => {
     if (!selectedAccountId) return;
 
@@ -77,7 +81,7 @@ export default function ExportTemplatesModal({
         if (!res.ok)
           throw new Error(data?.error || "Failed to fetch containers");
 
-        setContainers(data.container || []);
+        setContainers(Array.isArray(data.container) ? data.container : []);
 
         setSelectedContainerId("");
         setSelectedWorkspaceId("");
@@ -92,9 +96,9 @@ export default function ExportTemplatesModal({
     loadContainers();
   }, [selectedAccountId]);
 
-  // --------------------------------------
-  // FETCH WORKSPACES WHEN CONTAINER SELECTED
-  // --------------------------------------
+  // ----------------------------
+  // FETCH WORKSPACES
+  // ----------------------------
   useEffect(() => {
     if (!selectedAccountId || !selectedContainerId) return;
 
@@ -111,7 +115,7 @@ export default function ExportTemplatesModal({
         if (!res.ok)
           throw new Error(data?.error || "Failed to fetch workspaces");
 
-        setWorkspaces(data.workspace || []);
+        setWorkspaces(Array.isArray(data.workspace) ? data.workspace : []);
 
         setSelectedWorkspaceId("");
       } catch (err: any) {
@@ -124,30 +128,23 @@ export default function ExportTemplatesModal({
     loadWorkspaces();
   }, [selectedAccountId, selectedContainerId]);
 
-  // --------------------------------------
-  // EXPORT TEMPLATES FUNCTION
-  // --------------------------------------
+  // ----------------------------
+  // EXPORT FUNCTION
+  // ----------------------------
   async function handleExportTemplates() {
     if (!selectedAccountId) return toast.warning("Please select an Account");
     if (!selectedContainerId) return toast.warning("Please select a Container");
     if (!selectedWorkspaceId) return toast.warning("Please select a Workspace");
 
-    if (!selectedTemplates || selectedTemplates.length === 0)
+    if (safeTemplates.length === 0)
       return toast.warning("No templates selected for export.");
 
-    if (
-      !confirm(
-        `Are you sure you want to export ${selectedTemplates.length} template(s) to selected workspace?`
-      )
-    )
-      return;
+    setExportLoading(true);
 
     const failedTemplates: string[] = [];
 
     try {
-      setExportLoading(true);
-
-      for (const template of selectedTemplates) {
+      for (const template of safeTemplates) {
         try {
           let exportSuccess = false;
           let attempt = 0;
@@ -183,37 +180,35 @@ export default function ExportTemplatesModal({
 
               if (
                 errorMsg.toLowerCase().includes("already exists") ||
-                errorMsg.toLowerCase().includes("duplicate name")
+                errorMsg.toLowerCase().includes("duplicate")
               ) {
                 attempt++;
                 continue;
-              } else {
-                throw new Error(errorMsg);
               }
+
+              throw new Error(errorMsg);
             }
 
             exportSuccess = true;
           }
 
           if (!exportSuccess) {
-            throw new Error("Failed after retries (duplicate name issue)");
+            throw new Error("Failed after retries");
           }
         } catch {
           failedTemplates.push(template?.name || "Unknown Template");
-          continue;
         }
       }
 
-      // ✅ Clear checkbox only if ALL templates exported successfully
       if (failedTemplates.length > 0) {
         toast.warning(
-          `Export finished with failures. Failed: ${failedTemplates.join(", ")}`
+          `Export finished with failures: ${failedTemplates.join(", ")}`
         );
         return;
       }
 
       toast.success("Templates exported successfully!");
-      onExportSuccess(); // ✅ close modal + clear selection handled in TemplatesPage
+      onExportSuccess();
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -223,18 +218,12 @@ export default function ExportTemplatesModal({
 
   if (!show) return null;
 
-  // ✅ FILTERED LIST FOR SEARCH
-  const filteredTemplates = selectedTemplates.filter((template: any) =>
-    template.name?.toLowerCase().includes(searchText.toLowerCase())
-  );
-
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
       <div className="bg-white w-full max-w-3xl rounded-2xl shadow-xl overflow-hidden">
         {/* HEADER */}
         <div className="flex justify-between items-center px-6 py-4 border-b">
           <h2 className="text-lg font-bold text-gray-900">Export Templates</h2>
-
           <button
             onClick={onClose}
             className="text-gray-600 hover:text-gray-900 font-bold text-lg"
@@ -248,29 +237,16 @@ export default function ExportTemplatesModal({
           {/* LEFT */}
           <div className="col-span-5 border-r bg-gray-50 p-4">
             <p className="text-sm font-semibold text-gray-700 mb-3">
-              Selected Templates ({selectedTemplates.length})
+              Selected Templates ({safeTemplates.length})
             </p>
 
-            {/* ✅ SEARCH INPUT (SAME AS TAGS PAGE STYLE) */}
-            <div className="mb-4">
-              <input
-                type="text"
-                placeholder="Search templates..."
-                value={searchText}
-                onChange={(e) => setSearchText(e.target.value)}
-                className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-400"
-              />
-            </div>
-
             <div className="bg-white border rounded-xl overflow-y-auto max-h-80">
-              {filteredTemplates.length === 0 ? (
-                <p className="text-xs text-gray-500 p-4">
-                  No templates found.
-                </p>
+              {safeTemplates.length === 0 ? (
+                <p className="text-xs text-gray-500 p-4">No templates found.</p>
               ) : (
-                filteredTemplates.map((template: any) => (
+                safeTemplates.map((template: any, idx: number) => (
                   <div
-                    key={template.templateId}
+                    key={template.templateId || template.name || idx}
                     className="px-4 py-3 border-b last:border-none"
                   >
                     <p className="text-sm font-semibold text-gray-900">
@@ -291,14 +267,11 @@ export default function ExportTemplatesModal({
               Select Destination
             </h3>
 
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Account
-            </label>
             <select
               value={selectedAccountId}
               onChange={(e) => setSelectedAccountId(e.target.value)}
               disabled={loadingAccounts}
-              className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm"
             >
               <option value="">-- Select Account --</option>
               {accounts.map((acc: any) => (
@@ -308,14 +281,11 @@ export default function ExportTemplatesModal({
               ))}
             </select>
 
-            <label className="block text-sm font-semibold text-gray-700 mt-5 mb-2">
-              Container
-            </label>
             <select
               value={selectedContainerId}
               onChange={(e) => setSelectedContainerId(e.target.value)}
               disabled={!selectedAccountId || loadingContainers}
-              className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm mt-5"
             >
               <option value="">-- Select Container --</option>
               {containers.map((c: any) => (
@@ -325,14 +295,11 @@ export default function ExportTemplatesModal({
               ))}
             </select>
 
-            <label className="block text-sm font-semibold text-gray-700 mt-5 mb-2">
-              Workspace
-            </label>
             <select
               value={selectedWorkspaceId}
               onChange={(e) => setSelectedWorkspaceId(e.target.value)}
               disabled={!selectedContainerId || loadingWorkspaces}
-              className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm mt-5"
             >
               <option value="">-- Select Workspace --</option>
               {workspaces.map((w: any) => (
@@ -345,26 +312,17 @@ export default function ExportTemplatesModal({
         </div>
 
         {/* FOOTER */}
-        <div className="px-6 py-4 border-t bg-white flex justify-between items-center">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-semibold rounded-xl border border-gray-300 hover:bg-gray-100"
-          >
+        <div className="px-6 py-4 border-t flex justify-between">
+          <button onClick={onClose} className="px-4 py-2 border rounded-xl">
             Cancel
           </button>
 
           <button
             onClick={handleExportTemplates}
-            disabled={
-              exportLoading ||
-              !selectedAccountId ||
-              !selectedContainerId ||
-              !selectedWorkspaceId ||
-              selectedTemplates.length === 0
-            }
-            className="px-5 py-2 text-sm font-semibold rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-300"
+            disabled={exportLoading}
+            className="px-5 py-2 bg-blue-600 text-white rounded-xl"
           >
-            {exportLoading ? "Exporting..." : "Export Selected Templates"}
+            {exportLoading ? "Exporting..." : "Export"}
           </button>
         </div>
       </div>

@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import Image from "next/image";
 import UnifiedSelectionModal from "./UnifiedSelectionModal";
 import { useDashboardStore } from "@/app/store/useDashboardStore";
@@ -14,29 +13,36 @@ export default function Navbar({
   } | null;
   onLogout: () => void;
 }) {
-  const [showSelectionModal, setShowSelectionModal] = useState(false);
-
   const {
     selectedAccountId,
     selectedContainerId,
     selectedWorkspaceId,
+
+    // 👇 NEW (must exist in store)
+    selectedAccountName,
+    selectedContainerName,
+    selectedWorkspaceName,
+
+    showSelectionModal,
+    setShowSelectionModal,
   } = useDashboardStore();
 
   return (
     <>
       <nav className="sticky top-0 z-50 bg-white border-b shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex justify-between items-center">
+        <div className="w-full px-4 h-16 flex justify-between items-center">
           {/* Left */}
           <div className="flex items-center gap-4">
-            <h1 className="text-lg font-bold text-gray-900">My GTM TOOL</h1>
+            <h1 className="text-lg font-bold text-gray-900 whitespace-nowrap">
+              MY GTM TOOL
+            </h1>
 
-            {/* Merged Selection Button */}
             <button
               onClick={() => setShowSelectionModal(true)}
               className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-sm font-semibold text-white"
             >
               {selectedAccountId && selectedContainerId && selectedWorkspaceId
-                ? `${selectedAccountId} → ${selectedContainerId} → ${selectedWorkspaceId}`
+                ? `${selectedAccountName} → ${selectedContainerName} → ${selectedWorkspaceName}`
                 : "Select Account / Container / Workspace"}
             </button>
           </div>

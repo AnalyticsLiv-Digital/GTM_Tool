@@ -27,6 +27,11 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
     selectedWorkspaceId,
     setSelectedWorkspaceId,
 
+    // ✅ NEW (names)
+    setSelectedAccountName,
+    setSelectedContainerName,
+    setSelectedWorkspaceName,
+
     containers,
     containersLoading,
 
@@ -60,16 +65,33 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
 
   if (!show) return null;
 
-  const handleAccountSelect = (accountId: string) => {
-    setSelectedAccountId(accountId);
+  // ✅ UPDATED: account select now sets name also
+  const handleAccountSelect = (account: any) => {
+    setSelectedAccountId(account.accountId);
+    setSelectedAccountName(account.name);
+
+    // reset container/workspace when account changes
+    setSelectedContainerId("");
+    setSelectedContainerName("");
+    setSelectedWorkspaceId("");
+    setSelectedWorkspaceName("");
   };
 
-  const handleContainerSelect = (containerId: string) => {
-    setSelectedContainerId(containerId);
+  // ✅ UPDATED: container select now sets name also
+  const handleContainerSelect = (container: any) => {
+    setSelectedContainerId(container.containerId);
+    setSelectedContainerName(container.name);
+
+    // reset workspace when container changes
+    setSelectedWorkspaceId("");
+    setSelectedWorkspaceName("");
   };
 
-  const handleWorkspaceSelect = (workspaceId: string) => {
-    setSelectedWorkspaceId(workspaceId);
+  // ✅ UPDATED: workspace select now sets name also
+  const handleWorkspaceSelect = (workspace: any) => {
+    setSelectedWorkspaceId(workspace.workspaceId);
+    setSelectedWorkspaceName(workspace.name);
+
     onClose();
   };
 
@@ -131,7 +153,7 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
                 accounts.map((account: any) => (
                   <button
                     key={account.accountId}
-                    onClick={() => handleAccountSelect(account.accountId)}
+                    onClick={() => handleAccountSelect(account)}
                     className={`w-full flex justify-between items-center px-3 py-3 rounded-md text-left text-sm font-medium transition ${
                       selectedAccountId === account.accountId
                         ? "bg-blue-100 text-blue-800"
@@ -175,7 +197,7 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
                 containers.map((container: any) => (
                   <button
                     key={container.containerId}
-                    onClick={() => handleContainerSelect(container.containerId)}
+                    onClick={() => handleContainerSelect(container)}
                     className={`w-full flex justify-between items-center px-3 py-3 rounded-md text-left text-sm font-medium transition ${
                       selectedContainerId === container.containerId
                         ? "bg-gray-100 border border-gray-300"
@@ -230,7 +252,7 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
                 workspaces.map((workspace: any) => (
                   <button
                     key={workspace.workspaceId}
-                    onClick={() => handleWorkspaceSelect(workspace.workspaceId)}
+                    onClick={() => handleWorkspaceSelect(workspace)}
                     className={`w-full flex justify-between items-center px-3 py-3 rounded-md text-left text-sm font-medium transition ${
                       selectedWorkspaceId === workspace.workspaceId
                         ? "bg-blue-600 text-white"

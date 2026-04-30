@@ -10,6 +10,11 @@ interface DashboardStore {
   selectedContainerId: string;
   selectedWorkspaceId: string;
 
+  // ✅ NEW Selected Names
+  selectedAccountName: string;
+  selectedContainerName: string;
+  selectedWorkspaceName: string;
+
   selectedTagId: string;
   selectedTriggerId: string;
   selectedVariableId: string;
@@ -18,6 +23,11 @@ interface DashboardStore {
   setSelectedAccountId: (id: string) => void;
   setSelectedContainerId: (id: string) => void;
   setSelectedWorkspaceId: (id: string) => void;
+
+  // ✅ NEW Name Setters
+  setSelectedAccountName: (name: string) => void;
+  setSelectedContainerName: (name: string) => void;
+  setSelectedWorkspaceName: (name: string) => void;
 
   setSelectedTagId: (id: string) => void;
   setSelectedTriggerId: (id: string) => void;
@@ -135,6 +145,10 @@ interface DashboardStore {
   setTemplateModalMode: (mode: "create" | "edit") => void;
   setTemplateNameInput: (val: string) => void;
   setTemplateCrudLoading: (val: boolean) => void;
+
+  // Unified Selection Modal (Navbar popup)
+  showSelectionModal: boolean;
+  setShowSelectionModal: (val: boolean) => void;
 }
 
 export const useDashboardStore = create<DashboardStore>()(
@@ -147,6 +161,11 @@ export const useDashboardStore = create<DashboardStore>()(
       selectedContainerId: "",
       selectedWorkspaceId: "",
 
+      // ✅ NEW Selected Names
+      selectedAccountName: "",
+      selectedContainerName: "",
+      selectedWorkspaceName: "",
+
       selectedTagId: "",
       selectedTriggerId: "",
       selectedVariableId: "",
@@ -157,6 +176,11 @@ export const useDashboardStore = create<DashboardStore>()(
           selectedAccountId: id,
           selectedContainerId: "",
           selectedWorkspaceId: "",
+
+          // ✅ reset names also
+          selectedContainerName: "",
+          selectedWorkspaceName: "",
+
           selectedTagId: "",
           selectedTriggerId: "",
           selectedVariableId: "",
@@ -174,6 +198,10 @@ export const useDashboardStore = create<DashboardStore>()(
         set({
           selectedContainerId: id,
           selectedWorkspaceId: "",
+
+          // ✅ reset workspace name
+          selectedWorkspaceName: "",
+
           selectedTagId: "",
           selectedTriggerId: "",
           selectedVariableId: "",
@@ -199,6 +227,11 @@ export const useDashboardStore = create<DashboardStore>()(
           variables: [],
           templates: [],
         }),
+
+      // ✅ NEW Name Setters
+      setSelectedAccountName: (name) => set({ selectedAccountName: name }),
+      setSelectedContainerName: (name) => set({ selectedContainerName: name }),
+      setSelectedWorkspaceName: (name) => set({ selectedWorkspaceName: name }),
 
       setSelectedTagId: (id) => set({ selectedTagId: id }),
       setSelectedTriggerId: (id) => set({ selectedTriggerId: id }),
@@ -316,6 +349,10 @@ export const useDashboardStore = create<DashboardStore>()(
       setTemplateModalMode: (mode) => set({ templateModalMode: mode }),
       setTemplateNameInput: (val) => set({ templateNameInput: val }),
       setTemplateCrudLoading: (val) => set({ templateCrudLoading: val }),
+
+      // Unified Selection Modal (Navbar popup)
+      showSelectionModal: false,
+      setShowSelectionModal: (val) => set({ showSelectionModal: val }),
     }),
     {
       name: "gtm-dashboard-store", // localStorage key
@@ -323,6 +360,11 @@ export const useDashboardStore = create<DashboardStore>()(
         selectedAccountId: state.selectedAccountId,
         selectedContainerId: state.selectedContainerId,
         selectedWorkspaceId: state.selectedWorkspaceId,
+
+        // ✅ persist names also
+        selectedAccountName: state.selectedAccountName,
+        selectedContainerName: state.selectedContainerName,
+        selectedWorkspaceName: state.selectedWorkspaceName,
       }),
     }
   )

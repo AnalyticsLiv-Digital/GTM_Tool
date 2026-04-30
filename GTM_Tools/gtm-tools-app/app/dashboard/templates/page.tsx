@@ -12,10 +12,13 @@ import ExportTemplatesModal from "@/app/dashboard/components/modals/ExportTempla
 export default function TemplatesPage() {
   const store = useDashboardStore();
   const { fetchTemplates } = useDashboardActions();
-  store.selectedWorkspaceId
+  store.selectedWorkspaceId;
 
   const [selectedTemplateIds, setSelectedTemplateIds] = useState<string[]>([]);
   const [showExportModal, setShowExportModal] = useState(false);
+
+  // ✅ NEW SEARCH STATE
+  const [searchText, setSearchText] = useState("");
 
   // Fetch Templates only when workspace changes
   useEffect(() => {
@@ -30,10 +33,17 @@ export default function TemplatesPage() {
     setSelectedTemplateIds([]);
   }, [store.selectedWorkspaceId]);
 
+  // ✅ FILTERED TEMPLATES (NEW)
+  const filteredTemplates = useMemo(() => {
+    return store.templates.filter((template: any) =>
+      template.name?.toLowerCase().includes(searchText.toLowerCase())
+    );
+  }, [store.templates, searchText]);
+
   const allSelected = useMemo(() => {
-    if (store.templates.length === 0) return false;
-    return selectedTemplateIds.length === store.templates.length;
-  }, [selectedTemplateIds, store.templates]);
+    if (filteredTemplates.length === 0) return false;
+    return selectedTemplateIds.length === filteredTemplates.length;
+  }, [selectedTemplateIds, filteredTemplates]);
 
   const selectedTemplates = useMemo(() => {
     return store.templates.filter((t: any) =>
@@ -45,7 +55,7 @@ export default function TemplatesPage() {
     if (allSelected) {
       setSelectedTemplateIds([]);
     } else {
-      const ids = store.templates.map((t: any) => t.templateId);
+      const ids = filteredTemplates.map((t: any) => t.templateId);
       setSelectedTemplateIds(ids);
     }
   }
@@ -98,6 +108,17 @@ export default function TemplatesPage() {
         </div>
       </div>
 
+      {/* ✅ SEARCH BAR (NEW) */}
+      <div className="mb-5">
+        <input
+          type="text"
+          placeholder="Search templates..."
+          value={searchText}
+          onChange={(e) => setSearchText(e.target.value)}
+          className="w-full border border-slate-200 rounded-2xl px-4 py-3 text-sm bg-white shadow-sm outline-none focus:ring-2 focus:ring-indigo-400"
+        />
+      </div>
+
       {/* WORKSPACE WARNING */}
       {!store.selectedWorkspaceId && (
         <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 px-4 py-3 rounded-xl text-sm">
@@ -140,7 +161,7 @@ export default function TemplatesPage() {
           </thead>
 
           <tbody>
-            {store.templates.map((template: any) => {
+            {filteredTemplates.map((template: any) => {
               const isChecked = selectedTemplateIds.includes(
                 template.templateId
               );
@@ -148,8 +169,9 @@ export default function TemplatesPage() {
               return (
                 <tr
                   key={template.templateId}
-                  className={`border-b hover:bg-gray-50 ${isChecked ? "bg-blue-50" : ""
-                    }`}
+                  className={`border-b hover:bg-gray-50 ${
+                    isChecked ? "bg-blue-50" : ""
+                  }`}
                 >
                   {/* CHECKBOX */}
                   <td className="px-4 py-3">
@@ -172,7 +194,7 @@ export default function TemplatesPage() {
               );
             })}
 
-            {store.templates.length === 0 && !store.templatesLoading && (
+            {filteredTemplates.length === 0 && !store.templatesLoading && (
               <tr>
                 <td colSpan={3} className="text-center py-8 text-gray-500">
                   No templates found.
@@ -185,7 +207,7 @@ export default function TemplatesPage() {
 
       {/* FOOTER INFO */}
       <div className="mt-4 text-xs text-gray-500">
-        Showing {store.templates.length} template(s). Selected{" "}
+        Showing {filteredTemplates.length} template(s). Selected{" "}
         {selectedTemplateIds.length}.
       </div>
     </div>
