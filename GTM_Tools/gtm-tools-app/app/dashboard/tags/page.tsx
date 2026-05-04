@@ -192,9 +192,10 @@ export default function TagsPage() {
               return (
                 <tr
                   key={tag.tagId}
-                  className={`border-b border-slate-100 hover:bg-indigo-50/40 transition ${
-                    isChecked ? "bg-indigo-50" : ""
-                  }`}
+                  className={`border-b border-slate-200 transition-all duration-200 ${isChecked
+                      ? "bg-linear-to-r from-indigo-50 via-purple-50 to-white"
+                      : "hover:bg-slate-50"
+                    }`}
                 >
                   <td className="px-4 py-4">
                     <input
@@ -240,7 +241,7 @@ export default function TagsPage() {
   );
 }
 
-  
+
 // "use client";
 
 // import { useEffect, useMemo, useState } from "react";

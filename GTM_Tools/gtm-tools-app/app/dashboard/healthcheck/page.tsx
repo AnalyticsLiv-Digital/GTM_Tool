@@ -504,8 +504,12 @@ export default function HomePage() {
             </p>
 
             <div className="mt-10">
-              <button className="bg-indigo-600 hover:bg-indigo-500 text-white px-9 py-4 rounded-2xl text-sm font-semibold shadow-lg shadow-indigo-500/30 transition">
-                Start HealthCheck Now
+              <button
+                onClick={handleRunHealthCheck}
+                disabled={loading}
+                className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-9 py-4 rounded-2xl text-sm font-semibold shadow-lg shadow-indigo-500/30 transition"
+              >
+                {loading ? "Running..." : "Start HealthCheck Now"}
               </button>
             </div>
           </section>
