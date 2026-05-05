@@ -227,7 +227,7 @@ export default function HomePage() {
                                   className="flex items-center justify-between gap-4 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm"
                                 >
                                   <span className="font-semibold text-slate-800">
-                                    {t}
+                                    {t.name}
                                   </span>
                                 </div>
                               ))}
@@ -249,7 +249,7 @@ export default function HomePage() {
                                   className="flex items-center justify-between gap-4 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm"
                                 >
                                   <span className="font-semibold text-slate-800">
-                                    {t}
+                                    {t.name}
                                   </span>
                                 </div>
                               ))}
@@ -272,7 +272,7 @@ export default function HomePage() {
                                     className="flex items-center justify-between gap-4 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm"
                                   >
                                     <span className="font-semibold text-slate-800">
-                                      {t}
+                                      {t.name}
                                     </span>
                                   </div>
                                 ))}

@@ -71,6 +71,9 @@ export async function POST(req: Request) {
       tags,
       triggers,
       variables,
+      accountId: "",
+      containerId: "",
+      workspaceId: ""
     });
 
     return NextResponse.json(report);

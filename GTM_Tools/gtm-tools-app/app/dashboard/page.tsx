@@ -140,10 +140,10 @@ export default function DashboardPage() {
         </div>
 
         {/* CUSTOM FOOTER TEXT */}
-        <div className="mt-8 text-center text-xs text-slate-500">
+        {/* <div className="mt-8 text-center text-xs text-slate-500">
           GTM HealthCheck Suite • Export/Import Tools • Container Audit • Workspace
           Safe Operations
-        </div>
+        </div> */}
 
         {/* MODAL */}
         <ContainerModal
