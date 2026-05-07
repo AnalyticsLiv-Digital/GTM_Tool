@@ -31,7 +31,6 @@ export type GTMHealthData = {
   containerId: string;
   workspaceId: string;
 
-  // ✅ FIXED: removed "any" to avoid ESLint error
   tags: Record<string, unknown>[];
   triggers: Record<string, unknown>[];
   variables: Record<string, unknown>[];
