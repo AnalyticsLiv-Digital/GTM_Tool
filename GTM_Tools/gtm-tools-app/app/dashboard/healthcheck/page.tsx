@@ -8,7 +8,11 @@ import {
   FileText,
   XCircle,
   AlertTriangle,
+  Download,
 } from "lucide-react";
+
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { useState } from "react";
 import { HealthCheckResult } from "@/lib/healthcheck/types";
 import { useDashboardStore } from "@/app/store/useDashboardStore";
@@ -51,6 +55,70 @@ export default function HomePage() {
   const failedChecks = (report?.results || []).filter((r) => !r.passed);
   const passedChecks = (report?.results || []).filter((r) => r.passed);
 
+  // =====================================================
+  // DOWNLOAD PDF FUNCTION
+  // =====================================================
+  const handleDownloadPDF = () => {
+    if (!report) return;
+
+    const doc = new jsPDF();
+
+    doc.setFontSize(18);
+    doc.text("GTM HealthCheck Report", 14, 18);
+
+    doc.setFontSize(12);
+    doc.text(`Score: ${report.score}%`, 14, 30);
+    doc.text(`Passed Checks: ${report.passedCount}`, 14, 38);
+    doc.text(`Failed Checks: ${report.failedCount}`, 14, 46);
+
+    let currentY = 60;
+
+    // FAILED TABLE
+    if (failedChecks.length > 0) {
+      doc.setFontSize(14);
+      doc.text("Failed Checks", 14, currentY);
+      currentY += 6;
+
+      autoTable(doc, {
+        startY: currentY,
+        head: [["ID", "Title", "Severity", "Affected Items"]],
+        body: failedChecks.map((r) => [
+          r.id,
+          r.title,
+          r.severity,
+          `Tags: ${(r.affectedTags || []).map((x: any) => x.name).join(", ") || "-"}
+Triggers: ${(r.affectedTriggers || []).map((x: any) => x.name).join(", ") || "-"}
+Vars: ${(r.affectedVariables || []).map((x: any) => x.name).join(", ") || "-"}`,
+        ]),
+        styles: { fontSize: 9, cellPadding: 2 },
+        headStyles: { fontSize: 10 },
+      });
+
+      const lastY = (doc as any).lastAutoTable?.finalY || currentY;
+      currentY = lastY + 12;
+    }
+
+    // PASSED TABLE
+    if (passedChecks.length > 0) {
+      doc.setFontSize(14);
+      doc.text("Passed Checks", 14, currentY);
+      currentY += 6;
+
+      autoTable(doc, {
+        startY: currentY,
+        head: [["ID", "Title"]],
+        body: passedChecks.map((r) => [r.id, r.title]),
+        styles: { fontSize: 10, cellPadding: 2 },
+        headStyles: { fontSize: 11 },
+      });
+
+      const lastY = (doc as any).lastAutoTable?.finalY || currentY;
+      currentY = lastY + 12;
+    }
+
+    doc.save("GTM_HealthCheck_Report.pdf");
+  };
+
   return (
     <div
       className="min-h-screen bg-linear-to-br from-slate-50 via-white to-slate-100 px-6 py-10 max-w-7xl mx-auto"
@@ -72,8 +140,8 @@ export default function HomePage() {
 
           <p className="mt-6 text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
             GTM HealthCheck helps you identify tracking issues, unused tags,
-            duplicate triggers, broken variables, and performance bottlenecks with a
-            complete container audit.
+            duplicate triggers, broken variables, and performance bottlenecks with
+            a complete container audit.
           </p>
 
           <div className="mt-10 flex justify-center gap-4 flex-wrap">
@@ -105,39 +173,10 @@ export default function HomePage() {
 
       {/* REPORT */}
       {report && (
-
         <div className="mt-12 bg-white border border-slate-200 rounded-3xl shadow-md overflow-hidden">
           {/* Report Header */}
-          <section className="max-w-5xl mx-auto py-14 text-center relative">
-            <div className="absolute inset-0 -z-10 blur-3xl opacity-30">
-              <div className="w-105 h-105 bg-indigo-400 rounded-full absolute top-0 left-1/2 -translate-x-1/2" />
-              <div className="w-[320px] h-80 bg-sky-400 rounded-full absolute top-24 left-1/3" />
-            </div>
-
-            <h2 className="text-5xl font-extrabold leading-tight text-slate-900 tracking-tight">
-              Audit Your Google Tag Manager <br />
-              <span className="text-indigo-600">In Minutes</span>
-            </h2>
-
-            <p className="mt-6 text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
-              GTM HealthCheck helps you identify tracking issues, unused tags,
-              duplicate triggers, broken variables, and performance bottlenecks with a
-              complete container audit.
-            </p>
-
-            <div className="mt-10 flex justify-center gap-4 flex-wrap">
-              <button
-                onClick={handleRunHealthCheck}
-                disabled={loading}
-                className="px-7 py-3.5 rounded-2xl bg-indigo-600 text-white text-sm font-semibold shadow-lg shadow-indigo-500/30 hover:bg-indigo-500 disabled:opacity-50 transition-all"
-              >
-                {loading ? "Running HealthCheck..." : "Refresh HealthCheck"}
-              </button>
-            </div>
-          </section>
           <div className="p-6 md:p-8 border-b border-slate-200 bg-linear-to-r from-indigo-50 to-sky-50">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-5">
-
               <div>
                 <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">
                   GTM HealthCheck Report
@@ -167,15 +206,34 @@ export default function HomePage() {
 
                 <div
                   className={`w-14 h-14 rounded-2xl flex items-center justify-center font-extrabold text-white shadow-md ${report.score >= 80
-                    ? "bg-green-600"
-                    : report.score >= 50
-                      ? "bg-yellow-500"
-                      : "bg-red-600"
+                      ? "bg-green-600"
+                      : report.score >= 50
+                        ? "bg-yellow-500"
+                        : "bg-red-600"
                     }`}
                 >
                   {report.score >= 80 ? "A" : report.score >= 50 ? "B" : "C"}
                 </div>
               </div>
+            </div>
+
+            {/* Buttons */}
+            <div className="mt-6 flex flex-wrap gap-3">
+              <button
+                onClick={handleRunHealthCheck}
+                disabled={loading}
+                className="px-6 py-3 rounded-2xl bg-indigo-600 text-white text-sm font-semibold shadow hover:bg-indigo-500 disabled:opacity-50"
+              >
+                {loading ? "Refreshing..." : "Refresh HealthCheck"}
+              </button>
+
+              <button
+                onClick={handleDownloadPDF}
+                className="px-6 py-3 rounded-2xl bg-green-600 text-white text-sm font-semibold shadow hover:bg-green-500 flex items-center gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Download PDF
+              </button>
             </div>
           </div>
 
@@ -221,14 +279,12 @@ export default function HomePage() {
                             </p>
 
                             <div className="mt-2 space-y-2">
-                              {r.affectedTags.map((t, index: number) => (
+                              {r.affectedTags.map((t: any, index: number) => (
                                 <div
                                   key={index}
-                                  className="flex items-center justify-between gap-4 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm"
+                                  className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm"
                                 >
-                                  <span className="font-semibold text-slate-800">
-                                    {t.name}
-                                  </span>
+                                  {t.name}
                                 </div>
                               ))}
                             </div>
@@ -236,26 +292,27 @@ export default function HomePage() {
                         )}
 
                         {/* Affected Triggers */}
-                        {r.affectedTriggers && r.affectedTriggers.length > 0 && (
-                          <div className="mt-4">
-                            <p className="text-sm font-bold text-slate-800">
-                              Affected Triggers
-                            </p>
+                        {r.affectedTriggers &&
+                          r.affectedTriggers.length > 0 && (
+                            <div className="mt-4">
+                              <p className="text-sm font-bold text-slate-800">
+                                Affected Triggers
+                              </p>
 
-                            <div className="mt-2 space-y-2">
-                              {r.affectedTriggers.map((t, index: number) => (
-                                <div
-                                  key={index}
-                                  className="flex items-center justify-between gap-4 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm"
-                                >
-                                  <span className="font-semibold text-slate-800">
-                                    {t.name}
-                                  </span>
-                                </div>
-                              ))}
+                              <div className="mt-2 space-y-2">
+                                {r.affectedTriggers.map(
+                                  (t: any, index: number) => (
+                                    <div
+                                      key={index}
+                                      className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm"
+                                    >
+                                      {t.name}
+                                    </div>
+                                  )
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          )}
 
                         {/* Affected Variables */}
                         {r.affectedVariables &&
@@ -266,16 +323,16 @@ export default function HomePage() {
                               </p>
 
                               <div className="mt-2 space-y-2">
-                                {r.affectedVariables.map((t, index: number) => (
-                                  <div
-                                    key={index}
-                                    className="flex items-center justify-between gap-4 px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm"
-                                  >
-                                    <span className="font-semibold text-slate-800">
+                                {r.affectedVariables.map(
+                                  (t: any, index: number) => (
+                                    <div
+                                      key={index}
+                                      className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm"
+                                    >
                                       {t.name}
-                                    </span>
-                                  </div>
-                                ))}
+                                    </div>
+                                  )
+                                )}
                               </div>
                             </div>
                           )}
@@ -285,10 +342,10 @@ export default function HomePage() {
                       <div>
                         <span
                           className={`px-4 py-2 rounded-full text-xs font-bold shadow-sm ${r.severity === "HIGH"
-                            ? "bg-red-600 text-white"
-                            : r.severity === "MEDIUM"
-                              ? "bg-yellow-500 text-white"
-                              : "bg-blue-600 text-white"
+                              ? "bg-red-600 text-white"
+                              : r.severity === "MEDIUM"
+                                ? "bg-yellow-500 text-white"
+                                : "bg-blue-600 text-white"
                             }`}
                         >
                           {r.severity}
@@ -344,9 +401,9 @@ export default function HomePage() {
             <div className="mt-12 flex items-start gap-3 p-5 rounded-2xl border border-slate-200 bg-slate-50">
               <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5" />
               <p className="text-sm text-slate-700 leading-relaxed">
-                <span className="font-bold text-slate-900">Note:</span> This report
-                is based on best-practice GTM rules and automated scanning. Always
-                validate in Preview Mode before publishing.
+                <span className="font-bold text-slate-900">Note:</span> This
+                report is based on best-practice GTM rules and automated scanning.
+                Always validate in Preview Mode before publishing.
               </p>
             </div>
           </div>
@@ -363,8 +420,8 @@ export default function HomePage() {
             </h3>
 
             <p className="text-center text-slate-600 mt-3 max-w-2xl mx-auto">
-              Improve tracking accuracy, reduce container clutter, and optimize tag
-              performance.
+              Improve tracking accuracy, reduce container clutter, and optimize
+              tag performance.
             </p>
 
             <div className="grid md:grid-cols-3 gap-6 mt-14">
@@ -374,8 +431,8 @@ export default function HomePage() {
                   Tag Performance Audit
                 </h4>
                 <p className="text-slate-600 mt-3 text-sm leading-relaxed">
-                  Identify slow tags, excessive triggers, and unnecessary execution
-                  that impacts load time.
+                  Identify slow tags, excessive triggers, and unnecessary
+                  execution that impacts load time.
                 </p>
               </div>
 
@@ -402,123 +459,11 @@ export default function HomePage() {
               </div>
             </div>
           </section>
-
-          {/* HOW IT WORKS */}
-          <section className="py-16 border-t border-slate-200">
-            <h3 className="text-3xl font-extrabold text-center text-slate-900 tracking-tight">
-              How it Works
-            </h3>
-
-            <p className="text-center text-slate-600 mt-3 max-w-2xl mx-auto">
-              Simple process to get your GTM container health report.
-            </p>
-
-            <div className="grid md:grid-cols-3 gap-8 mt-14">
-              <div className="p-7 rounded-3xl bg-white border border-slate-200 shadow-sm hover:shadow-md transition">
-                <h4 className="text-lg font-bold text-indigo-600">
-                  Step 1: Connect
-                </h4>
-                <p className="text-slate-600 mt-3 text-sm leading-relaxed">
-                  Login using Google and select your GTM account, container, and
-                  workspace.
-                </p>
-              </div>
-
-              <div className="p-7 rounded-3xl bg-white border border-slate-200 shadow-sm hover:shadow-md transition">
-                <h4 className="text-lg font-bold text-indigo-600">
-                  Step 2: Scan Container
-                </h4>
-                <p className="text-slate-600 mt-3 text-sm leading-relaxed">
-                  Our engine scans tags, triggers, variables, templates, and checks
-                  best practices.
-                </p>
-              </div>
-
-              <div className="p-7 rounded-3xl bg-white border border-slate-200 shadow-sm hover:shadow-md transition">
-                <h4 className="text-lg font-bold text-indigo-600">
-                  Step 3: Get Report
-                </h4>
-                <p className="text-slate-600 mt-3 text-sm leading-relaxed">
-                  Download your audit report and fix issues with clear
-                  recommendations.
-                </p>
-              </div>
-            </div>
-          </section>
-
-          {/* REPORT INCLUDES */}
-          <section className="py-16 border-t border-slate-200">
-            <h3 className="text-3xl font-extrabold text-center text-slate-900 tracking-tight">
-              HealthCheck Report Includes
-            </h3>
-
-            <div className="grid md:grid-cols-2 gap-6 mt-14">
-              <div className="bg-white p-7 rounded-3xl border border-slate-200 shadow-sm hover:shadow-md transition">
-                <h4 className="text-lg font-bold text-slate-900">
-                  ✔ Duplicate Tags / Triggers
-                </h4>
-                <p className="text-slate-600 text-sm mt-3 leading-relaxed">
-                  Find repeated triggers, unused tags, and redundant setup.
-                </p>
-              </div>
-
-              <div className="bg-white p-7 rounded-3xl border border-slate-200 shadow-sm hover:shadow-md transition">
-                <h4 className="text-lg font-bold text-slate-900">
-                  ✔ Unused Variables
-                </h4>
-                <p className="text-slate-600 text-sm mt-3 leading-relaxed">
-                  Identify variables created but never used in tags/triggers.
-                </p>
-              </div>
-
-              <div className="bg-white p-7 rounded-3xl border border-slate-200 shadow-sm hover:shadow-md transition">
-                <h4 className="text-lg font-bold text-slate-900">
-                  ✔ Template Dependency Check
-                </h4>
-                <p className="text-slate-600 text-sm mt-3 leading-relaxed">
-                  Detect vendor templates used by tags and validate template export
-                  requirements.
-                </p>
-              </div>
-
-              <div className="bg-white p-7 rounded-3xl border border-slate-200 shadow-sm hover:shadow-md transition">
-                <h4 className="text-lg font-bold text-slate-900">
-                  ✔ Best Practice Suggestions
-                </h4>
-                <p className="text-slate-600 text-sm mt-3 leading-relaxed">
-                  Recommended improvements for container structure and performance.
-                </p>
-              </div>
-            </div>
-          </section>
-
-          {/* CTA */}
-          <section className="py-16 text-center border-t border-slate-200">
-            <h3 className="text-4xl font-extrabold text-slate-900 tracking-tight">
-              Ready to Optimize Your GTM Container?
-            </h3>
-
-            <p className="text-slate-600 mt-4 max-w-2xl mx-auto leading-relaxed">
-              Run a GTM HealthCheck today and improve tracking accuracy,
-              performance, and maintainability.
-            </p>
-
-            <div className="mt-10">
-              <button
-                onClick={handleRunHealthCheck}
-                disabled={loading}
-                className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-9 py-4 rounded-2xl text-sm font-semibold shadow-lg shadow-indigo-500/30 transition"
-              >
-                {loading ? "Running..." : "Start HealthCheck Now"}
-              </button>
-            </div>
-          </section>
         </>
       )}
     </div>
   );
 }
-
 // "use client";
 
 // import { CheckCircle, ShieldCheck, Zap, BarChart3, FileText } from "lucide-react";

@@ -15,14 +15,18 @@ export async function POST(req: Request) {
     }
 
     const accessToken = await getValidGoogleAccessToken();
+    if (!accessToken) {
+      return NextResponse.json(
+        { error: "Missing Google access token" },
+        { status: 401 }
+      );
+    }
 
     // ✅ Fetch Full Tags
     const tagsRes = await fetch(
       `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/tags`,
       {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
+        headers: { Authorization: `Bearer ${accessToken}` },
       }
     );
 
@@ -30,9 +34,7 @@ export async function POST(req: Request) {
     const triggersRes = await fetch(
       `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/triggers`,
       {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
+        headers: { Authorization: `Bearer ${accessToken}` },
       }
     );
 
@@ -40,9 +42,7 @@ export async function POST(req: Request) {
     const variablesRes = await fetch(
       `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/variables`,
       {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
+        headers: { Authorization: `Bearer ${accessToken}` },
       }
     );
 
@@ -62,22 +62,48 @@ export async function POST(req: Request) {
     const triggersJson = await triggersRes.json();
     const variablesJson = await variablesRes.json();
 
-    // ✅ IMPORTANT: store FULL objects (not mapping only 3 fields)
     const tags = tagsJson.tag || [];
     const triggers = triggersJson.trigger || [];
     const variables = variablesJson.variable || [];
 
+    // ✅ Run healthcheck
     const report = runHealthCheck({
       tags,
       triggers,
       variables,
-      accountId: "",
-      containerId: "",
-      workspaceId: ""
+      accountId,
+      containerId,
+      workspaceId,
     });
 
-    return NextResponse.json(report);
+    // =====================================================
+    // ✅ FIX: Normalize affected items for UI
+    // =====================================================
+    const normalizedResults = (report.results || []).map((r: any) => {
+      const normalize = (arr: any[]) => {
+        if (!Array.isArray(arr)) return [];
+        return arr.map((x) => {
+          if (typeof x === "string") return { name: x };
+          if (x?.name) return { name: x.name };
+          return { name: JSON.stringify(x) };
+        });
+      };
+
+      return {
+        ...r,
+        affectedTags: normalize(r.affectedTags),
+        affectedTriggers: normalize(r.affectedTriggers),
+        affectedVariables: normalize(r.affectedVariables),
+      };
+    });
+
+    return NextResponse.json({
+      ...report,
+      results: normalizedResults,
+    });
   } catch (error) {
+    console.error("HealthCheck API Error:", error);
+
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Internal server error" },
       { status: 500 }
