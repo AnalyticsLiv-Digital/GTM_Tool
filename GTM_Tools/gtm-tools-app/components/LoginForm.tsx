@@ -1,25 +1,24 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
+import { useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { ArrowRight } from "lucide-react";
 
 export default function LoginForm() {
   const { login, error: authError } = useAuth();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [focusedField, setFocusedField] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError('');
+    setError("");
     setLoading(true);
-
     try {
       await login(email, password);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : authError || 'Login failed';
+    } catch (err) {
+      const message = err instanceof Error ? err.message : authError || "Login failed";
       setError(message);
     } finally {
       setLoading(false);
@@ -27,88 +26,104 @@ export default function LoginForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Email Field */}
-      <div>
-        <label htmlFor="email" className="block text-sm font-semibold text-gray-900 mb-2">
-          Email Address
-        </label>
-        <div className={`relative transition-all duration-200 ${focusedField === 'email' ? 'scale-105' : ''}`}>
-          <input
-            type="email"
-            id="email"
-            placeholder="you@example.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            onFocus={() => setFocusedField('email')}
-            onBlur={() => setFocusedField(null)}
-            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100 transition-all duration-150 bg-gray-50 hover:bg-white"
-            required
-            disabled={loading}
-          />
-        </div>
-      </div>
+    <form onSubmit={handleSubmit} className="space-y-5">
+      <Field
+        id="email"
+        label="Email"
+        type="email"
+        value={email}
+        onChange={setEmail}
+        placeholder="you@example.com"
+        disabled={loading}
+        autoComplete="email"
+      />
 
-      {/* Password Field */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <label htmlFor="password" className="block text-sm font-semibold text-gray-900">
-            Password
-          </label>
-          <a href="#" className="text-sm text-purple-600 hover:text-purple-700 font-medium">
+      <Field
+        id="password"
+        label="Password"
+        type="password"
+        value={password}
+        onChange={setPassword}
+        placeholder="••••••••"
+        disabled={loading}
+        autoComplete="current-password"
+        rightSlot={
+          <a
+            href="#"
+            className="text-[11px] text-[color:var(--fg-faint)] hover:text-[color:var(--accent)]"
+          >
             Forgot?
           </a>
-        </div>
-        <div className={`relative transition-all duration-200 ${focusedField === 'password' ? 'scale-105' : ''}`}>
-          <input
-            type="password"
-            id="password"
-            placeholder="••••••••"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onFocus={() => setFocusedField('password')}
-            onBlur={() => setFocusedField(null)}
-            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-gray-900 placeholder-gray-400 focus:outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-100 transition-all duration-150 bg-gray-50 hover:bg-white"
-            required
-            disabled={loading}
-          />
-        </div>
-      </div>
+        }
+      />
 
-      {/* Error Message */}
       {error && (
-        <div className="bg-red-50 border-l-4 border-red-500 rounded-lg px-4 py-3 animate-slideIn">
-          <p className="font-medium text-red-900">{error}</p>
+        <div className="border-l-2 border-[color:var(--danger)] pl-3 py-1">
+          <p className="text-[12.5px] text-[color:var(--danger)]">{error}</p>
         </div>
       )}
 
-      {/* Submit Button */}
       <button
         type="submit"
         disabled={loading}
-        className="w-full bg-linear-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 disabled:from-gray-300 disabled:to-gray-400 text-white py-3 px-4 rounded-xl font-semibold text-sm shadow-lg hover:shadow-xl transition-all duration-200 disabled:cursor-not-allowed transform hover:scale-105 disabled:hover:scale-100 flex items-center justify-center gap-2"
+        className="btn-primary w-full justify-center !py-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {loading ? (
-          <>
-            <span className="inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-            <span>Signing in...</span>
-          </>
+          <span className="flex items-center gap-2">
+            <span className="inline-block w-3.5 h-3.5 border border-current border-t-transparent rounded-full animate-spin" />
+            Signing in…
+          </span>
         ) : (
-          <span>Sign in</span>
+          <>
+            Sign in
+            <ArrowRight size={14} strokeWidth={2.4} />
+          </>
         )}
       </button>
-
-      {/* Remember Me Checkbox */}
-      <div className="flex items-center">
-        <input
-          type="checkbox"
-          id="remember"
-          className="h-4 w-4 rounded border-gray-300 cursor-pointer"
-        />
-        <label htmlFor="remember" className="ml-2 text-sm text-gray-700 cursor-pointer">
-          Remember me for 7 days
-        </label>
-      </div>
     </form>
+  );
+}
+
+function Field({
+  id,
+  label,
+  type,
+  value,
+  onChange,
+  placeholder,
+  disabled,
+  autoComplete,
+  rightSlot,
+}: {
+  id: string;
+  label: string;
+  type: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  autoComplete?: string;
+  rightSlot?: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div className="flex items-baseline justify-between mb-1.5">
+        <label htmlFor={id} className="text-[12.5px] font-medium text-[color:var(--fg)]">
+          {label}
+        </label>
+        {rightSlot}
+      </div>
+      <input
+        id={id}
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        disabled={disabled}
+        autoComplete={autoComplete}
+        required
+        className="w-full"
+      />
+    </div>
   );
 }

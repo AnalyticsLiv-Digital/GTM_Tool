@@ -204,17 +204,620 @@ a:hover {
     .animation-slideUp {
       animation: slideUp 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
-    
+
     .animate-blob {
       animation: blob 7s infinite;
     }
-    
+
     .animation-delay-2000 {
       animation-delay: 2s;
     }
-    
+
     .animate-slideIn {
       animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
   }
+}
+
+/* ============================================================
+   Marketing & auth surfaces — Linear-style dark theme
+   Scoped under .marketing-doc so dashboard styles are untouched.
+   ============================================================ */
+.marketing-doc {
+  --bg: #08090a;
+  --bg-elev: #101113;
+  --bg-elev-2: #16181b;
+  --fg: #f5f5f7;
+  --fg-dim: #a1a1aa;
+  --fg-faint: #5b5b66;
+  --border: #1f2024;
+  --border-strong: #2b2c31;
+  --accent: #5dffb4;
+  --accent-dim: rgba(93, 255, 180, 0.16);
+  --accent-glow: rgba(93, 255, 180, 0.35);
+  --danger: #ff6a55;
+
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "ss01", "cv11";
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+.marketing-doc * {
+  border-color: var(--border);
+}
+.marketing-doc p {
+  color: inherit;
+  font-size: inherit;
+}
+.marketing-doc h1,
+.marketing-doc h2,
+.marketing-doc h3,
+.marketing-doc h4 {
+  font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.022em;
+  line-height: 1.05;
+  font-weight: 600;
+  color: var(--fg);
+}
+.marketing-doc .font-mono,
+.marketing-doc code,
+.marketing-doc kbd,
+.marketing-doc samp {
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-feature-settings: "ss01", "ss02";
+}
+.marketing-doc a {
+  color: inherit;
+}
+
+/* Inputs — dark, underline style */
+.marketing-doc input[type="text"],
+.marketing-doc input[type="email"],
+.marketing-doc input[type="password"],
+.marketing-doc textarea {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border-strong);
+  border-radius: 0;
+  padding: 0.7rem 0;
+  font-family: var(--font-body), system-ui, sans-serif;
+  font-size: 0.95rem;
+  color: var(--fg);
+  transition: border-color 0.2s ease;
+}
+.marketing-doc input::placeholder,
+.marketing-doc textarea::placeholder {
+  color: var(--fg-faint);
+}
+.marketing-doc input:hover,
+.marketing-doc textarea:hover {
+  background: transparent;
+  border-bottom-color: var(--fg-dim);
+}
+.marketing-doc input:focus,
+.marketing-doc textarea:focus {
+  outline: none;
+  border-bottom-color: var(--accent);
+  box-shadow: none;
+  background: transparent;
+}
+
+/* Selection */
+.marketing-doc ::selection {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+/* Hero accent — radial glow behind headline */
+.marketing-doc .hero-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(60% 50% at 25% 0%, rgba(93, 255, 180, 0.10) 0%, transparent 60%),
+    radial-gradient(70% 50% at 80% 30%, rgba(93, 255, 180, 0.05) 0%, transparent 60%);
+  mask-image: linear-gradient(to bottom, black 0%, black 60%, transparent 100%);
+}
+
+/* Subtle grid background */
+.marketing-doc .grid-bg {
+  background-image:
+    linear-gradient(to right, var(--border) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+  background-size: 80px 80px;
+  background-position: -1px -1px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 0%, transparent 75%);
+}
+
+/* Buttons */
+.marketing-doc .btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.65rem 1.05rem;
+  background: var(--fg);
+  color: var(--bg);
+  border: 1px solid var(--fg);
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: -0.005em;
+  transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
+}
+.marketing-doc .btn-primary:hover {
+  background: transparent;
+  color: var(--fg);
+}
+.marketing-doc .btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.65rem 1.05rem;
+  background: var(--bg-elev);
+  color: var(--fg);
+  border: 1px solid var(--border-strong);
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+.marketing-doc .btn-secondary:hover {
+  background: var(--bg-elev-2);
+  border-color: var(--fg-dim);
+}
+
+/* Page-load reveal */
+@keyframes reveal-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.marketing-doc .reveal {
+  opacity: 0;
+  animation: reveal-up 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+}
+
+/* Card hover — feature cards */
+.marketing-doc .feat-card {
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.marketing-doc .feat-card:hover {
+  background: var(--bg-elev-2);
+  border-color: var(--border-strong);
+}
+
+/* Pulse dot */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.3; }
+}
+.marketing-doc .pulse-dot {
+  animation: pulse-dot 2.4s ease-in-out infinite;
+}
+
+/* ============================================================
+   ANIMATIONS — subtle polish layer
+   ============================================================ */
+
+/* Hero glow drift — very slow ambient motion */
+@keyframes glow-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50%      { transform: translate3d(2%, 1%, 0) scale(1.04); }
+}
+.marketing-doc .hero-glow {
+  animation: glow-drift 22s ease-in-out infinite;
+}
+
+/* Brand mark animations */
+.marketing-doc .logo-mark {
+  color: var(--fg);
+  transition: color 0.3s ease, transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.marketing-doc .logo-mark .logo-dot {
+  transform-origin: 12px 12px;
+  transform-box: fill-box;
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  filter: drop-shadow(0 0 6px var(--accent-glow));
+}
+.marketing-doc .logo-mark .logo-scan {
+  transform-origin: 12px 12px;
+  transform-box: fill-box;
+  transition: transform 0.5s cubic-bezier(0.2, 0.7, 0.2, 1), opacity 0.3s ease;
+}
+.marketing-doc .brand-lockup:hover .logo-mark {
+  color: var(--accent);
+}
+.marketing-doc .brand-lockup:hover .logo-mark .logo-dot {
+  transform: scale(1.35);
+}
+.marketing-doc .brand-lockup:hover .logo-mark .logo-scan {
+  transform: rotate(90deg);
+  opacity: 0.7;
+}
+
+/* Logo dot ambient pulse */
+@keyframes logo-dot-pulse {
+  0%, 100% { filter: drop-shadow(0 0 2px var(--accent-glow)); }
+  50%      { filter: drop-shadow(0 0 10px var(--accent-glow)); }
+}
+.marketing-doc .logo-mark .logo-dot {
+  animation: logo-dot-pulse 3.6s ease-in-out infinite;
+}
+
+/* Feature card lift on hover */
+.marketing-doc .feat-card {
+  transition: background 0.25s ease, border-color 0.25s ease, transform 0.3s cubic-bezier(0.2, 0.7, 0.2, 1);
+  position: relative;
+}
+.marketing-doc .feat-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px transparent;
+  transition: box-shadow 0.25s ease;
+}
+.marketing-doc .feat-card:hover {
+  transform: translateY(-2px);
+  background: var(--bg-elev-2);
+}
+.marketing-doc .feat-card:hover::after {
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+/* Primary button — subtle sheen on hover */
+.marketing-doc .btn-primary {
+  position: relative;
+  overflow: hidden;
+}
+.marketing-doc .btn-primary::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.18) 50%,
+    transparent 70%
+  );
+  transform: translateX(-120%);
+  transition: transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
+  pointer-events: none;
+}
+.marketing-doc .btn-primary:hover::before {
+  transform: translateX(120%);
+}
+
+/* Scroll-reveal — applied via IntersectionObserver */
+.marketing-doc .sr {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 0.7s cubic-bezier(0.2, 0.7, 0.2, 1), transform 0.7s cubic-bezier(0.2, 0.7, 0.2, 1);
+  will-change: opacity, transform;
+}
+.marketing-doc .sr.sr-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+.marketing-doc .sr-delay-1 { transition-delay: 80ms; }
+.marketing-doc .sr-delay-2 { transition-delay: 160ms; }
+.marketing-doc .sr-delay-3 { transition-delay: 240ms; }
+
+/* Accent shimmer — for the "smarter" word in hero */
+@keyframes accent-shimmer {
+  0%, 100% { filter: drop-shadow(0 0 8px var(--accent-glow)); }
+  50%      { filter: drop-shadow(0 0 18px var(--accent-glow)); }
+}
+.marketing-doc .accent-glow-text {
+  animation: accent-shimmer 4.5s ease-in-out infinite;
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .marketing-doc *,
+  .marketing-doc .hero-glow,
+  .marketing-doc .logo-mark .logo-dot,
+  .marketing-doc .pulse-dot,
+  .marketing-doc .accent-glow-text {
+    animation: none !important;
+    transition: none !important;
+  }
+  .marketing-doc .sr {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ============================================================
+   TOOL-DARK — dashboard dark theme
+   Applied via wrapper class on app/dashboard/layout.tsx.
+   Overrides common Tailwind utility classes used in the dashboard
+   so existing components are reskinned without touching their JSX.
+   ============================================================ */
+.tool-dark {
+  --bg: #08090a;
+  --bg-elev: #101113;
+  --bg-elev-2: #16181b;
+  --bg-elev-3: #1d1f23;
+  --fg: #f5f5f7;
+  --fg-dim: #a1a1aa;
+  --fg-faint: #6b6b75;
+  --border: #1f2024;
+  --border-strong: #2b2c31;
+  --accent: #5dffb4;
+  --accent-dim: rgba(93, 255, 180, 0.16);
+  --accent-glow: rgba(93, 255, 180, 0.35);
+  --danger: #ff6a55;
+  --warn: #f5b041;
+  --success: #5dffb4;
+
+  background: var(--bg);
+  color: var(--fg);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Backgrounds ── */
+.tool-dark .bg-white,
+.tool-dark .bg-slate-50,
+.tool-dark .bg-slate-100,
+.tool-dark .bg-gray-50,
+.tool-dark .bg-gray-100,
+.tool-dark .bg-zinc-50,
+.tool-dark .bg-zinc-100,
+.tool-dark .bg-neutral-50,
+.tool-dark .bg-neutral-100 {
+  background-color: var(--bg-elev) !important;
+}
+
+.tool-dark .bg-slate-200,
+.tool-dark .bg-gray-200 {
+  background-color: var(--bg-elev-2) !important;
+}
+
+/* alpha-modified white surfaces (e.g. bg-white/70 backdrop-blur banners) */
+.tool-dark [class*="bg-white\/"] {
+  background-color: rgba(16, 17, 19, 0.85) !important;
+}
+
+/* gradient backgrounds — flatten to solid dark */
+.tool-dark [class*="bg-linear-to-"],
+.tool-dark [class*="bg-gradient-to-"] {
+  background-image: none !important;
+  background-color: var(--bg) !important;
+}
+
+/* hover bgs */
+.tool-dark .hover\:bg-gray-50:hover,
+.tool-dark .hover\:bg-gray-100:hover,
+.tool-dark .hover\:bg-slate-50:hover,
+.tool-dark .hover\:bg-slate-100:hover {
+  background-color: var(--bg-elev-2) !important;
+}
+
+/* ── Text colors ── */
+.tool-dark .text-slate-900,
+.tool-dark .text-slate-800,
+.tool-dark .text-gray-900,
+.tool-dark .text-gray-800,
+.tool-dark .text-zinc-900,
+.tool-dark .text-zinc-800,
+.tool-dark .text-neutral-900,
+.tool-dark .text-black {
+  color: var(--fg) !important;
+}
+
+.tool-dark .text-slate-700,
+.tool-dark .text-slate-600,
+.tool-dark .text-gray-700,
+.tool-dark .text-gray-600,
+.tool-dark .text-zinc-700,
+.tool-dark .text-zinc-600 {
+  color: var(--fg-dim) !important;
+}
+
+.tool-dark .text-slate-500,
+.tool-dark .text-slate-400,
+.tool-dark .text-slate-300,
+.tool-dark .text-gray-500,
+.tool-dark .text-gray-400 {
+  color: var(--fg-faint) !important;
+}
+
+/* ── Borders ── */
+.tool-dark .border,
+.tool-dark .border-t,
+.tool-dark .border-b,
+.tool-dark .border-l,
+.tool-dark .border-r,
+.tool-dark .border-x,
+.tool-dark .border-y {
+  border-color: var(--border);
+}
+
+.tool-dark .border-slate-100,
+.tool-dark .border-slate-200,
+.tool-dark .border-gray-100,
+.tool-dark .border-gray-200,
+.tool-dark .border-zinc-200,
+.tool-dark .border-neutral-200 {
+  border-color: var(--border) !important;
+}
+
+.tool-dark .border-slate-300,
+.tool-dark .border-gray-300 {
+  border-color: var(--border-strong) !important;
+}
+
+/* ── Primary accent — flip blue/indigo/purple buttons to mint ── */
+.tool-dark .text-blue-600,
+.tool-dark .text-blue-500,
+.tool-dark .text-indigo-600,
+.tool-dark .text-indigo-500,
+.tool-dark .text-purple-600,
+.tool-dark .text-violet-600 {
+  color: var(--accent) !important;
+}
+
+.tool-dark .bg-blue-600,
+.tool-dark .bg-blue-500,
+.tool-dark .bg-indigo-600,
+.tool-dark .bg-indigo-500,
+.tool-dark .bg-purple-600,
+.tool-dark .bg-violet-600 {
+  background-color: var(--accent) !important;
+  color: var(--bg) !important;
+}
+.tool-dark .bg-blue-600:hover,
+.tool-dark .bg-blue-500:hover,
+.tool-dark .bg-indigo-600:hover,
+.tool-dark .bg-indigo-500:hover,
+.tool-dark .hover\:bg-blue-700:hover,
+.tool-dark .hover\:bg-indigo-700:hover,
+.tool-dark .hover\:bg-purple-700:hover {
+  background-color: rgba(93, 255, 180, 0.85) !important;
+  color: var(--bg) !important;
+}
+
+/* primary-NNN tokens (defined in legacy globals — fall back to mint) */
+.tool-dark [class*="bg-primary-"] {
+  background-color: var(--accent) !important;
+  color: var(--bg) !important;
+}
+.tool-dark [class*="text-primary-"] {
+  color: var(--accent) !important;
+}
+.tool-dark [class*="border-primary-"],
+.tool-dark [class*="ring-primary-"],
+.tool-dark [class*="focus\:ring-primary-"] {
+  border-color: var(--accent) !important;
+}
+
+/* ── Status colors — keep semantic legibility on dark ── */
+.tool-dark .bg-red-50,
+.tool-dark .bg-red-100 {
+  background-color: rgba(255, 106, 85, 0.10) !important;
+}
+.tool-dark .text-red-700,
+.tool-dark .text-red-600,
+.tool-dark .text-red-900,
+.tool-dark .text-red-500 {
+  color: var(--danger) !important;
+}
+.tool-dark .border-red-500,
+.tool-dark .border-red-400 {
+  border-color: var(--danger) !important;
+}
+
+.tool-dark .bg-green-50,
+.tool-dark .bg-emerald-50 {
+  background-color: var(--accent-dim) !important;
+}
+.tool-dark .text-green-700,
+.tool-dark .text-green-600,
+.tool-dark .text-emerald-600,
+.tool-dark .text-emerald-700 {
+  color: var(--accent) !important;
+}
+
+.tool-dark .bg-amber-50,
+.tool-dark .bg-yellow-50 {
+  background-color: rgba(245, 176, 65, 0.10) !important;
+}
+.tool-dark .text-amber-700,
+.tool-dark .text-yellow-700 {
+  color: var(--warn) !important;
+}
+
+/* ── Inputs (forms, selects, textareas) ── */
+.tool-dark input[type="text"],
+.tool-dark input[type="email"],
+.tool-dark input[type="password"],
+.tool-dark input[type="number"],
+.tool-dark input[type="search"],
+.tool-dark input[type="url"],
+.tool-dark input[type="tel"],
+.tool-dark textarea,
+.tool-dark select {
+  background-color: var(--bg-elev-2) !important;
+  color: var(--fg) !important;
+  border-color: var(--border-strong) !important;
+}
+.tool-dark input::placeholder,
+.tool-dark textarea::placeholder {
+  color: var(--fg-faint) !important;
+}
+.tool-dark input:focus,
+.tool-dark textarea:focus,
+.tool-dark select:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 3px var(--accent-dim) !important;
+  outline: none;
+}
+
+/* ── Modals / dialog backdrops ── */
+.tool-dark [class*="bg-black\/"] {
+  background-color: rgba(0, 0, 0, 0.7) !important;
+}
+
+/* ── Selection ── */
+.tool-dark ::selection {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+/* ── Scrollbar (Chromium) ── */
+.tool-dark *::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.tool-dark *::-webkit-scrollbar-track {
+  background: transparent;
+}
+.tool-dark *::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+  border: 2px solid var(--bg);
+}
+.tool-dark *::-webkit-scrollbar-thumb:hover {
+  background: var(--fg-faint);
+}
+
+/* ── Shadow tweaks — subtle accent ring instead of harsh black drop ── */
+.tool-dark .shadow,
+.tool-dark .shadow-sm,
+.tool-dark .shadow-md,
+.tool-dark .shadow-lg,
+.tool-dark .shadow-xl,
+.tool-dark .shadow-2xl {
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.02) inset,
+    0 12px 24px -12px rgba(0, 0, 0, 0.6) !important;
+}
+
+/* ── Card hover lifts (StatCard, feature cards) ── */
+.tool-dark .hover\:shadow-md:hover,
+.tool-dark .hover\:shadow-lg:hover,
+.tool-dark .hover\:shadow-xl:hover {
+  box-shadow:
+    0 0 0 1px var(--border-strong) inset,
+    0 18px 32px -16px rgba(0, 0, 0, 0.7) !important;
+}
+
+/* ── Decorative amber accents in WelcomeSection — cool-toned for dark ── */
+.tool-dark .bg-amber-300,
+.tool-dark .bg-amber-400 {
+  background-color: var(--accent) !important;
+}
+.tool-dark .text-amber-500,
+.tool-dark .text-amber-400 {
+  color: var(--accent) !important;
+}
+
+/* The Sidebar component uses inline #0f1117 — already on theme.
+   Just normalize its border to our token. */
+.tool-dark aside.border-r {
+  border-right-color: var(--border) !important;
 }
