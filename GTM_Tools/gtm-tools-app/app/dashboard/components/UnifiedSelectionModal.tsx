@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ChevronRight, Check, Plus, X } from "lucide-react";
 import { useDashboardStore } from "@/app/store/useDashboardStore";
 import { useDashboardActions } from "@/hooks/useDashboardActions";
 import { useGtmAccounts } from "@/hooks/useGtmAccounts";
@@ -13,7 +14,6 @@ interface Props {
 
 export default function UnifiedSelectionModal({ show, onClose }: Props) {
   const [, setStep] = useState<"account" | "container" | "workspace">("account");
-
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
 
@@ -26,26 +26,19 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
     setSelectedContainerId,
     selectedWorkspaceId,
     setSelectedWorkspaceId,
-
-    // ✅ NEW (names)
     setSelectedAccountName,
     setSelectedContainerName,
     setSelectedWorkspaceName,
-
     containers,
     containersLoading,
-
     workspaces,
     workspacesLoading,
-
     workspaceCrudLoading,
     setWorkspaceNameInput,
   } = useDashboardStore();
 
-  const { fetchContainers, fetchWorkspaces, handleSaveWorkspace } =
-    useDashboardActions();
+  const { fetchContainers, fetchWorkspaces, handleSaveWorkspace } = useDashboardActions();
 
-  // Fetch containers when account selected
   useEffect(() => {
     if (selectedAccountId) {
       setStep("container");
@@ -54,7 +47,6 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedAccountId]);
 
-  // Fetch workspaces when container selected
   useEffect(() => {
     if (selectedContainerId && selectedAccountId) {
       setStep("workspace");
@@ -65,46 +57,35 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
 
   if (!show) return null;
 
-  // ✅ UPDATED: account select now sets name also
   const handleAccountSelect = (account: any) => {
     setSelectedAccountId(account.accountId);
     setSelectedAccountName(account.name);
-
-    // reset container/workspace when account changes
     setSelectedContainerId("");
     setSelectedContainerName("");
     setSelectedWorkspaceId("");
     setSelectedWorkspaceName("");
   };
 
-  // ✅ UPDATED: container select now sets name also
   const handleContainerSelect = (container: any) => {
     setSelectedContainerId(container.containerId);
     setSelectedContainerName(container.name);
-
-    // reset workspace when container changes
     setSelectedWorkspaceId("");
     setSelectedWorkspaceName("");
   };
 
-  // ✅ UPDATED: workspace select now sets name also
   const handleWorkspaceSelect = (workspace: any) => {
     setSelectedWorkspaceId(workspace.workspaceId);
     setSelectedWorkspaceName(workspace.name);
-
     onClose();
   };
 
   const handleCreateWorkspace = async () => {
     if (!newWorkspaceName.trim()) return;
-
     try {
       setWorkspaceNameInput(newWorkspaceName.trim());
       await handleSaveWorkspace();
-
       setNewWorkspaceName("");
       setIsCreatingWorkspace(false);
-
       await fetchWorkspaces();
     } catch (error) {
       console.error("Error creating workspace:", error);
@@ -112,209 +93,226 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white w-full max-w-6xl h-[80vh] rounded-xl shadow-xl border border-gray-200 overflow-hidden flex flex-col">
-        {/* TOP NAVBAR */}
-        <div className="flex items-center justify-between px-6 py-3 border-b bg-white">
-          <div className="flex items-center gap-4">
-            <h2 className="text-lg font-semibold text-gray-900">All</h2>
-            <h2 className="text-sm font-medium text-gray-500">Favourites</h2>
-            <h2 className="text-sm font-medium text-gray-500">Recent</h2>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="bg-card text-fg w-full max-w-6xl h-[80vh] rounded-xl shadow-lg border border-edge overflow-hidden flex flex-col"
+      >
+        {/* HEADER */}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-line">
+          <div className="flex items-center gap-5">
+            <h2 className="text-[14px] font-semibold text-fg">Select workspace</h2>
+            <span className="text-[11px] text-faint">
+              Pick an account, container, then workspace.
+            </span>
           </div>
-
-          <div className="flex items-center gap-4">
-            <button
-              onClick={onClose}
-              className="text-gray-500 hover:text-gray-900 text-lg font-bold"
-            >
-              ✕
-            </button>
-          </div>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 inline-flex items-center justify-center rounded-md text-muted hover:text-fg hover:bg-card-hi transition-colors"
+            aria-label="Close"
+          >
+            <X size={15} strokeWidth={2} />
+          </button>
         </div>
 
-        {/* MAIN BODY */}
+        {/* THREE-PANE BODY */}
         <div className="flex flex-1 overflow-hidden">
-          {/* LEFT PANEL (ACCOUNTS) */}
-          <div className="w-[25%] border-r bg-gray-50 overflow-y-auto">
-            <div className="px-4 py-3 border-b bg-white font-semibold text-sm text-gray-700">
-              Tag Manager Accounts
-            </div>
+          {/* LEFT — ACCOUNTS */}
+          <Pane label="Accounts" width="w-[24%]">
+            {accountsLoading ? (
+              <Hint>Loading accounts…</Hint>
+            ) : accounts.length === 0 ? (
+              <Hint>No accounts found.</Hint>
+            ) : (
+              accounts.map((account: any) => (
+                <PaneButton
+                  key={account.accountId}
+                  active={selectedAccountId === account.accountId}
+                  onClick={() => handleAccountSelect(account)}
+                  trailing={<ChevronRight size={13} strokeWidth={2} className="text-faint" />}
+                  primary={account.name}
+                  secondary={account.accountId}
+                />
+              ))
+            )}
+          </Pane>
 
-            <div className="p-2 space-y-1">
-              {accountsLoading ? (
-                <p className="text-sm text-gray-500 px-2 py-2">
-                  Loading accounts...
-                </p>
-              ) : accounts.length === 0 ? (
-                <p className="text-sm text-gray-500 px-2 py-2">
-                  No accounts found
-                </p>
-              ) : (
-                accounts.map((account: any) => (
-                  <button
-                    key={account.accountId}
-                    onClick={() => handleAccountSelect(account)}
-                    className={`w-full flex justify-between items-center px-3 py-3 rounded-md text-left text-sm font-medium transition ${
-                      selectedAccountId === account.accountId
-                        ? "bg-blue-100 text-blue-800"
-                        : "hover:bg-gray-200 text-gray-800"
-                    }`}
-                  >
-                    <div>
-                      <p className="font-semibold">{account.name}</p>
-                      <p className="text-xs text-gray-500">
-                        {account.accountId}
-                      </p>
-                    </div>
+          {/* MIDDLE — CONTAINERS */}
+          <Pane label="Containers" width="w-[36%]">
+            {!selectedAccountId ? (
+              <Hint>Select an account first.</Hint>
+            ) : containersLoading ? (
+              <Hint>Loading containers…</Hint>
+            ) : containers.length === 0 ? (
+              <Hint>No containers found.</Hint>
+            ) : (
+              containers.map((container: any) => (
+                <PaneButton
+                  key={container.containerId}
+                  active={selectedContainerId === container.containerId}
+                  onClick={() => handleContainerSelect(container)}
+                  trailing={
+                    selectedContainerId === container.containerId ? (
+                      <Check size={13} strokeWidth={2.5} className="text-accent" />
+                    ) : (
+                      <ChevronRight size={13} strokeWidth={2} className="text-faint" />
+                    )
+                  }
+                  primary={container.name}
+                  secondary={container.publicId || container.containerId}
+                />
+              ))
+            )}
+          </Pane>
 
-                    <span className="text-gray-400">{">"}</span>
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* MIDDLE PANEL (CONTAINERS) */}
-          <div className="w-[40%] border-r bg-white overflow-y-auto">
-            <div className="px-4 py-3 border-b bg-white font-semibold text-sm text-gray-700">
-              Containers
-            </div>
-
-            <div className="p-2 space-y-1">
-              {!selectedAccountId ? (
-                <p className="text-sm text-gray-500 px-2 py-2">
-                  Select an account first
-                </p>
-              ) : containersLoading ? (
-                <p className="text-sm text-gray-500 px-2 py-2">
-                  Loading containers...
-                </p>
-              ) : containers.length === 0 ? (
-                <p className="text-sm text-gray-500 px-2 py-2">
-                  No containers found
-                </p>
-              ) : (
-                containers.map((container: any) => (
-                  <button
-                    key={container.containerId}
-                    onClick={() => handleContainerSelect(container)}
-                    className={`w-full flex justify-between items-center px-3 py-3 rounded-md text-left text-sm font-medium transition ${
-                      selectedContainerId === container.containerId
-                        ? "bg-gray-100 border border-gray-300"
-                        : "hover:bg-gray-100 text-gray-800"
-                    }`}
-                  >
-                    <div>
-                      <p className="font-semibold">{container.name}</p>
-                      <p className="text-xs text-gray-500">
-                        {container.publicId || container.containerId}
-                      </p>
-                    </div>
-
-                    {selectedContainerId === container.containerId && (
-                      <span className="text-green-600 font-bold">✔</span>
-                    )}
-                  </button>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* RIGHT PANEL (WORKSPACES) */}
-          <div className="flex-1 bg-white overflow-y-auto">
-            <div className="px-4 py-3 border-b bg-white font-semibold text-sm text-gray-700 flex justify-between items-center">
-              <span>Workspaces</span>
-
-              {selectedContainerId && !isCreatingWorkspace && (
+          {/* RIGHT — WORKSPACES */}
+          <Pane
+            label="Workspaces"
+            width="flex-1"
+            action={
+              selectedContainerId && !isCreatingWorkspace ? (
                 <button
                   onClick={() => setIsCreatingWorkspace(true)}
-                  className="text-xs font-semibold px-3 py-1 rounded bg-green-600 text-white hover:bg-green-700"
+                  className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md text-accent hover:bg-accent-soft transition-colors"
                 >
-                  + New Workspace
+                  <Plus size={12} strokeWidth={2.4} />
+                  New
                 </button>
-              )}
-            </div>
-
-            <div className="p-2 space-y-1">
-              {!selectedContainerId ? (
-                <p className="text-sm text-gray-500 px-2 py-2">
-                  Select a container first
-                </p>
-              ) : workspacesLoading ? (
-                <p className="text-sm text-gray-500 px-2 py-2">
-                  Loading workspaces...
-                </p>
-              ) : workspaces.length === 0 ? (
-                <p className="text-sm text-gray-500 px-2 py-2">
-                  No workspaces found
-                </p>
-              ) : (
-                workspaces.map((workspace: any) => (
-                  <button
-                    key={workspace.workspaceId}
-                    onClick={() => handleWorkspaceSelect(workspace)}
-                    className={`w-full flex justify-between items-center px-3 py-3 rounded-md text-left text-sm font-medium transition ${
-                      selectedWorkspaceId === workspace.workspaceId
-                        ? "bg-blue-600 text-white"
-                        : "hover:bg-gray-100 text-gray-800"
-                    }`}
-                  >
-                    <span>{workspace.name}</span>
-
-                    {selectedWorkspaceId === workspace.workspaceId && (
-                      <span className="font-bold">✔</span>
-                    )}
-                  </button>
-                ))
-              )}
-            </div>
+              ) : undefined
+            }
+          >
+            {!selectedContainerId ? (
+              <Hint>Select a container first.</Hint>
+            ) : workspacesLoading ? (
+              <Hint>Loading workspaces…</Hint>
+            ) : workspaces.length === 0 ? (
+              <Hint>No workspaces found.</Hint>
+            ) : (
+              workspaces.map((workspace: any) => (
+                <PaneButton
+                  key={workspace.workspaceId}
+                  active={selectedWorkspaceId === workspace.workspaceId}
+                  onClick={() => handleWorkspaceSelect(workspace)}
+                  trailing={
+                    selectedWorkspaceId === workspace.workspaceId ? (
+                      <Check size={13} strokeWidth={2.5} className="text-accent" />
+                    ) : null
+                  }
+                  primary={workspace.name}
+                />
+              ))
+            )}
 
             {/* CREATE WORKSPACE FORM */}
             {isCreatingWorkspace && (
-              <div className="p-4 border-t bg-gray-50">
-                <h3 className="text-sm font-semibold text-gray-800 mb-2">
-                  Create Workspace
-                </h3>
-
+              <div className="mt-3 p-3 rounded-lg bg-card-hi border border-line">
+                <p className="text-[12px] font-medium text-fg mb-2">Create workspace</p>
                 <input
                   type="text"
                   value={newWorkspaceName}
                   onChange={(e) => setNewWorkspaceName(e.target.value)}
                   placeholder="Workspace name"
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-green-400"
+                  className="w-full bg-card text-[13px] py-2"
+                  autoFocus
                 />
-
                 <div className="flex gap-2 mt-3">
                   <button
                     onClick={handleCreateWorkspace}
                     disabled={workspaceCrudLoading || !newWorkspaceName.trim()}
-                    className="flex-1 px-3 py-2 text-sm font-semibold bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-300"
+                    className="btn-primary !py-1.5 !px-3 flex-1 justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {workspaceCrudLoading ? "Creating..." : "Create"}
+                    {workspaceCrudLoading ? "Creating…" : "Create"}
                   </button>
-
                   <button
-                    onClick={() => setIsCreatingWorkspace(false)}
-                    className="flex-1 px-3 py-2 text-sm font-semibold border rounded hover:bg-gray-100"
+                    onClick={() => {
+                      setIsCreatingWorkspace(false);
+                      setNewWorkspaceName("");
+                    }}
+                    className="btn-secondary !py-1.5 !px-3 flex-1 justify-center"
                   >
                     Cancel
                   </button>
                 </div>
               </div>
             )}
-          </div>
+          </Pane>
         </div>
 
         {/* FOOTER */}
-        <div className="px-6 py-3 border-t bg-white flex justify-end">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm font-semibold rounded border hover:bg-gray-100"
-          >
+        <div className="px-5 py-3 border-t border-line bg-page-soft flex justify-end gap-2">
+          <button onClick={onClose} className="btn-secondary !py-1.5 !px-3">
             Close
           </button>
         </div>
       </div>
     </div>
   );
+}
+
+/* ──────────────────────────────────────── helpers */
+
+function Pane({
+  label,
+  width,
+  action,
+  children,
+}: {
+  label: string;
+  width: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={`${width} flex flex-col border-r border-line last:border-r-0 overflow-hidden`}>
+      <div className="px-4 py-2.5 border-b border-line bg-card-hi flex items-center justify-between">
+        <span className="font-mono text-[10.5px] uppercase tracking-[0.15em] text-faint font-semibold">
+          {label}
+        </span>
+        {action}
+      </div>
+      <div className="flex-1 overflow-y-auto p-2 space-y-0.5">{children}</div>
+    </div>
+  );
+}
+
+function PaneButton({
+  active,
+  onClick,
+  primary,
+  secondary,
+  trailing,
+}: {
+  active: boolean;
+  onClick: () => void;
+  primary: string;
+  secondary?: string;
+  trailing?: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-md text-left transition-colors ${
+        active
+          ? "bg-accent-soft border border-accent/25"
+          : "hover:bg-card-hi border border-transparent"
+      }`}
+    >
+      <div className="min-w-0 flex-1">
+        <p className={`text-[13px] truncate ${active ? "text-accent font-medium" : "text-fg"}`}>
+          {primary}
+        </p>
+        {secondary && (
+          <p className="text-[11px] font-mono text-faint truncate mt-0.5">{secondary}</p>
+        )}
+      </div>
+      {trailing && <span className="shrink-0">{trailing}</span>}
+    </button>
+  );
+}
+
+function Hint({ children }: { children: React.ReactNode }) {
+  return <p className="text-[12.5px] text-faint px-3 py-2">{children}</p>;
 }

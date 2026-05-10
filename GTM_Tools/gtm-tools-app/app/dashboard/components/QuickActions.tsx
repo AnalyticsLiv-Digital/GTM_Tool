@@ -13,63 +13,68 @@ export default function QuickActions() {
   const actions = [
     {
       title: "Manage Tags",
-      //desc: "Create, edit and export tags quickly.",
-      icon: <Tag className="w-5 h-5 text-blue-600" />,
+      icon: Tag,
       href: "/dashboard/tags",
-      accent: "bg-blue-50 border-blue-200",
+      accent: "#3b82f6",
     },
     {
       title: "Manage Triggers",
-      //desc: "Organize triggers and reduce clutter.",
-      icon: <Zap className="w-5 h-5 text-orange-600" />,
+      icon: Zap,
       href: "/dashboard/triggers",
-      accent: "bg-orange-50 border-orange-200",
+      accent: "#f59e0b",
     },
     {
       title: "Manage Variables",
-      //desc: "Audit variables and remove unused ones.",
-      icon: <Database className="w-5 h-5 text-emerald-600" />,
+      icon: Database,
       href: "/dashboard/variables",
-      accent: "bg-emerald-50 border-emerald-200",
+      accent: "#10b981",
     },
     {
       title: "Manage Templates",
-      //desc: "Import/export custom templates easily.",
-      icon: <LayoutTemplate className="w-5 h-5 text-purple-600" />,
+      icon: LayoutTemplate,
       href: "/dashboard/templates",
-      accent: "bg-purple-50 border-purple-200",
+      accent: "#8b5cf6",
     },
     {
       title: "Run HealthCheck",
-      //desc: "Scan container and generate a report.",
-      icon: <BarChart2 className="w-5 h-5 text-red-600" />,
+      icon: BarChart2,
       href: "/dashboard/healthcheck",
-      accent: "bg-red-50 border-red-200",
+      accent: "#ef4444",
     },
   ];
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-      {actions.map((a) => (
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {actions.map(({ title, icon: Icon, href, accent }) => (
         <button
-          key={a.title}
+          key={title}
           disabled={disabled}
-          onClick={() => router.push(a.href)}
-          className={`text-left p-6 rounded-2xl border shadow-sm transition hover:shadow-md ${
-            a.accent
-          } ${disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+          onClick={() => router.push(href)}
+          className={`group relative text-left p-5 rounded-xl border border-line bg-card transition-all overflow-hidden ${
+            disabled
+              ? "opacity-50 cursor-not-allowed"
+              : "cursor-pointer hover:border-edge hover:bg-card-hi"
+          }`}
         >
+          <div
+            className="absolute left-0 top-4 bottom-4 w-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+            style={{ background: accent }}
+          />
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white shadow flex items-center justify-center">
-              {a.icon}
+            <div
+              className="w-10 h-10 rounded-lg flex items-center justify-center"
+              style={{
+                background: `color-mix(in srgb, ${accent} 14%, transparent)`,
+                color: accent,
+              }}
+            >
+              <Icon size={18} strokeWidth={1.8} />
             </div>
-            <h3 className="font-bold text-slate-900 text-base">{a.title}</h3>
+            <h3 className="font-semibold text-fg text-[14px]">{title}</h3>
           </div>
 
-          <p className="mt-3 text-sm text-slate-600"></p>
-
-          {!store.selectedWorkspaceId && (
-            <p className="mt-3 text-xs text-red-500 font-semibold">
+          {disabled && (
+            <p className="mt-3 text-[11px] text-[color:var(--danger)] font-medium">
               Select workspace first
             </p>
           )}
@@ -78,39 +83,3 @@ export default function QuickActions() {
     </div>
   );
 }
-// import QuickActionCard from "./QuickActionCard";
-
-// export default function QuickActions() {
-//   return (
-//     <div className="mb-12">
-//       <h2 className="text-2xl font-bold text-gray-900 mb-6">Quick Actions</h2>
-
-//       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-//         <QuickActionCard
-//           title="Containers"
-//           description="View and manage containers"
-//           icon="📦"
-//           onClick={() => alert("Containers feature coming soon")}
-//         />
-//         <QuickActionCard
-//           title="Tags"
-//           description="Create and edit GTM tags"
-//           icon="🏷️"
-//           onClick={() => alert("Tags feature coming soon")}
-//         />
-//         <QuickActionCard
-//           title="Triggers"
-//           description="Configure triggers and rules"
-//           icon="⚡"
-//           onClick={() => alert("Triggers feature coming soon")}
-//         />
-//         <QuickActionCard
-//           title="Variables"
-//           description="Manage built-in and custom variables"
-//           icon="📊"
-//           onClick={() => alert("Variables feature coming soon")}
-//         />
-//       </div>
-//     </div>
-//   );
-// }

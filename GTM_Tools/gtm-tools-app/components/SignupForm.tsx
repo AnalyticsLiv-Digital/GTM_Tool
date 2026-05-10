@@ -81,7 +81,7 @@ export default function SignupForm() {
             password && (
               <span
                 className={`text-[11px] font-mono ${
-                  passwordLength ? "text-[color:var(--accent)]" : "text-[color:var(--fg-faint)]"
+                  passwordLength ? "text-accent" : "text-faint"
                 }`}
               >
                 {passwordLength ? "✓ ok" : `${password.length}/6`}
@@ -89,10 +89,10 @@ export default function SignupForm() {
             )
           }
         />
-        <div className="mt-1.5 h-px bg-[color:var(--border)] relative overflow-hidden">
+        <div className="mt-1.5 h-px bg-line relative overflow-hidden">
           <span
             className={`absolute inset-y-0 left-0 transition-all duration-300 ${
-              passwordLength ? "bg-[color:var(--accent)]" : "bg-[color:var(--fg-faint)]"
+              passwordLength ? "bg-accent" : "bg-faint"
             }`}
             style={{ width: `${Math.min((password.length / 6) * 100, 100)}%` }}
           />
@@ -112,7 +112,7 @@ export default function SignupForm() {
           confirmPassword && (
             <span
               className={`text-[11px] font-mono ${
-                passwordMatch ? "text-[color:var(--accent)]" : "text-[color:var(--danger)]"
+                passwordMatch ? "text-accent" : "text-[color:var(--danger)]"
               }`}
             >
               {passwordMatch ? "✓ match" : "✗ mismatch"}
@@ -145,10 +145,10 @@ export default function SignupForm() {
         )}
       </button>
 
-      <p className="text-[11.5px] text-[color:var(--fg-faint)] text-center leading-[1.6]">
+      <p className="text-[11.5px] text-faint text-center leading-[1.6]">
         By creating an account, you agree to our{" "}
-        <a href="#" className="text-[color:var(--fg-dim)] hover:text-[color:var(--accent)]">terms</a> and{" "}
-        <a href="#" className="text-[color:var(--fg-dim)] hover:text-[color:var(--accent)]">privacy policy</a>.
+        <a href="#" className="text-muted hover:text-accent">terms</a> and{" "}
+        <a href="#" className="text-muted hover:text-accent">privacy policy</a>.
       </p>
     </form>
   );
@@ -178,7 +178,7 @@ function Field({
   return (
     <div>
       <div className="flex items-baseline justify-between mb-1.5">
-        <label htmlFor={id} className="text-[12.5px] font-medium text-[color:var(--fg)]">
+        <label htmlFor={id} className="text-[12.5px] font-medium text-fg">
           {label}
         </label>
         {rightSlot}
@@ -192,7 +192,7 @@ function Field({
         disabled={disabled}
         autoComplete={autoComplete}
         required
-        className="w-full"
+        className="w-full bg-page-soft"
       />
     </div>
   );

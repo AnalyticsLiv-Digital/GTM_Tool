@@ -1,3 +1,8 @@
+"use client";
+
+import { useRef } from "react";
+import { Modal } from "@/components/ui/Modal";
+
 interface ContainerModalProps {
   show: boolean;
   mode: "create" | "edit";
@@ -17,44 +22,52 @@ export default function ContainerModal({
   onClose,
   onSave,
 }: ContainerModalProps) {
-  if (!show) return null;
+  const inputRef = useRef<HTMLInputElement>(null);
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white w-full max-w-md rounded-2xl shadow-xl p-6">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">
-          {mode === "create" ? "Create Container" : "Edit Container"}
-        </h2>
-
-        <label className="block text-sm font-semibold text-gray-700 mb-2">
-          Container Name
-        </label>
-
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Enter container name"
-          className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-purple-400"
-        />
-
-        <div className="flex justify-end gap-3 mt-6">
+    <Modal
+      open={show}
+      onClose={onClose}
+      size="md"
+      title={mode === "create" ? "Create container" : "Edit container"}
+      initialFocusRef={inputRef}
+      footer={
+        <>
           <button
+            type="button"
             disabled={loading}
             onClick={onClose}
-            className="px-4 py-2 text-sm font-semibold rounded-xl border border-gray-300 hover:bg-gray-100 disabled:bg-gray-200"
+            className="btn-secondary !py-1.5 !px-3 disabled:opacity-50"
           >
             Cancel
           </button>
-
           <button
+            type="button"
             disabled={loading}
             onClick={onSave}
-            className="px-4 py-2 text-sm font-semibold rounded-xl bg-purple-600 text-white hover:bg-purple-700 disabled:bg-gray-300"
+            className="btn-primary !py-1.5 !px-3 disabled:opacity-50"
           >
-            {loading ? "Saving..." : "Save"}
+            {loading ? "Saving…" : "Save container"}
           </button>
-        </div>
+        </>
+      }
+    >
+      <div>
+        <label htmlFor="container-name" className="block text-[12.5px] font-medium text-fg mb-2">
+          Container name
+        </label>
+        <input
+          id="container-name"
+          ref={inputRef}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !loading) onSave();
+          }}
+          placeholder="Enter container name"
+          className="w-full bg-page-soft"
+        />
       </div>
-    </div>
+    </Modal>
   );
 }

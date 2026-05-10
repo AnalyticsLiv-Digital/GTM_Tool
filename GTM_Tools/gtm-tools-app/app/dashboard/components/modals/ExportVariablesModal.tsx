@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
+import { confirmDialog } from "@/lib/ui/dialog";
 
 export default function ExportVariablesModal({
   show,
@@ -131,12 +132,12 @@ export default function ExportVariablesModal({
     if (!selectedVariables || selectedVariables.length === 0)
       return toast.warning("No variables selected for export.");
 
-    if (
-      !confirm(
-        `Are you sure you want to export ${selectedVariables.length} variable(s) to selected workspace?`
-      )
-    )
-      return;
+    const ok = await confirmDialog({
+      title: `Export ${selectedVariables.length} variable(s)?`,
+      description: "They will be created in the selected destination workspace. Existing variables in that workspace are not modified.",
+      confirmLabel: "Export",
+    });
+    if (!ok) return;
 
     const failedVariables: string[] = [];
 
@@ -235,17 +236,17 @@ export default function ExportVariablesModal({
   if (!show) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white w-full max-w-3xl rounded-2xl shadow-xl overflow-hidden">
+    <div className="fixed inset-0 bg-black/55 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-card text-fg w-full max-w-3xl rounded-xl border border-edge shadow-lg overflow-hidden">
         {/* HEADER */}
-        <div className="flex justify-between items-center px-6 py-4 border-b">
-          <h2 className="text-lg font-bold text-gray-900">
+        <div className="flex justify-between items-center px-5 py-3 border-b border-line">
+          <h2 className="text-[15px] font-semibold text-fg">
             Export Variables
           </h2>
 
           <button
             onClick={onClose}
-            className="text-gray-600 hover:text-gray-900 font-bold text-lg"
+            className="w-8 h-8 inline-flex items-center justify-center rounded-md text-muted hover:text-fg hover:bg-card-hi text-base"
           >
             ✕
           </button>
@@ -254,26 +255,26 @@ export default function ExportVariablesModal({
         {/* BODY */}
         <div className="grid grid-cols-12 min-h-90">
           {/* LEFT */}
-          <div className="col-span-5 border-r bg-gray-50 p-4">
-            <p className="text-sm font-semibold text-gray-700 mb-3">
+          <div className="col-span-5 border-r border-line bg-card-hi p-4">
+            <p className="text-[12.5px] font-medium text-faint mb-3 uppercase tracking-[0.05em]">
               Selected Variables ({selectedVariables.length})
             </p>
 
-            <div className="bg-white border rounded-xl overflow-y-auto max-h-80">
+            <div className="bg-card border border-line rounded-lg overflow-y-auto max-h-80">
               {selectedVariables.length === 0 ? (
-                <p className="text-xs text-gray-500 p-4">
+                <p className="text-[12px] text-faint p-4">
                   No variables selected.
                 </p>
               ) : (
                 selectedVariables.map((variable: any) => (
                   <div
                     key={variable.variableId}
-                    className="px-4 py-3 border-b last:border-none"
+                    className="px-4 py-3 border-b border-line last:border-none"
                   >
-                    <p className="text-sm font-semibold text-gray-900">
+                    <p className="text-[13px] font-medium text-fg">
                       {variable.name}
                     </p>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-[11px] text-faint">
                       Type: {variable.type} | ID: {variable.variableId}
                     </p>
                   </div>
@@ -284,18 +285,18 @@ export default function ExportVariablesModal({
 
           {/* RIGHT */}
           <div className="col-span-7 p-6">
-            <h3 className="text-md font-bold text-gray-900 mb-5">
+            <h3 className="text-[14px] font-semibold text-fg mb-5">
               Select Destination
             </h3>
 
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
+            <label className="block text-[12.5px] font-medium text-fg mb-2">
               Account
             </label>
             <select
               value={selectedAccountId}
               onChange={(e) => setSelectedAccountId(e.target.value)}
               disabled={loadingAccounts}
-              className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full bg-page-soft py-2.5 text-[13px]"
             >
               <option value="">-- Select Account --</option>
               {accounts.map((acc: any) => (
@@ -305,14 +306,14 @@ export default function ExportVariablesModal({
               ))}
             </select>
 
-            <label className="block text-sm font-semibold text-gray-700 mt-5 mb-2">
+            <label className="block text-[12.5px] font-medium text-fg mt-5 mb-2">
               Container
             </label>
             <select
               value={selectedContainerId}
               onChange={(e) => setSelectedContainerId(e.target.value)}
               disabled={!selectedAccountId || loadingContainers}
-              className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full bg-page-soft py-2.5 text-[13px]"
             >
               <option value="">-- Select Container --</option>
               {containers.map((c: any) => (
@@ -322,14 +323,14 @@ export default function ExportVariablesModal({
               ))}
             </select>
 
-            <label className="block text-sm font-semibold text-gray-700 mt-5 mb-2">
+            <label className="block text-[12.5px] font-medium text-fg mt-5 mb-2">
               Workspace
             </label>
             <select
               value={selectedWorkspaceId}
               onChange={(e) => setSelectedWorkspaceId(e.target.value)}
               disabled={!selectedContainerId || loadingWorkspaces}
-              className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full bg-page-soft py-2.5 text-[13px]"
             >
               <option value="">-- Select Workspace --</option>
               {workspaces.map((w: any) => (
@@ -342,10 +343,10 @@ export default function ExportVariablesModal({
         </div>
 
         {/* FOOTER */}
-        <div className="px-6 py-4 border-t bg-white flex justify-between items-center">
+        <div className="px-5 py-3 border-t border-line bg-page-soft flex justify-between items-center">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-semibold rounded-xl border border-gray-300 hover:bg-gray-100"
+            className="btn-secondary !py-1.5 !px-3"
           >
             Cancel
           </button>
@@ -359,7 +360,7 @@ export default function ExportVariablesModal({
               !selectedWorkspaceId ||
               selectedVariables.length === 0
             }
-            className="px-5 py-2 text-sm font-semibold rounded-xl bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-300"
+            className="btn-primary !py-1.5 !px-3 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {exportLoading ? "Exporting..." : "Export Selected Variables"}
           </button>

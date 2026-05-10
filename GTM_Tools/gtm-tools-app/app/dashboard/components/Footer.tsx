@@ -2,26 +2,16 @@ import { ShieldCheck, Code2 } from "lucide-react";
 
 export default function Footer() {
   return (
-    <div className="mt-14 border-t pt-6 flex flex-col sm:flex-row justify-between items-center text-sm text-gray-500 gap-4">
+    <div className="mt-14 border-t border-line pt-6 flex flex-col sm:flex-row justify-between items-center text-[13px] text-muted gap-3">
       <p className="flex items-center gap-2">
-        <Code2 size={16} />
-        GTM Tools Dashboard • Built with Next.js + OAuth + Google Tag Manager API
+        <Code2 size={14} strokeWidth={1.8} />
+        GTM Tools · Next.js · Google Tag Manager API
       </p>
 
-      <p className="flex items-center gap-2 text-green-700 font-semibold">
-        <ShieldCheck size={16} />
-        Secure Auth Enabled
+      <p className="flex items-center gap-1.5 text-accent">
+        <ShieldCheck size={14} strokeWidth={2} />
+        Secure auth enabled
       </p>
     </div>
   );
 }
-
-// export default function Footer() {
-//   return (
-//     <div className="mt-14 text-center text-sm text-gray-500">
-//       <p>
-//         GTM Tools Dashboard • Built with Next.js • OAuth + Google Tag Manager API
-//       </p>
-//     </div>
-//   );
-// }

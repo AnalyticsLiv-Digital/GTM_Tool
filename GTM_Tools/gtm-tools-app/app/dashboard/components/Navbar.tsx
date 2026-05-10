@@ -1,8 +1,11 @@
 "use client";
 
 import Image from "next/image";
+import { ChevronDown, LogOut } from "lucide-react";
 import UnifiedSelectionModal from "./UnifiedSelectionModal";
 import { useDashboardStore } from "@/app/store/useDashboardStore";
+import { Brand } from "@/components/BrandLogo";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function Navbar({
   user,
@@ -10,6 +13,8 @@ export default function Navbar({
 }: {
   user: {
     picture?: string | null;
+    name?: string;
+    email?: string;
   } | null;
   onLogout: () => void;
 }) {
@@ -17,59 +22,84 @@ export default function Navbar({
     selectedAccountId,
     selectedContainerId,
     selectedWorkspaceId,
-
-    // 👇 NEW (must exist in store)
     selectedAccountName,
     selectedContainerName,
     selectedWorkspaceName,
-
     showSelectionModal,
     setShowSelectionModal,
   } = useDashboardStore();
 
+  const hasSelection = !!(selectedAccountId && selectedContainerId && selectedWorkspaceId);
+
   return (
     <>
-      <nav className="sticky top-0 z-50 bg-white border-b shadow-sm">
-        <div className="w-full px-4 h-16 flex justify-between items-center">
-          {/* Left */}
-          <div className="flex items-center gap-4">
-            <h1 className="text-lg font-bold text-gray-900 whitespace-nowrap">
-              MY GTM TOOL
-            </h1>
+      <nav className="sticky top-0 z-50 h-14 bg-page/85 backdrop-blur-md border-b border-line">
+        <div className="w-full h-full px-5 flex items-center justify-between gap-4">
+          {/* Left — brand + selection */}
+          <div className="flex items-center gap-4 min-w-0">
+            <Brand />
+
+            <span className="hidden md:inline-block w-px h-5 bg-line shrink-0" />
 
             <button
               onClick={() => setShowSelectionModal(true)}
-              className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-sm font-semibold text-white"
+              className="group flex items-center gap-2 px-3 py-1.5 rounded-md border border-line bg-card hover:bg-card-hi hover:border-edge transition-colors min-w-0"
+              aria-label="Switch account, container, or workspace"
             >
-              {selectedAccountId && selectedContainerId && selectedWorkspaceId
-                ? `${selectedAccountName} → ${selectedContainerName} → ${selectedWorkspaceName}`
-                : "Select Account / Container / Workspace"}
+              {hasSelection ? (
+                <span className="flex items-center gap-1.5 text-[13px] text-fg min-w-0">
+                  <span className="truncate max-w-[120px]">{selectedAccountName}</span>
+                  <span className="text-faint">/</span>
+                  <span className="truncate max-w-[140px]">{selectedContainerName}</span>
+                  <span className="text-faint">/</span>
+                  <span className="truncate max-w-[140px] text-accent font-medium">
+                    {selectedWorkspaceName}
+                  </span>
+                </span>
+              ) : (
+                <span className="text-[13px] text-muted">
+                  Select account / container / workspace
+                </span>
+              )}
+              <ChevronDown size={13} strokeWidth={2.2} className="text-faint group-hover:text-fg transition-colors shrink-0" />
             </button>
           </div>
 
-          {/* Right */}
-          <div className="flex items-center gap-4">
-            {user?.picture && (
-              <Image
-                src={user.picture}
-                alt="user"
-                width={36}
-                height={36}
-                className="rounded-full"
-              />
-            )}
+          {/* Right — theme toggle + user */}
+          <div className="flex items-center gap-2 shrink-0">
+            <ThemeToggle />
+
+            <div className="hidden sm:flex items-center gap-2.5 pl-2 ml-1 border-l border-line">
+              {user?.picture ? (
+                <Image
+                  src={user.picture}
+                  alt={user.name ?? "user"}
+                  width={28}
+                  height={28}
+                  className="rounded-full ring-1 ring-line"
+                />
+              ) : (
+                <div className="w-7 h-7 rounded-full bg-card-hi border border-line flex items-center justify-center text-[11px] font-mono text-muted">
+                  {user?.name?.[0]?.toUpperCase() ?? "U"}
+                </div>
+              )}
+              <span className="text-[13px] text-fg max-w-[140px] truncate">
+                {user?.name ?? "User"}
+              </span>
+            </div>
 
             <button
               onClick={onLogout}
-              className="text-sm font-semibold text-gray-700 hover:text-black"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-[13px] text-muted hover:text-fg hover:bg-card-hi transition-colors"
+              aria-label="Sign out"
             >
-              Logout
+              <LogOut size={13} strokeWidth={2} />
+              <span className="hidden sm:inline">Sign out</span>
             </button>
           </div>
         </div>
       </nav>
 
-      {/* UNIFIED SELECTION MODAL */}
       <UnifiedSelectionModal
         show={showSelectionModal}
         onClose={() => setShowSelectionModal(false)}
@@ -77,77 +107,3 @@ export default function Navbar({
     </>
   );
 }
-// "use client";
-
-// import { useState } from "react";
-// import Image from "next/image";
-// import { useGtmAccounts } from "@/hooks/useGtmAccounts";
-// import AccountContainerModal from "./AccountContainerModal";
-// import { useDashboardStore } from "@/app/store/useDashboardStore";
-
-// export default function Navbar({
-//   user,
-//   onLogout,
-// }: {
-//   user: {
-//     picture?: string | null;
-//   } | null;
-//   onLogout: () => void;
-// }) {
-//   const [showModal, setShowModal] = useState(false);
-
-//   const { accounts, loading: accountsLoading } = useGtmAccounts();
-
-//   const { selectedAccountId, selectedContainerId } = useDashboardStore();
-// console.log("Navbar render - selectedAccountId:", selectedAccountId, "selectedContainerId:", selectedContainerId);
-//   const [] = useState(false);
-
-//   return (
-//     <>
-//       <nav className="sticky top-0 z-50 bg-white border-b shadow-sm">
-//         <div className="max-w-7xl mx-auto px-4 h-16 flex justify-between items-center">
-//           {/* Left */}
-//           <div className="flex items-center gap-6">
-//             <h1 className="text-lg font-bold text-gray-900">My GTM TOOL</h1>
-
-//             <button
-//               onClick={() => setShowModal(true)}
-//               className="px-4 py-2 rounded-lg bg-gray-100 hover:bg-gray-200 text-sm font-semibold text-gray-800"
-//             >
-//               Account: {selectedAccountId || "Select"} | Container:{" "}
-//               {selectedContainerId || "Select"}
-//             </button>
-//           </div>
-
-//           {/* Right */}
-//           <div className="flex items-center gap-4">
-//             {user?.picture && (
-//               <Image
-//                 src={user.picture}
-//                 alt="user"
-//                 width={36}
-//                 height={36}
-//                 className="rounded-full"
-//               />
-//             )}
-
-//             <button
-//               onClick={onLogout}
-//               className="text-sm font-semibold text-gray-700 hover:text-black"
-//             >
-//               Logout
-//             </button>
-//           </div>
-//         </div>
-//       </nav>
-
-//       <AccountContainerModal
-//         show={showModal}
-//         onClose={() => setShowModal(false)}
-//         accounts={accounts}
-//         accountsLoading={accountsLoading}
-//       />
-//     </>
-//   );
-// }
-

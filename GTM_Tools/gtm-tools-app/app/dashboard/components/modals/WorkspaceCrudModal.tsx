@@ -1,6 +1,6 @@
- 
 "use client";
 
+import { X } from "lucide-react";
 import { useDashboardStore } from "@/app/store/useDashboardStore";
 import { useDashboardActions } from "@/hooks/useDashboardActions";
 
@@ -10,67 +10,74 @@ export default function WorkspaceCrudModal() {
 
   if (!store.showWorkspaceModal) return null;
 
-  return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white w-full max-w-lg rounded-xl shadow-xl border border-gray-200 overflow-hidden">
-        {/* HEADER */}
-        <div className="flex justify-between items-center px-6 py-4 border-b bg-white">
-          <h2 className="text-lg font-semibold text-gray-900">
-            {store.workspaceModalMode === "create"
-              ? "Create Workspace"
-              : "Edit Workspace"}
-          </h2>
+  const isCreate = store.workspaceModalMode === "create";
+  const atLimit = store.workspaces.length >= 3 && isCreate;
 
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 backdrop-blur-sm p-4"
+      onClick={() => store.setShowWorkspaceModal(false)}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="bg-card text-fg w-full max-w-lg rounded-xl shadow-lg border border-edge overflow-hidden"
+      >
+        {/* HEADER */}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-line">
+          <h2 className="text-[15px] font-semibold text-fg">
+            {isCreate ? "Create workspace" : "Edit workspace"}
+          </h2>
           <button
             onClick={() => store.setShowWorkspaceModal(false)}
-            className="text-gray-500 hover:text-gray-900 text-lg font-bold"
+            className="w-8 h-8 inline-flex items-center justify-center rounded-md text-muted hover:text-fg hover:bg-card-hi transition-colors"
+            aria-label="Close"
           >
-            ✕
+            <X size={15} strokeWidth={2} />
           </button>
         </div>
 
         {/* BODY */}
-        <div className="p-6 space-y-4">
+        <div className="px-5 py-5 space-y-4">
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Workspace Name
+            <label className="block text-[12.5px] font-medium text-fg mb-2">
+              Workspace name
             </label>
-
             <input
               value={store.workspaceNameInput}
               onChange={(e) => store.setWorkspaceNameInput(e.target.value)}
-              placeholder="Enter workspace name..."
-              className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-blue-400"
+              placeholder="Enter workspace name…"
+              className="w-full bg-page-soft"
+              autoFocus
             />
           </div>
 
-          {store.workspaces.length >= 3 && store.workspaceModalMode === "create" && (
-            <p className="text-xs text-red-600">
-              You can only create maximum 3 workspaces.
+          {atLimit && (
+            <p className="text-[12px] text-[color:var(--danger)] flex items-start gap-1.5">
+              <span aria-hidden>⚠</span>
+              You can only create a maximum of 3 workspaces.
             </p>
           )}
         </div>
 
         {/* FOOTER */}
-        <div className="px-6 py-4 border-t bg-white flex justify-end gap-3">
+        <div className="px-5 py-3 border-t border-line bg-page-soft flex justify-end gap-2">
           <button
             onClick={() => store.setShowWorkspaceModal(false)}
             disabled={store.workspaceCrudLoading}
-            className="px-4 py-2 text-sm font-semibold rounded border hover:bg-gray-100 disabled:opacity-50"
+            className="btn-secondary !py-1.5 !px-3 disabled:opacity-50"
           >
             Cancel
           </button>
-
           <button
             onClick={handleSaveWorkspace}
-            disabled={store.workspaceCrudLoading}
-            className="px-4 py-2 text-sm font-semibold rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+            disabled={store.workspaceCrudLoading || atLimit}
+            className="btn-primary !py-1.5 !px-3 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {store.workspaceCrudLoading
-              ? "Saving..."
-              : store.workspaceModalMode === "create"
-              ? "Create Workspace"
-              : "Update Workspace"}
+              ? "Saving…"
+              : isCreate
+              ? "Create workspace"
+              : "Update workspace"}
           </button>
         </div>
       </div>

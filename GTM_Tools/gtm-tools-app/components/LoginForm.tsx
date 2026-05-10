@@ -48,10 +48,7 @@ export default function LoginForm() {
         disabled={loading}
         autoComplete="current-password"
         rightSlot={
-          <a
-            href="#"
-            className="text-[11px] text-[color:var(--fg-faint)] hover:text-[color:var(--accent)]"
-          >
+          <a href="#" className="text-[11px] text-faint hover:text-accent">
             Forgot?
           </a>
         }
@@ -108,7 +105,7 @@ function Field({
   return (
     <div>
       <div className="flex items-baseline justify-between mb-1.5">
-        <label htmlFor={id} className="text-[12.5px] font-medium text-[color:var(--fg)]">
+        <label htmlFor={id} className="text-[12.5px] font-medium text-fg">
           {label}
         </label>
         {rightSlot}
@@ -122,7 +119,7 @@ function Field({
         disabled={disabled}
         autoComplete={autoComplete}
         required
-        className="w-full"
+        className="w-full bg-page-soft"
       />
     </div>
   );

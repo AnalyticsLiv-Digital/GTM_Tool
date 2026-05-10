@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import {
@@ -9,6 +10,7 @@ import {
   XCircle,
   AlertTriangle,
   Download,
+  RefreshCw,
 } from "lucide-react";
 
 import jsPDF from "jspdf";
@@ -24,7 +26,7 @@ type HealthCheckReport = {
   results: HealthCheckResult[];
 };
 
-export default function HomePage() {
+export default function HealthCheckPage() {
   const store = useDashboardStore();
   const [loading, setLoading] = useState(false);
   const [report, setReport] = useState<HealthCheckReport | null>(null);
@@ -32,7 +34,6 @@ export default function HomePage() {
   const handleRunHealthCheck = async () => {
     try {
       setLoading(true);
-
       const res = await fetch("/api/auth/healthcheck", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -42,7 +43,6 @@ export default function HomePage() {
           workspaceId: store.selectedWorkspaceId,
         }),
       });
-
       const data = await res.json();
       setReport(data);
     } catch (err) {
@@ -55,17 +55,12 @@ export default function HomePage() {
   const failedChecks = (report?.results || []).filter((r) => !r.passed);
   const passedChecks = (report?.results || []).filter((r) => r.passed);
 
-  // =====================================================
-  // DOWNLOAD PDF FUNCTION
-  // =====================================================
   const handleDownloadPDF = () => {
     if (!report) return;
-
     const doc = new jsPDF();
 
     doc.setFontSize(18);
     doc.text("GTM HealthCheck Report", 14, 18);
-
     doc.setFontSize(12);
     doc.text(`Score: ${report.score}%`, 14, 30);
     doc.text(`Passed Checks: ${report.passedCount}`, 14, 38);
@@ -73,7 +68,6 @@ export default function HomePage() {
 
     let currentY = 60;
 
-    // FAILED TABLE
     if (failedChecks.length > 0) {
       doc.setFontSize(14);
       doc.text("Failed Checks", 14, currentY);
@@ -98,7 +92,6 @@ Vars: ${(r.affectedVariables || []).map((x: any) => x.name).join(", ") || "-"}`,
       currentY = lastY + 12;
     }
 
-    // PASSED TABLE
     if (passedChecks.length > 0) {
       doc.setFontSize(14);
       doc.text("Passed Checks", 14, currentY);
@@ -119,724 +112,358 @@ Vars: ${(r.affectedVariables || []).map((x: any) => x.name).join(", ") || "-"}`,
     doc.save("GTM_HealthCheck_Report.pdf");
   };
 
+  // Grade & verdict
+  const grade = report ? (report.score >= 80 ? "A" : report.score >= 50 ? "B" : "C") : "";
+  const verdictColor =
+    report && report.score >= 80
+      ? "var(--success)"
+      : report && report.score >= 50
+      ? "var(--warn)"
+      : "var(--danger)";
+
   return (
-    <div
-      className="min-h-screen bg-linear-to-br from-slate-50 via-white to-slate-100 px-6 py-10 max-w-7xl mx-auto"
-      style={{ fontFamily: "'Sora', sans-serif" }}
-    >
-      {/* HERO */}
+    <div>
+      {/* HERO — shown before a report exists */}
       {!report && (
-        <section className="max-w-5xl mx-auto py-14 text-center relative">
-          {/* Glow background */}
-          <div className="absolute inset-0 -z-10 blur-3xl opacity-30">
-            <div className="w-105 h-105 bg-indigo-400 rounded-full absolute top-0 left-1/2 -translate-x-1/2" />
-            <div className="w-[320px] h-80 bg-sky-400 rounded-full absolute top-24 left-1/3" />
-          </div>
+        <section className="relative max-w-4xl mx-auto py-16 text-center overflow-hidden">
+          <div className="absolute inset-0 grid-bg opacity-30" />
+          <div className="hero-glow" />
 
-          <h2 className="text-5xl font-extrabold leading-tight text-slate-900 tracking-tight">
-            Audit Your Google Tag Manager <br />
-            <span className="text-indigo-600">In Minutes</span>
-          </h2>
+          <div className="relative">
+            <p className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-accent mb-4">
+              GTM HealthCheck
+            </p>
+            <h2 className="text-[clamp(34px,5vw,52px)] font-semibold leading-[1.05] tracking-[-0.025em] text-fg">
+              Audit your tag manager,
+              <br />
+              <span className="text-accent accent-glow-text">in seconds</span>.
+            </h2>
+            <p className="mt-5 text-[15.5px] text-muted max-w-xl mx-auto leading-relaxed">
+              Find tracking issues, unused tags, duplicate triggers, broken variables,
+              and performance bottlenecks with a complete container audit.
+            </p>
 
-          <p className="mt-6 text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
-            GTM HealthCheck helps you identify tracking issues, unused tags,
-            duplicate triggers, broken variables, and performance bottlenecks with
-            a complete container audit.
-          </p>
+            <div className="mt-9 flex justify-center gap-3 flex-wrap">
+              <button
+                onClick={handleRunHealthCheck}
+                disabled={loading || !store.selectedWorkspaceId}
+                className="btn-primary !px-5 !py-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? (
+                  <>
+                    <span className="inline-block w-3.5 h-3.5 border border-current border-t-transparent rounded-full animate-spin" />
+                    Running…
+                  </>
+                ) : (
+                  <>
+                    <Zap size={14} strokeWidth={2.4} />
+                    Run HealthCheck
+                  </>
+                )}
+              </button>
+            </div>
 
-          <div className="mt-10 flex justify-center gap-4 flex-wrap">
-            <button
-              onClick={handleRunHealthCheck}
-              disabled={loading}
-              className="px-7 py-3.5 rounded-2xl bg-indigo-600 text-white text-sm font-semibold shadow-lg shadow-indigo-500/30 hover:bg-indigo-500 disabled:opacity-50 transition-all"
-            >
-              {loading ? "Running HealthCheck..." : "Run HealthCheck"}
-            </button>
-          </div>
+            {!store.selectedWorkspaceId && (
+              <p className="mt-4 text-[12.5px] text-[color:var(--warn)]">
+                Select a workspace before running the audit.
+              </p>
+            )}
 
-          {/* Info badges */}
-          <div className="mt-12 flex justify-center gap-6 text-slate-600 text-sm flex-wrap">
-            <span className="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-full shadow-sm">
-              <CheckCircle className="w-5 h-5 text-green-500" /> Secure & Fast
-            </span>
-
-            <span className="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-full shadow-sm">
-              <ShieldCheck className="w-5 h-5 text-blue-500" /> Workspace Safe
-            </span>
-
-            <span className="flex items-center gap-2 bg-white border border-slate-200 px-4 py-2 rounded-full shadow-sm">
-              <Zap className="w-5 h-5 text-yellow-500" /> Automated Audit
-            </span>
+            <div className="mt-12 flex justify-center gap-3 flex-wrap">
+              <Badge icon={<CheckCircle size={13} strokeWidth={2} />} label="Secure & fast" />
+              <Badge icon={<ShieldCheck size={13} strokeWidth={2} />} label="Workspace-safe" />
+              <Badge icon={<Zap size={13} strokeWidth={2} />} label="Automated" />
+            </div>
           </div>
         </section>
       )}
 
       {/* REPORT */}
       {report && (
-        <div className="mt-12 bg-white border border-slate-200 rounded-3xl shadow-md overflow-hidden">
-          {/* Report Header */}
-          <div className="p-6 md:p-8 border-b border-slate-200 bg-linear-to-r from-indigo-50 to-sky-50">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-5">
+        <div className="bg-card border border-line rounded-xl overflow-hidden">
+          {/* Report header */}
+          <div className="p-6 md:p-7 border-b border-line">
+            <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-5">
               <div>
-                <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-                  GTM HealthCheck Report
+                <p className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-faint mb-2">
+                  HealthCheck report
+                </p>
+                <h2 className="text-[24px] md:text-[28px] font-semibold text-fg tracking-[-0.02em]">
+                  Container audit
                 </h2>
-
-                <p className="text-sm text-slate-600 mt-2">
-                  Passed:{" "}
-                  <span className="font-semibold text-green-700">
-                    {report.passedCount}
-                  </span>{" "}
-                  | Failed:{" "}
-                  <span className="font-semibold text-red-700">
-                    {report.failedCount}
+                <p className="text-[13px] text-muted mt-2 flex items-center gap-3">
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-accent" />
+                    {report.passedCount} passed
+                  </span>
+                  <span className="text-faint">·</span>
+                  <span className="inline-flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--danger)]" />
+                    {report.failedCount} failed
                   </span>
                 </p>
               </div>
 
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-5">
                 <div className="text-right">
-                  <p className="text-xs uppercase tracking-widest text-slate-500 font-semibold">
-                    Score
-                  </p>
-                  <p className="text-3xl font-extrabold text-indigo-700">
-                    {report.score}%
+                  <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-faint">Score</p>
+                  <p className="text-[40px] font-semibold text-fg leading-none tracking-[-0.04em] mt-1">
+                    {report.score}
+                    <span className="text-[18px] text-faint ml-1">%</span>
                   </p>
                 </div>
 
                 <div
-                  className={`w-14 h-14 rounded-2xl flex items-center justify-center font-extrabold text-white shadow-md ${report.score >= 80
-                      ? "bg-green-600"
-                      : report.score >= 50
-                        ? "bg-yellow-500"
-                        : "bg-red-600"
-                    }`}
+                  className="w-14 h-14 rounded-xl flex items-center justify-center font-semibold text-[22px] border"
+                  style={{
+                    background: `color-mix(in srgb, ${verdictColor} 14%, transparent)`,
+                    color: verdictColor,
+                    borderColor: `color-mix(in srgb, ${verdictColor} 25%, transparent)`,
+                  }}
                 >
-                  {report.score >= 80 ? "A" : report.score >= 50 ? "B" : "C"}
+                  {grade}
                 </div>
               </div>
             </div>
 
-            {/* Buttons */}
-            <div className="mt-6 flex flex-wrap gap-3">
+            <div className="mt-6 flex flex-wrap gap-2">
               <button
                 onClick={handleRunHealthCheck}
                 disabled={loading}
-                className="px-6 py-3 rounded-2xl bg-indigo-600 text-white text-sm font-semibold shadow hover:bg-indigo-500 disabled:opacity-50"
+                className="btn-secondary !py-2 disabled:opacity-50"
               >
-                {loading ? "Refreshing..." : "Refresh HealthCheck"}
+                <RefreshCw size={13} strokeWidth={2} className={loading ? "animate-spin" : ""} />
+                {loading ? "Refreshing…" : "Refresh"}
               </button>
 
-              <button
-                onClick={handleDownloadPDF}
-                className="px-6 py-3 rounded-2xl bg-green-600 text-white text-sm font-semibold shadow hover:bg-green-500 flex items-center gap-2"
-              >
-                <Download className="w-4 h-4" />
+              <button onClick={handleDownloadPDF} className="btn-primary !py-2">
+                <Download size={13} strokeWidth={2.2} />
                 Download PDF
               </button>
             </div>
           </div>
 
-          {/* Report Body */}
-          <div className="p-6 md:p-8">
-            {/* Failed Checks */}
+          {/* Body */}
+          <div className="p-6 md:p-7">
+            {/* Failed checks */}
             <div>
-              <div className="flex items-center gap-2">
-                <XCircle className="w-5 h-5 text-red-600" />
-                <h3 className="text-lg font-bold text-red-700">
-                  Failed Checks ({failedChecks.length})
+              <div className="flex items-center gap-2 mb-5">
+                <XCircle size={15} strokeWidth={2.2} className="text-[color:var(--danger)]" />
+                <h3 className="text-[15px] font-semibold text-fg">
+                  Failed checks
+                  <span className="text-faint font-normal ml-1.5">({failedChecks.length})</span>
                 </h3>
               </div>
 
-              <div className="mt-5 space-y-4">
+              <div className="space-y-3">
                 {failedChecks.map((r) => (
-                  <div
-                    key={r.id}
-                    className="rounded-2xl border border-red-200 bg-linear-to-br from-red-50 to-white shadow-sm p-5"
-                  >
-                    <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4">
-                      <div className="flex-1">
-                        <p className="font-bold text-slate-900 text-base">
-                          {r.id} — {r.title}
-                        </p>
-
-                        <p className="text-sm text-slate-700 mt-2 leading-relaxed">
-                          {r.description}
-                        </p>
-
-                        {r.recommendation && (
-                          <div className="mt-3 bg-white border border-red-200 rounded-xl px-4 py-3 text-sm text-red-700 font-medium">
-                            <span className="font-bold">Fix:</span>{" "}
-                            {r.recommendation}
-                          </div>
-                        )}
-
-                        {/* Affected Tags */}
-                        {r.affectedTags && r.affectedTags.length > 0 && (
-                          <div className="mt-4">
-                            <p className="text-sm font-bold text-slate-800">
-                              Affected Tags
-                            </p>
-
-                            <div className="mt-2 space-y-2">
-                              {r.affectedTags.map((t: any, index: number) => (
-                                <div
-                                  key={index}
-                                  className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm"
-                                >
-                                  {t.name}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Affected Triggers */}
-                        {r.affectedTriggers &&
-                          r.affectedTriggers.length > 0 && (
-                            <div className="mt-4">
-                              <p className="text-sm font-bold text-slate-800">
-                                Affected Triggers
-                              </p>
-
-                              <div className="mt-2 space-y-2">
-                                {r.affectedTriggers.map(
-                                  (t: any, index: number) => (
-                                    <div
-                                      key={index}
-                                      className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm"
-                                    >
-                                      {t.name}
-                                    </div>
-                                  )
-                                )}
-                              </div>
-                            </div>
-                          )}
-
-                        {/* Affected Variables */}
-                        {r.affectedVariables &&
-                          r.affectedVariables.length > 0 && (
-                            <div className="mt-4">
-                              <p className="text-sm font-bold text-slate-800">
-                                Affected Variables
-                              </p>
-
-                              <div className="mt-2 space-y-2">
-                                {r.affectedVariables.map(
-                                  (t: any, index: number) => (
-                                    <div
-                                      key={index}
-                                      className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-sm"
-                                    >
-                                      {t.name}
-                                    </div>
-                                  )
-                                )}
-                              </div>
-                            </div>
-                          )}
-                      </div>
-
-                      {/* Severity Badge */}
-                      <div>
-                        <span
-                          className={`px-4 py-2 rounded-full text-xs font-bold shadow-sm ${r.severity === "HIGH"
-                              ? "bg-red-600 text-white"
-                              : r.severity === "MEDIUM"
-                                ? "bg-yellow-500 text-white"
-                                : "bg-blue-600 text-white"
-                            }`}
-                        >
-                          {r.severity}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
+                  <FailedCheckCard key={r.id} r={r} />
                 ))}
 
                 {failedChecks.length === 0 && (
-                  <div className="mt-4 p-5 rounded-2xl bg-green-50 border border-green-200 text-green-700 text-sm font-semibold">
-                    🎉 No failed checks found. Your container looks healthy!
+                  <div className="px-4 py-5 rounded-lg bg-accent-soft border border-accent/25 text-accent text-[13.5px] flex items-center gap-2">
+                    <CheckCircle size={15} strokeWidth={2} />
+                    No failed checks. Your container looks healthy.
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Passed Checks */}
-            <div className="mt-12">
-              <div className="flex items-center gap-2">
-                <CheckCircle className="w-5 h-5 text-green-600" />
-                <h3 className="text-lg font-bold text-green-700">
-                  Passed Checks ({passedChecks.length})
-                </h3>
-              </div>
+            {/* Passed checks */}
+            {passedChecks.length > 0 && (
+              <div className="mt-10">
+                <div className="flex items-center gap-2 mb-5">
+                  <CheckCircle size={15} strokeWidth={2.2} className="text-accent" />
+                  <h3 className="text-[15px] font-semibold text-fg">
+                    Passed checks
+                    <span className="text-faint font-normal ml-1.5">({passedChecks.length})</span>
+                  </h3>
+                </div>
 
-              <div className="mt-5 grid md:grid-cols-2 gap-4">
-                {passedChecks.map((r) => (
-                  <div
-                    key={r.id}
-                    className="rounded-2xl border border-green-200 bg-linear-to-br from-green-50 to-white shadow-sm p-5 hover:shadow-md transition"
-                  >
-                    <div className="flex justify-between items-start gap-4">
-                      <div>
-                        <p className="font-bold text-slate-900">
-                          {r.id} — {r.title}
-                        </p>
-                        <p className="text-sm text-slate-700 mt-2 leading-relaxed">
-                          {r.description}
-                        </p>
+                <div className="grid md:grid-cols-2 gap-3">
+                  {passedChecks.map((r) => (
+                    <div
+                      key={r.id}
+                      className="rounded-lg border border-line bg-card-hi p-4 transition-colors hover:border-edge"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-[13.5px] font-medium text-fg">
+                            <span className="font-mono text-[11px] text-faint mr-1.5">{r.id}</span>
+                            {r.title}
+                          </p>
+                          <p className="text-[12.5px] text-muted mt-1.5 leading-relaxed">
+                            {r.description}
+                          </p>
+                        </div>
+                        <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-[0.1em] bg-accent-soft text-accent border border-accent/25">
+                          Pass
+                        </span>
                       </div>
-
-                      <span className="px-3 py-1 rounded-full text-xs font-bold bg-green-600 text-white shadow-sm">
-                        PASSED
-                      </span>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Note */}
-            <div className="mt-12 flex items-start gap-3 p-5 rounded-2xl border border-slate-200 bg-slate-50">
-              <AlertTriangle className="w-5 h-5 text-yellow-600 mt-0.5" />
-              <p className="text-sm text-slate-700 leading-relaxed">
-                <span className="font-bold text-slate-900">Note:</span> This
-                report is based on best-practice GTM rules and automated scanning.
-                Always validate in Preview Mode before publishing.
+            <div className="mt-10 flex items-start gap-3 p-4 rounded-lg border border-line bg-card-hi">
+              <AlertTriangle size={15} strokeWidth={2} className="text-[color:var(--warn)] mt-0.5 shrink-0" />
+              <p className="text-[13px] text-muted leading-relaxed">
+                <span className="font-medium text-fg">Note:</span> This report is based on best-practice
+                GTM rules and automated scanning. Always validate in Preview Mode before publishing.
               </p>
             </div>
           </div>
         </div>
       )}
 
-      {/* BELOW SECTIONS ONLY SHOW IF REPORT IS NOT GENERATED */}
+      {/* FEATURES — only when no report */}
       {!report && (
-        <>
-          {/* FEATURES */}
-          <section className="py-16 border-t border-slate-200 mt-16">
-            <h3 className="text-3xl font-extrabold text-center text-slate-900 tracking-tight">
-              Why GTM HealthCheck?
+        <section className="border-t border-line mt-16 pt-16">
+          <div className="text-center mb-10">
+            <h3 className="text-[26px] font-semibold text-fg tracking-[-0.02em]">
+              Why HealthCheck?
             </h3>
-
-            <p className="text-center text-slate-600 mt-3 max-w-2xl mx-auto">
-              Improve tracking accuracy, reduce container clutter, and optimize
-              tag performance.
+            <p className="text-muted mt-2 max-w-xl mx-auto text-[14.5px]">
+              Improve tracking accuracy, reduce container clutter, and optimize tag performance.
             </p>
+          </div>
 
-            <div className="grid md:grid-cols-3 gap-6 mt-14">
-              <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm hover:shadow-lg transition">
-                <BarChart3 className="w-10 h-10 text-indigo-600" />
-                <h4 className="text-xl font-bold mt-5 text-slate-900">
-                  Tag Performance Audit
-                </h4>
-                <p className="text-slate-600 mt-3 text-sm leading-relaxed">
-                  Identify slow tags, excessive triggers, and unnecessary
-                  execution that impacts load time.
-                </p>
-              </div>
-
-              <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm hover:shadow-lg transition">
-                <ShieldCheck className="w-10 h-10 text-green-600" />
-                <h4 className="text-xl font-bold mt-5 text-slate-900">
-                  Tracking Validation
-                </h4>
-                <p className="text-slate-600 mt-3 text-sm leading-relaxed">
-                  Validate tag firing logic, variable configuration, and ensure
-                  correct analytics tracking.
-                </p>
-              </div>
-
-              <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm hover:shadow-lg transition">
-                <FileText className="w-10 h-10 text-yellow-600" />
-                <h4 className="text-xl font-bold mt-5 text-slate-900">
-                  Smart Reports
-                </h4>
-                <p className="text-slate-600 mt-3 text-sm leading-relaxed">
-                  Generate structured report with issues, severity levels, and
-                  actionable recommendations.
-                </p>
-              </div>
-            </div>
-          </section>
-        </>
+          <div className="grid md:grid-cols-3 gap-4">
+            <FeatureCard
+              icon={<BarChart3 size={18} strokeWidth={1.7} />}
+              accent="#3b82f6"
+              title="Tag performance audit"
+              body="Identify slow tags, excessive triggers, and unnecessary execution that impact load time."
+            />
+            <FeatureCard
+              icon={<ShieldCheck size={18} strokeWidth={1.7} />}
+              accent="#10b981"
+              title="Tracking validation"
+              body="Validate tag firing logic, variable configuration, and ensure correct analytics tracking."
+            />
+            <FeatureCard
+              icon={<FileText size={18} strokeWidth={1.7} />}
+              accent="#f59e0b"
+              title="Smart reports"
+              body="Structured report with issues, severity levels, and actionable recommendations."
+            />
+          </div>
+        </section>
       )}
     </div>
   );
 }
-// "use client";
 
-// import { CheckCircle, ShieldCheck, Zap, BarChart3, FileText } from "lucide-react";
-// import { useState } from "react";
-// import { HealthCheckResult } from "@/lib/healthcheck/types";
-// import { useDashboardStore } from "@/app/store/useDashboardStore";
+/* ──────────────────────────────────────── helpers */
 
+function Badge({ icon, label }: { icon: React.ReactNode; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-card border border-line text-[12.5px] text-muted">
+      <span className="text-accent">{icon}</span>
+      {label}
+    </span>
+  );
+}
 
-// type HealthCheckReport = {
-//     score: number;
-//     passedCount: number;
-//     failedCount: number;
-//     results: HealthCheckResult[];
-// };
+function SeverityBadge({ severity }: { severity: string }) {
+  const tone =
+    severity === "HIGH"
+      ? "var(--danger)"
+      : severity === "MEDIUM"
+      ? "var(--warn)"
+      : "var(--accent)";
+  return (
+    <span
+      className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold uppercase tracking-[0.12em] border"
+      style={{
+        background: `color-mix(in srgb, ${tone} 14%, transparent)`,
+        color: tone,
+        borderColor: `color-mix(in srgb, ${tone} 30%, transparent)`,
+      }}
+    >
+      {severity}
+    </span>
+  );
+}
 
-// export default function HomePage() {
-//     const store = useDashboardStore();
-//     const [loading, setLoading] = useState(false);
-//     const [report, setReport] = useState<HealthCheckReport | null>(null);
+function FailedCheckCard({ r }: { r: HealthCheckResult }) {
+  return (
+    <div className="rounded-lg border border-[color:var(--danger)]/25 bg-card p-5">
+      <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-3">
+        <div className="flex-1 min-w-0">
+          <p className="text-[14px] font-semibold text-fg">
+            <span className="font-mono text-[11px] text-faint mr-1.5">{r.id}</span>
+            {r.title}
+          </p>
 
-//     const handleRunHealthCheck = async () => {
-//         try {
-//             setLoading(true);
+          <p className="text-[13px] text-muted mt-2 leading-relaxed">{r.description}</p>
 
-//             const res = await fetch("/api/auth/healthcheck", {
-//                 method: "POST",
-//                 headers: { "Content-Type": "application/json" },
-//                 body: JSON.stringify({
-//                     accountId: store.selectedAccountId,
-//                     containerId: store.selectedContainerId,
-//                     workspaceId: store.selectedWorkspaceId,
-//                 }),
-//             });
+          {r.recommendation && (
+            <div className="mt-3 px-3 py-2 rounded-md text-[12.5px] bg-[color:var(--danger)]/8 border border-[color:var(--danger)]/20 text-[color:var(--danger)]">
+              <span className="font-semibold">Fix:</span> {r.recommendation}
+            </div>
+          )}
 
-//             const data = await res.json();
-//             setReport(data);
-//         } catch (err) {
-//             console.error(err);
-//         } finally {
-//             setLoading(false);
-//         }
-//     };
-//     return (
-//         <div
-//             className="min-h-screen bg-slate-50/60 px-6 py-10 max-w-7xl mx-auto"
-//             style={{ fontFamily: "'Sora', sans-serif" }}
-//         >
-//             {/* Hero Section */}
-//             <section className="text-center max-w-5xl mx-auto py-14">
-//                 <h2 className="text-5xl font-extrabold leading-tight text-slate-900">
-//                     Audit Your Google Tag Manager <br />
-//                     <span className="text-indigo-600">In Minutes</span>
-//                 </h2>
+          <AffectedList label="Affected tags" items={r.affectedTags} />
+          <AffectedList label="Affected triggers" items={r.affectedTriggers} />
+          <AffectedList label="Affected variables" items={r.affectedVariables} />
+        </div>
 
-//                 <p className="mt-6 text-lg text-slate-600 max-w-2xl mx-auto">
-//                     GTM HealthCheck helps you identify tracking issues, unused tags,
-//                     duplicate triggers, broken variables, and performance bottlenecks with
-//                     a complete container audit.
-//                 </p>
+        <div className="shrink-0">
+          <SeverityBadge severity={r.severity} />
+        </div>
+      </div>
+    </div>
+  );
+}
 
-//                 <div className="mt-10 flex justify-center gap-4 flex-wrap">
-//                     {/* <button className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-3 rounded-2xl text-sm font-semibold shadow-lg transition">
-//                         Run HealthCheck
-//                     </button> */}
-//                     <button
-//                         onClick={handleRunHealthCheck}
-//                         disabled={loading}
-//                         className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white px-6 py-3 rounded-2xl text-sm font-semibold shadow-lg transition"
-//                     >
-//                         {loading ? "Running..." : "Run HealthCheck"}
-//                     </button>
-//                 </div>
-//                 {report && (
-//                     <div className="mt-10 bg-white border border-slate-200 rounded-2xl shadow-sm p-6">
-//                         {/* Header */}
-//                         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-//                             <div>
-//                                 <h2 className="text-xl font-bold text-slate-900">
-//                                     HealthCheck Report
-//                                 </h2>
-//                                 <p className="text-sm text-slate-600 mt-1">
-//                                     Passed: {report.passedCount} | Failed: {report.failedCount}
-//                                 </p>
-//                             </div>
+function AffectedList({ label, items }: { label: string; items?: any[] }) {
+  if (!items || items.length === 0) return null;
+  return (
+    <div className="mt-3">
+      <p className="font-mono text-[10.5px] uppercase tracking-[0.15em] text-faint mb-1.5">
+        {label}
+      </p>
+      <div className="flex flex-wrap gap-1.5">
+        {items.map((t: any, i: number) => (
+          <span
+            key={i}
+            className="inline-flex px-2 py-0.5 rounded-md text-[12px] bg-card-hi border border-line text-muted"
+          >
+            {t.name}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
 
-//                             <div className="flex items-center gap-3">
-//                                 <span className="text-sm font-semibold text-slate-700">Score</span>
-//                                 <span className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-bold text-sm shadow">
-//                                     {report.score}%
-//                                 </span>
-//                             </div>
-//                         </div>
-
-//                         {/* Failed Rules */}
-//                         <div className="mt-8">
-//                             <h3 className="text-lg font-semibold text-red-600">
-//                                 Failed Checks ({report.results.filter((r) => !r.passed).length})
-//                             </h3>
-
-//                             <div className="mt-4 space-y-4">
-//                                 {report.results
-//                                     .filter((r) => !r.passed)
-//                                     .map((r) => (
-//                                         <div
-//                                             key={r.id}
-//                                             className="p-4 rounded-xl border border-red-200 bg-red-50"
-//                                         >
-//                                             <div className="flex justify-between items-start gap-4">
-//                                                 <div>
-//                                                     <p className="font-semibold text-slate-900">
-//                                                         {r.id} - {r.title}
-//                                                     </p>
-//                                                     <p className="text-sm text-slate-700 mt-1">
-//                                                         {r.description}
-//                                                     </p>
-
-//                                                     {r.recommendation && (
-//                                                         <p className="text-sm text-red-700 mt-2">
-//                                                             Fix: {r.recommendation}
-//                                                         </p>
-//                                                     )}
-
-//                                                     {r.affectedTags && r.affectedTags.length > 0 && (
-//                                                         <div className="mt-3">
-//                                                             <p className="text-sm font-semibold text-slate-800">Affected Tags:</p>
-//                                                             <ul className="mt-1 list-disc pl-5 text-sm text-slate-700">
-//                                                                 {r.affectedTags.map((t) => (
-//                                                                     <li key={t}>{t}</li>
-//                                                                 ))}
-//                                                             </ul>
-//                                                         </div>
-//                                                     )}
-
-//                                                     {r.affectedTriggers && r.affectedTriggers.length > 0 && (
-//                                                         <div className="mt-3">
-//                                                             <p className="text-sm font-semibold text-slate-800">Affected Triggers:</p>
-//                                                             <ul className="mt-1 list-disc pl-5 text-sm text-slate-700">
-//                                                                 {r.affectedTriggers.map((t) => (
-//                                                                     <li key={t}>{t}</li>
-//                                                                 ))}
-//                                                             </ul>
-//                                                         </div>
-//                                                     )}
-
-//                                                     {r.affectedVariables && r.affectedVariables.length > 0 && (
-//                                                         <div className="mt-3">
-//                                                             <p className="text-sm font-semibold text-slate-800">Affected Variables:</p>
-//                                                             <ul className="mt-1 list-disc pl-5 text-sm text-slate-700">
-//                                                                 {r.affectedVariables.map((t) => (
-//                                                                     <li key={t}>{t}</li>
-//                                                                 ))}
-//                                                             </ul>
-//                                                         </div>
-//                                                     )}
-//                                                 </div>
-
-//                                                 <span
-//                                                     className={`px-3 py-1 rounded-full text-xs font-semibold ${r.severity === "HIGH"
-//                                                         ? "bg-red-600 text-white"
-//                                                         : r.severity === "MEDIUM"
-//                                                             ? "bg-yellow-500 text-white"
-//                                                             : "bg-blue-500 text-white"
-//                                                         }`}
-//                                                 >
-//                                                     {r.severity}
-//                                                 </span>
-//                                             </div>
-//                                         </div>
-//                                     ))}
-//                             </div>
-//                         </div>
-
-//                         {/* Passed Rules */}
-//                         <div className="mt-10">
-//                             <h3 className="text-lg font-semibold text-green-600">
-//                                 Passed Checks ({report.results.filter((r) => r.passed).length})
-//                             </h3>
-
-//                             <div className="mt-4 space-y-3">
-//                                 {report.results
-//                                     .filter((r) => r.passed)
-//                                     .map((r) => (
-//                                         <div
-//                                             key={r.id}
-//                                             className="p-4 rounded-xl border border-green-200 bg-green-50"
-//                                         >
-//                                             <div className="flex justify-between items-start gap-4">
-//                                                 <div>
-//                                                     <p className="font-semibold text-slate-900">
-//                                                         {r.id} - {r.title}
-//                                                     </p>
-//                                                     <p className="text-sm text-slate-700 mt-1">
-//                                                         {r.description}
-//                                                     </p>
-//                                                 </div>
-
-//                                                 <span className="px-3 py-1 rounded-full text-xs font-semibold bg-green-600 text-white">
-//                                                     PASSED
-//                                                 </span>
-//                                             </div>
-//                                         </div>
-//                                     ))}
-//                             </div>
-//                         </div>
-//                     </div>
-//                 )}
-
-//                 <div className="mt-12 flex justify-center gap-6 text-slate-600 text-sm flex-wrap">
-//                     <span className="flex items-center gap-2">
-//                         <CheckCircle className="w-5 h-5 text-green-500" /> Secure & Fast
-//                     </span>
-//                     <span className="flex items-center gap-2">
-//                         <ShieldCheck className="w-5 h-5 text-blue-500" /> Workspace Safe
-//                     </span>
-//                     <span className="flex items-center gap-2">
-//                         <Zap className="w-5 h-5 text-yellow-500" /> Automated Audit
-//                     </span>
-//                 </div>
-//             </section>
-
-//             {/* Features */}
-//             <section className="py-16 border-t border-slate-200">
-//                 <h3 className="text-3xl font-bold text-center text-slate-900">
-//                     Why GTM HealthCheck?
-//                 </h3>
-
-//                 <p className="text-center text-slate-600 mt-3 max-w-2xl mx-auto">
-//                     Improve tracking accuracy, reduce container clutter, and optimize tag
-//                     performance.
-//                 </p>
-
-//                 <div className="grid md:grid-cols-3 gap-6 mt-14">
-//                     <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition">
-//                         <BarChart3 className="w-10 h-10 text-indigo-600" />
-//                         <h4 className="text-xl font-semibold mt-5 text-slate-900">
-//                             Tag Performance Audit
-//                         </h4>
-//                         <p className="text-slate-600 mt-3 text-sm">
-//                             Identify slow tags, excessive triggers, and unnecessary execution
-//                             that impacts load time.
-//                         </p>
-//                     </div>
-
-//                     <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition">
-//                         <ShieldCheck className="w-10 h-10 text-green-600" />
-//                         <h4 className="text-xl font-semibold mt-5 text-slate-900">
-//                             Tracking Validation
-//                         </h4>
-//                         <p className="text-slate-600 mt-3 text-sm">
-//                             Validate tag firing logic, variable configuration, and ensure
-//                             correct analytics tracking.
-//                         </p>
-//                     </div>
-
-//                     <div className="bg-white p-8 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition">
-//                         <FileText className="w-10 h-10 text-yellow-600" />
-//                         <h4 className="text-xl font-semibold mt-5 text-slate-900">
-//                             Smart Reports
-//                         </h4>
-//                         <p className="text-slate-600 mt-3 text-sm">
-//                             Generate a structured report with issues, severity levels, and
-//                             actionable recommendations.
-//                         </p>
-//                     </div>
-//                 </div>
-//             </section>
-
-//             {/* How it Works */}
-//             <section className="py-16 border-t border-slate-200">
-//                 <h3 className="text-3xl font-bold text-center text-slate-900">
-//                     How it Works
-//                 </h3>
-
-//                 <p className="text-center text-slate-600 mt-3 max-w-2xl mx-auto">
-//                     Simple process to get your GTM container health report.
-//                 </p>
-
-//                 <div className="grid md:grid-cols-3 gap-8 mt-14">
-//                     <div className="p-6 rounded-2xl bg-white border border-slate-200 shadow-sm">
-//                         <h4 className="text-lg font-semibold text-indigo-600">
-//                             Step 1: Connect
-//                         </h4>
-//                         <p className="text-slate-600 mt-2 text-sm">
-//                             Login using Google and select your GTM account, container, and
-//                             workspace.
-//                         </p>
-//                     </div>
-
-//                     <div className="p-6 rounded-2xl bg-white border border-slate-200 shadow-sm">
-//                         <h4 className="text-lg font-semibold text-indigo-600">
-//                             Step 2: Scan Container
-//                         </h4>
-//                         <p className="text-slate-600 mt-2 text-sm">
-//                             Our engine scans tags, triggers, variables, templates, and checks
-//                             best practices.
-//                         </p>
-//                     </div>
-
-//                     <div className="p-6 rounded-2xl bg-white border border-slate-200 shadow-sm">
-//                         <h4 className="text-lg font-semibold text-indigo-600">
-//                             Step 3: Get Report
-//                         </h4>
-//                         <p className="text-slate-600 mt-2 text-sm">
-//                             Download your audit report and fix issues with clear
-//                             recommendations.
-//                         </p>
-//                     </div>
-//                 </div>
-//             </section>
-
-//             {/* Reports */}
-//             <section className="py-16 border-t border-slate-200">
-//                 <h3 className="text-3xl font-bold text-center text-slate-900">
-//                     HealthCheck Report Includes
-//                 </h3>
-
-//                 <div className="grid md:grid-cols-2 gap-6 mt-14">
-//                     <div className="bg-white p-7 rounded-2xl border border-slate-200 shadow-sm">
-//                         <h4 className="text-lg font-semibold text-slate-900">
-//                             ✔ Duplicate Tags / Triggers
-//                         </h4>
-//                         <p className="text-slate-600 text-sm mt-2">
-//                             Find repeated triggers, unused tags, and redundant setup.
-//                         </p>
-//                     </div>
-
-//                     <div className="bg-white p-7 rounded-2xl border border-slate-200 shadow-sm">
-//                         <h4 className="text-lg font-semibold text-slate-900">
-//                             ✔ Unused Variables
-//                         </h4>
-//                         <p className="text-slate-600 text-sm mt-2">
-//                             Identify variables created but never used in tags/triggers.
-//                         </p>
-//                     </div>
-
-//                     <div className="bg-white p-7 rounded-2xl border border-slate-200 shadow-sm">
-//                         <h4 className="text-lg font-semibold text-slate-900">
-//                             ✔ Template Dependency Check
-//                         </h4>
-//                         <p className="text-slate-600 text-sm mt-2">
-//                             Detect vendor templates used by tags and validate template export
-//                             requirements.
-//                         </p>
-//                     </div>
-
-//                     <div className="bg-white p-7 rounded-2xl border border-slate-200 shadow-sm">
-//                         <h4 className="text-lg font-semibold text-slate-900">
-//                             ✔ Best Practice Suggestions
-//                         </h4>
-//                         <p className="text-slate-600 text-sm mt-2">
-//                             Recommended improvements for container structure and performance.
-//                         </p>
-//                     </div>
-//                 </div>
-//             </section>
-
-//             {/* CTA */}
-//             <section className="py-16 text-center border-t border-slate-200">
-//                 <h3 className="text-4xl font-bold text-slate-900">
-//                     Ready to Optimize Your GTM Container?
-//                 </h3>
-
-//                 <p className="text-slate-600 mt-4 max-w-2xl mx-auto">
-//                     Run a GTM HealthCheck today and improve tracking accuracy, performance,
-//                     and maintainability.
-//                 </p>
-
-//                 <div className="mt-10">
-//                     <button className="bg-indigo-600 hover:bg-indigo-500 text-white px-8 py-4 rounded-2xl text-sm font-semibold shadow-lg transition">
-//                         Start HealthCheck Now
-//                     </button>
-//                 </div>
-//             </section>
-//         </div>
-//     );
-// }
+function FeatureCard({
+  icon,
+  accent,
+  title,
+  body,
+}: {
+  icon: React.ReactNode;
+  accent: string;
+  title: string;
+  body: string;
+}) {
+  return (
+    <div className="bg-card p-6 rounded-xl border border-line transition-all hover:border-edge hover:bg-card-hi">
+      <div
+        className="w-10 h-10 rounded-lg flex items-center justify-center mb-4"
+        style={{
+          background: `color-mix(in srgb, ${accent} 14%, transparent)`,
+          color: accent,
+        }}
+      >
+        {icon}
+      </div>
+      <h4 className="text-[15px] font-semibold text-fg mb-1.5">{title}</h4>
+      <p className="text-[13px] text-muted leading-relaxed">{body}</p>
+    </div>
+  );
+}

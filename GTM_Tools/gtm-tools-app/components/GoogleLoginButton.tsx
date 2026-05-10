@@ -9,7 +9,7 @@ export default function GoogleOAuthLoginButton() {
     <button
       onClick={handleLogin}
       type="button"
-      className="group w-full inline-flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-lg bg-[color:var(--bg-elev-2)] hover:bg-[color:var(--fg)] text-[color:var(--fg)] hover:text-[color:var(--bg)] border border-[color:var(--border-strong)] hover:border-[color:var(--fg)] transition-colors duration-200"
+      className="group w-full inline-flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-lg bg-card-hi hover:bg-fg text-fg hover:text-page border border-edge hover:border-fg transition-colors duration-200"
     >
       <GoogleG />
       <span className="text-[14px] font-medium">Continue with Google</span>

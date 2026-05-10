@@ -219,14 +219,14 @@ export default function ExportTemplatesModal({
   if (!show) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white w-full max-w-3xl rounded-2xl shadow-xl overflow-hidden">
+    <div className="fixed inset-0 bg-black/55 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-card text-fg w-full max-w-3xl rounded-xl border border-edge shadow-lg overflow-hidden">
         {/* HEADER */}
-        <div className="flex justify-between items-center px-6 py-4 border-b">
-          <h2 className="text-lg font-bold text-gray-900">Export Templates</h2>
+        <div className="flex justify-between items-center px-5 py-3 border-b border-line">
+          <h2 className="text-[15px] font-semibold text-fg">Export Templates</h2>
           <button
             onClick={onClose}
-            className="text-gray-600 hover:text-gray-900 font-bold text-lg"
+            className="w-8 h-8 inline-flex items-center justify-center rounded-md text-muted hover:text-fg hover:bg-card-hi text-base"
           >
             ✕
           </button>
@@ -235,24 +235,24 @@ export default function ExportTemplatesModal({
         {/* BODY */}
         <div className="grid grid-cols-12 min-h-100">
           {/* LEFT */}
-          <div className="col-span-5 border-r bg-gray-50 p-4">
-            <p className="text-sm font-semibold text-gray-700 mb-3">
+          <div className="col-span-5 border-r border-line bg-card-hi p-4">
+            <p className="text-[12.5px] font-medium text-faint mb-3 uppercase tracking-[0.05em]">
               Selected Templates ({safeTemplates.length})
             </p>
 
-            <div className="bg-white border rounded-xl overflow-y-auto max-h-80">
+            <div className="bg-card border border-line rounded-lg overflow-y-auto max-h-80">
               {safeTemplates.length === 0 ? (
-                <p className="text-xs text-gray-500 p-4">No templates found.</p>
+                <p className="text-[12px] text-faint p-4">No templates found.</p>
               ) : (
                 safeTemplates.map((template: any, idx: number) => (
                   <div
                     key={template.templateId || template.name || idx}
-                    className="px-4 py-3 border-b last:border-none"
+                    className="px-4 py-3 border-b border-line last:border-none"
                   >
-                    <p className="text-sm font-semibold text-gray-900">
+                    <p className="text-[13px] font-medium text-fg">
                       {template.name}
                     </p>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-[11px] text-faint">
                       ID: {template.templateId}
                     </p>
                   </div>
@@ -263,7 +263,7 @@ export default function ExportTemplatesModal({
 
           {/* RIGHT */}
           <div className="col-span-7 p-6">
-            <h3 className="text-md font-bold text-gray-900 mb-5">
+            <h3 className="text-[14px] font-semibold text-fg mb-5">
               Select Destination
             </h3>
 

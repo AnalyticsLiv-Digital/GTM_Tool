@@ -1,103 +1,87 @@
- 
 "use client";
 
+import { useRef } from "react";
 import { useDashboardStore } from "@/app/store/useDashboardStore";
 import { useDashboardActions } from "@/hooks/useDashboardActions";
+import { Modal } from "@/components/ui/Modal";
 
 export default function TemplateModal() {
   const store = useDashboardStore();
-  const {
-    handleSaveTemplate,
-    handleDeleteTemplate,
-    fetchTemplates,
-  } = useDashboardActions();
-
-  if (!store.showTemplateModal) return null;
+  const { handleSaveTemplate, handleDeleteTemplate, fetchTemplates } =
+    useDashboardActions();
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const isEditMode = store.templateModalMode === "edit";
-
-  const closeModal = () => {
+  const close = () => {
     store.setShowTemplateModal(false);
     store.setTemplateNameInput("");
   };
 
+  const saveLabel = store.templateCrudLoading
+    ? isEditMode
+      ? "Updating…"
+      : "Creating…"
+    : isEditMode
+    ? "Update template"
+    : "Create template";
+
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white w-full max-w-lg rounded-xl shadow-lg p-6">
-        {/* HEADER */}
-        <div className="flex justify-between items-center mb-5">
-          <h2 className="text-xl font-bold text-gray-900">
-            {isEditMode ? "Edit Template" : "Create Template"}
-          </h2>
-
-          <button
-            onClick={closeModal}
-            className="text-gray-500 hover:text-gray-800 text-lg font-bold"
-          >
-            ✕
-          </button>
-        </div>
-
-        {/* INPUT */}
-        <div className="mb-4">
-          <label className="text-sm font-semibold text-gray-700">
-            Template Name
-          </label>
-
-          <input
-            type="text"
-            value={store.templateNameInput}
-            onChange={(e) => store.setTemplateNameInput(e.target.value)}
-            placeholder="Enter template name"
-            className="w-full mt-2 px-4 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-purple-400"
-          />
-        </div>
-
-        {/* BUTTONS */}
-        <div className="flex justify-between items-center mt-6">
-          {/* DELETE BUTTON ONLY IN EDIT MODE */}
+    <Modal
+      open={store.showTemplateModal}
+      onClose={close}
+      size="md"
+      title={isEditMode ? "Edit template" : "Create template"}
+      initialFocusRef={inputRef}
+      footer={
+        <div className="flex w-full items-center justify-between">
           {isEditMode ? (
             <button
+              type="button"
               onClick={async () => {
                 await handleDeleteTemplate();
                 await fetchTemplates();
               }}
               disabled={store.templateCrudLoading}
-              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium rounded-md border border-[color:var(--danger)]/30 bg-[color:var(--danger)]/10 text-[color:var(--danger)] hover:bg-[color:var(--danger)]/15 disabled:opacity-50"
             >
-              {store.templateCrudLoading ? "Deleting..." : "Delete"}
+              {store.templateCrudLoading ? "Deleting…" : "Delete"}
             </button>
           ) : (
-            <div />
+            <span />
           )}
-
-          <div className="flex gap-3">
-            <button
-              onClick={closeModal}
-              className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 py-2 rounded-lg text-sm font-semibold"
-            >
+          <div className="flex gap-2">
+            <button type="button" onClick={close} className="btn-secondary !py-1.5 !px-3">
               Cancel
             </button>
-
             <button
+              type="button"
               onClick={async () => {
                 await handleSaveTemplate();
                 await fetchTemplates();
               }}
               disabled={store.templateCrudLoading}
-              className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50"
+              className="btn-primary !py-1.5 !px-3 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {store.templateCrudLoading
-                ? isEditMode
-                  ? "Updating..."
-                  : "Creating..."
-                : isEditMode
-                ? "Update"
-                : "Create"}
+              {saveLabel}
             </button>
           </div>
         </div>
+      }
+    >
+      <div>
+        <label htmlFor="template-name" className="block text-[12.5px] font-medium text-fg mb-2">
+          Template name
+        </label>
+        <input
+          id="template-name"
+          ref={inputRef}
+          type="text"
+          value={store.templateNameInput}
+          onChange={(e) => store.setTemplateNameInput(e.target.value)}
+          placeholder="Enter template name"
+          className="w-full bg-page-soft"
+        />
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -2,9 +2,10 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { DialogHost } from "@/components/ui/DialogHost";
+import { themeInitScript } from "@/components/ThemeToggle";
+import { ThemedToastContainer } from "@/components/ThemedToastContainer";
 import "./globals.css";
 
-import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
 const geist = Geist({
@@ -34,7 +35,12 @@ export default function RootLayout({
     <html
       lang="en"
       className={`h-full antialiased ${geist.variable} ${geistMono.variable}`}
+      suppressHydrationWarning
     >
+      <head>
+        {/* Sets data-theme on <html> before paint to avoid theme flash */}
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="min-h-full flex flex-col">
         <AuthProvider>
           {children}
@@ -42,8 +48,8 @@ export default function RootLayout({
           {/* Imperative confirm-dialog host (single instance) */}
           <DialogHost />
 
-          {/* Toast Provider */}
-          <ToastContainer position="top-right" autoClose={3000} theme="dark" />
+          {/* Toast Provider — follows active theme */}
+          <ThemedToastContainer />
         </AuthProvider>
       </body>
     </html>
