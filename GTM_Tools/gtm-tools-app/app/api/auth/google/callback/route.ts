@@ -71,10 +71,10 @@ export async function GET(req: Request) {
     }
 
     // 3️⃣ Save/update user
-    let user = getUserByEmail(email);
+    let user = await getUserByEmail(email);
 
     if (!user) {
-      user = createUser({
+      user = await createUser({
         name,
         email,
         picture,
@@ -86,11 +86,13 @@ export async function GET(req: Request) {
     const jwtToken = generateToken(user);
 
     // 5️⃣ Redirect + set cookies
-    const response = NextResponse.redirect("http://localhost:3000/dashboard");
+    const appUrl = process.env.APP_URL || url.origin;
+    const isProd = process.env.NODE_ENV === "production";
+    const response = NextResponse.redirect(`${appUrl}/dashboard`);
 
     response.cookies.set("auth_token", jwtToken, {
       httpOnly: true,
-      secure: false,
+      secure: isProd,
       sameSite: "lax",
       path: "/",
       maxAge: 7 * 24 * 60 * 60,
@@ -99,7 +101,7 @@ export async function GET(req: Request) {
     // store google access token
     response.cookies.set("google_access_token", accessToken, {
       httpOnly: true,
-      secure: false,
+      secure: isProd,
       sameSite: "lax",
       path: "/",
       maxAge: expiresIn, // seconds
@@ -108,7 +110,7 @@ export async function GET(req: Request) {
     // store access token expiry (timestamp)
     response.cookies.set("google_access_token_expiry", accessTokenExpiry.toString(), {
       httpOnly: true,
-      secure: false,
+      secure: isProd,
       sameSite: "lax",
       path: "/",
       maxAge: 7 * 24 * 60 * 60,
@@ -118,10 +120,9 @@ export async function GET(req: Request) {
     if (refreshToken) {
       response.cookies.set("google_refresh_token", refreshToken, {
         httpOnly: true,
-        secure: false,
+        secure: isProd,
         sameSite: "lax",
         path: "/",
-     //   maxAge: 30 * 24 * 60 * 60, // store for 30 days (safe default)
       });
 
       

@@ -24,7 +24,7 @@ export default function DashboardShell({ children }: { children: ReactNode }) {
       <Navbar user={user} onLogout={handleLogout} />
 
       <div className="flex">
-        <Sidebar />
+        <Sidebar onLogout={handleLogout} />
         <div className="flex-1 p-6">{children}</div>
       </div>
     </div>

@@ -18,7 +18,7 @@ export async function GET() {
       return NextResponse.json({ error: "Invalid token" }, { status: 401 });
     }
 
-    const user = getUserById(payload.id);
+    const user = await getUserById(payload.id);
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });

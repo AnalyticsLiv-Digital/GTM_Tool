@@ -16,11 +16,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if user exists with Google ID
-    let user = getUserByGoogleId(googleId);
+    let user = await getUserByGoogleId(googleId);
 
     if (!user) {
       // Create new user
-      user = createUser({
+      user = await createUser({
         name: name || email.split('@')[0],
         email,
         googleId,
@@ -28,10 +28,7 @@ export async function POST(request: NextRequest) {
       });
     } else {
       // Update user with latest info
-      updateUser(user.id, {
-        picture,
-      });
-      user = updateUser(user.id, { picture })!;
+      user = (await updateUser(user.id, { picture }))!;
     }
 
     // Generate token

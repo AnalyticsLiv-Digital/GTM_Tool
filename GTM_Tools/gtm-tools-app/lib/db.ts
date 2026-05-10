@@ -1,20 +1,27 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-import fs from 'fs';
-import path from 'path';
 import bcrypt from 'bcryptjs';
+import { MongoClient, Collection } from 'mongodb';
 
-// Database file paths
-const DATA_DIR = path.join(process.cwd(), '.data');
-const USERS_FILE = path.join(DATA_DIR, 'users.json');
-
-// Ensure data directory exists
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+declare global {
+  var _mongoClientPromise: Promise<MongoClient> | undefined;
 }
 
-// Initialize users file if it doesn't exist
-if (!fs.existsSync(USERS_FILE)) {
-  fs.writeFileSync(USERS_FILE, JSON.stringify([], null, 2));
+function getClientPromise(): Promise<MongoClient> {
+  const uri = process.env.MONGODB_URI;
+  if (!uri) throw new Error('MONGODB_URI is not set');
+
+  if (process.env.NODE_ENV === 'production') {
+    return new MongoClient(uri).connect();
+  }
+  if (!global._mongoClientPromise) {
+    global._mongoClientPromise = new MongoClient(uri).connect();
+  }
+  return global._mongoClientPromise;
+}
+
+async function users(): Promise<Collection<User>> {
+  const client = await getClientPromise();
+  const dbName = process.env.MONGODB_DB || 'gtm_tools';
+  return client.db(dbName).collection<User>('users');
 }
 
 export interface User {
@@ -27,70 +34,55 @@ export interface User {
   createdAt: string;
 }
 
-// Read all users
-export function getAllUsers(): User[] {
-  try {
-    const data = fs.readFileSync(USERS_FILE, 'utf-8');
-    return JSON.parse(data);
-  } catch (error) {
-    return [];
-  }
+export async function getAllUsers(): Promise<User[]> {
+  return (await users()).find({}, { projection: { _id: 0 } }).toArray();
 }
 
-// Find user by email
-export function getUserByEmail(email: string): User | null {
-  const users = getAllUsers();
-  return users.find((u) => u.email === email) || null;
+export async function getUserByEmail(email: string): Promise<User | null> {
+  return (await users()).findOne({ email }, { projection: { _id: 0 } });
 }
 
-// Find user by ID
-export function getUserById(id: string): User | null {
-  const users = getAllUsers();
-  return users.find((u) => u.id === id) || null;
+export async function getUserById(id: string): Promise<User | null> {
+  return (await users()).findOne({ id }, { projection: { _id: 0 } });
 }
 
-// Find user by Google ID
-export function getUserByGoogleId(googleId: string): User | null {
-  const users = getAllUsers();
-  return users.find((u) => u.googleId === googleId) || null;
+export async function getUserByGoogleId(googleId: string): Promise<User | null> {
+  return (await users()).findOne({ googleId }, { projection: { _id: 0 } });
 }
 
-// Create new user
-export function createUser(userData: Omit<User, 'id' | 'createdAt'>): User {
-  const users = getAllUsers();
-  
+export async function createUser(
+  userData: Omit<User, 'id' | 'createdAt'>
+): Promise<User> {
   const newUser: User = {
     ...userData,
-    id: `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    id: `user_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
     createdAt: new Date().toISOString(),
   };
-
-  users.push(newUser);
-  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-  
+  await (await users()).insertOne(newUser);
   return newUser;
 }
 
-// Hash password
+export async function updateUser(
+  id: string,
+  updates: Partial<User>
+): Promise<User | null> {
+  const col = await users();
+  const result = await col.findOneAndUpdate(
+    { id },
+    { $set: updates },
+    { returnDocument: 'after', projection: { _id: 0 } }
+  );
+  return result ?? null;
+}
+
 export async function hashPassword(password: string): Promise<string> {
   const salt = await bcrypt.genSalt(10);
   return bcrypt.hash(password, salt);
 }
 
-// Verify password
-export async function verifyPassword(password: string, hash: string): Promise<boolean> {
+export async function verifyPassword(
+  password: string,
+  hash: string
+): Promise<boolean> {
   return bcrypt.compare(password, hash);
-}
-
-// Update user
-export function updateUser(id: string, updates: Partial<User>): User | null {
-  const users = getAllUsers();
-  const index = users.findIndex((u) => u.id === id);
-  
-  if (index === -1) return null;
-  
-  users[index] = { ...users[index], ...updates };
-  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-  
-  return users[index];
 }
