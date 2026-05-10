@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git -C C:/Users/sales/Desktop/GTM_Tool log --oneline -20)",
+      "Bash(git -C C:/Users/sales/Desktop/GTM_Tool show --stat cb9d87e)",
+      "Bash(npx tsc *)"
+    ]
+  }
+}

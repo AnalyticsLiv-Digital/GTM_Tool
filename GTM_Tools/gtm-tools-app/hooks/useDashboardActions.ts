@@ -2,6 +2,8 @@
 "use client";
 
 import { useDashboardStore } from "@/app/store/useDashboardStore";
+import { notify } from "@/lib/ui/notify";
+import { confirmDialog } from "@/lib/ui/dialog";
 
 export function useDashboardActions() {
   const store = useDashboardStore();
@@ -173,7 +175,10 @@ export function useDashboardActions() {
       (c: any) => c.containerId === store.selectedContainerId
     );
 
-    if (!selected) return alert("Select container first");
+    if (!selected) {
+      notify.warning("Select container first");
+      return;
+    }
 
     store.setContainerModalMode("edit");
     store.setContainerNameInput(selected.name || "");
@@ -181,8 +186,14 @@ export function useDashboardActions() {
   };
 
   const handleSaveContainer = async () => {
-    if (!store.selectedAccountId) return alert("Select account first");
-    if (!store.containerNameInput.trim()) return alert("Container name required");
+    if (!store.selectedAccountId) {
+      notify.warning("Select account first");
+      return;
+    }
+    if (!store.containerNameInput.trim()) {
+      notify.warning("Container name required");
+      return;
+    }
 
     try {
       store.setContainerCrudLoading(true);
@@ -219,17 +230,25 @@ export function useDashboardActions() {
       store.setShowContainerModal(false);
       await fetchContainers();
     } catch (err: any) {
-      alert(err.message);
+      notify.error(err.message);
     } finally {
       store.setContainerCrudLoading(false);
     }
   };
 
   const handleDeleteContainer = async () => {
-    if (!store.selectedAccountId || !store.selectedContainerId)
-      return alert("Select account and container first");
+    if (!store.selectedAccountId || !store.selectedContainerId) {
+      notify.warning("Select account and container first");
+      return;
+    }
 
-    if (!confirm("Delete this container?")) return;
+    const ok = await confirmDialog({
+      title: "Delete this container?",
+      description: "This will permanently remove the container and all its workspaces, tags, triggers, and variables. This cannot be undone.",
+      danger: true,
+      confirmLabel: "Delete container",
+    });
+    if (!ok) return;
 
     try {
       store.setContainerCrudLoading(true);
@@ -252,7 +271,7 @@ export function useDashboardActions() {
 
       await fetchContainers();
     } catch (err: any) {
-      alert(err.message);
+      notify.error(err.message);
     } finally {
       store.setContainerCrudLoading(false);
     }
@@ -263,22 +282,30 @@ export function useDashboardActions() {
   // ============================================================
 
   const openCreateWorkspaceModal = () => {
-    if (store.workspaces.length >= 3)
-      return alert("You can only create maximum 3 workspaces.");
+    if (store.workspaces.length >= 3) {
+      notify.warning("You can only create up to 3 workspaces.");
+      return;
+    }
 
     store.setWorkspaceNameInput("");
     store.setShowWorkspaceModal(true);
   };
 
   const handleSaveWorkspace = async () => {
-    if (!store.selectedAccountId || !store.selectedContainerId)
-      return alert("Select account and container first");
+    if (!store.selectedAccountId || !store.selectedContainerId) {
+      notify.warning("Select account and container first");
+      return;
+    }
 
-    if (!store.workspaceNameInput.trim())
-      return alert("Workspace name required");
+    if (!store.workspaceNameInput.trim()) {
+      notify.warning("Workspace name required");
+      return;
+    }
 
-    if (store.workspaces.length >= 3)
-      return alert("You can only create maximum 3 workspaces.");
+    if (store.workspaces.length >= 3) {
+      notify.warning("You can only create up to 3 workspaces.");
+      return;
+    }
 
     try {
       store.setWorkspaceCrudLoading(true);
@@ -300,7 +327,7 @@ export function useDashboardActions() {
       store.setWorkspaceNameInput("");
       await fetchWorkspaces();
     } catch (err: any) {
-      alert(err.message);
+      notify.error(err.message);
     } finally {
       store.setWorkspaceCrudLoading(false);
     }
@@ -320,7 +347,10 @@ export function useDashboardActions() {
 
   const openEditTagModal = () => {
     const tag = store.tags.find((t: any) => t.tagId === store.selectedTagId);
-    if (!tag) return alert("Select tag first");
+    if (!tag) {
+      notify.warning("Select a tag first");
+      return;
+    }
 
     store.setTagModalMode("edit");
     store.setTagNameInput(tag.name || "");
@@ -332,10 +362,15 @@ export function useDashboardActions() {
       !store.selectedAccountId ||
       !store.selectedContainerId ||
       !store.selectedWorkspaceId
-    )
-      return alert("Select workspace first");
+    ) {
+      notify.warning("Select a workspace first");
+      return;
+    }
 
-    if (!store.tagNameInput.trim()) return alert("Tag name required");
+    if (!store.tagNameInput.trim()) {
+      notify.warning("Tag name required");
+      return;
+    }
 
     try {
       store.setTagCrudLoading(true);
@@ -388,7 +423,7 @@ export function useDashboardActions() {
       store.setShowTagModal(false);
       await fetchTags();
     } catch (err: any) {
-      alert(err.message);
+      notify.error(err.message);
     } finally {
       store.setTagCrudLoading(false);
     }
@@ -399,12 +434,23 @@ export function useDashboardActions() {
       !store.selectedAccountId ||
       !store.selectedContainerId ||
       !store.selectedWorkspaceId
-    )
-      return alert("Select workspace first");
+    ) {
+      notify.warning("Select a workspace first");
+      return;
+    }
 
-    if (!store.selectedTagId) return alert("Select tag first");
+    if (!store.selectedTagId) {
+      notify.warning("Select a tag first");
+      return;
+    }
 
-    if (!confirm("Delete this tag?")) return;
+    const ok = await confirmDialog({
+      title: "Delete this tag?",
+      description: "The tag will be removed from this workspace. This cannot be undone.",
+      danger: true,
+      confirmLabel: "Delete tag",
+    });
+    if (!ok) return;
 
     try {
       store.setTagCrudLoading(true);
@@ -420,7 +466,7 @@ export function useDashboardActions() {
       store.setSelectedTagId("");
       await fetchTags();
     } catch (err: any) {
-      alert(err.message);
+      notify.error(err.message);
     } finally {
       store.setTagCrudLoading(false);
     }
@@ -442,7 +488,10 @@ export function useDashboardActions() {
       (t: any) => t.triggerId === store.selectedTriggerId
     );
 
-    if (!trigger) return alert("Select trigger first");
+    if (!trigger) {
+      notify.warning("Select a trigger first");
+      return;
+    }
 
     store.setTriggerModalMode("edit");
     store.setTriggerNameInput(trigger.name || "");
@@ -454,11 +503,15 @@ export function useDashboardActions() {
       !store.selectedAccountId ||
       !store.selectedContainerId ||
       !store.selectedWorkspaceId
-    )
-      return alert("Select workspace first");
+    ) {
+      notify.warning("Select a workspace first");
+      return;
+    }
 
-    if (!store.triggerNameInput.trim())
-      return alert("Trigger name required");
+    if (!store.triggerNameInput.trim()) {
+      notify.warning("Trigger name required");
+      return;
+    }
 
     try {
       store.setTriggerCrudLoading(true);
@@ -504,7 +557,7 @@ export function useDashboardActions() {
       store.setShowTriggerModal(false);
       await fetchTriggers();
     } catch (err: any) {
-      alert(err.message);
+      notify.error(err.message);
     } finally {
       store.setTriggerCrudLoading(false);
     }
@@ -515,12 +568,23 @@ export function useDashboardActions() {
       !store.selectedAccountId ||
       !store.selectedContainerId ||
       !store.selectedWorkspaceId
-    )
-      return alert("Select workspace first");
+    ) {
+      notify.warning("Select a workspace first");
+      return;
+    }
 
-    if (!store.selectedTriggerId) return alert("Select trigger first");
+    if (!store.selectedTriggerId) {
+      notify.warning("Select a trigger first");
+      return;
+    }
 
-    if (!confirm("Delete this trigger?")) return;
+    const ok = await confirmDialog({
+      title: "Delete this trigger?",
+      description: "Tags that depend on this trigger may stop firing. This cannot be undone.",
+      danger: true,
+      confirmLabel: "Delete trigger",
+    });
+    if (!ok) return;
 
     try {
       store.setTriggerCrudLoading(true);
@@ -536,7 +600,7 @@ export function useDashboardActions() {
       store.setSelectedTriggerId("");
       await fetchTriggers();
     } catch (err: any) {
-      alert(err.message);
+      notify.error(err.message);
     } finally {
       store.setTriggerCrudLoading(false);
     }
@@ -558,7 +622,10 @@ export function useDashboardActions() {
       (v: any) => v.variableId === store.selectedVariableId
     );
 
-    if (!variable) return alert("Select variable first");
+    if (!variable) {
+      notify.warning("Select a variable first");
+      return;
+    }
 
     store.setVariableModalMode("edit");
     store.setVariableNameInput(variable.name || "");
@@ -570,11 +637,15 @@ export function useDashboardActions() {
       !store.selectedAccountId ||
       !store.selectedContainerId ||
       !store.selectedWorkspaceId
-    )
-      return alert("Select workspace first");
+    ) {
+      notify.warning("Select a workspace first");
+      return;
+    }
 
-    if (!store.variableNameInput.trim())
-      return alert("Variable name required");
+    if (!store.variableNameInput.trim()) {
+      notify.warning("Variable name required");
+      return;
+    }
 
     try {
       store.setVariableCrudLoading(true);
@@ -620,7 +691,7 @@ export function useDashboardActions() {
       store.setShowVariableModal(false);
       await fetchVariables();
     } catch (err: any) {
-      alert(err.message);
+      notify.error(err.message);
     } finally {
       store.setVariableCrudLoading(false);
     }
@@ -631,12 +702,23 @@ export function useDashboardActions() {
       !store.selectedAccountId ||
       !store.selectedContainerId ||
       !store.selectedWorkspaceId
-    )
-      return alert("Select workspace first");
+    ) {
+      notify.warning("Select a workspace first");
+      return;
+    }
 
-    if (!store.selectedVariableId) return alert("Select variable first");
+    if (!store.selectedVariableId) {
+      notify.warning("Select a variable first");
+      return;
+    }
 
-    if (!confirm("Delete this variable?")) return;
+    const ok = await confirmDialog({
+      title: "Delete this variable?",
+      description: "Tags or triggers that reference this variable may break. This cannot be undone.",
+      danger: true,
+      confirmLabel: "Delete variable",
+    });
+    if (!ok) return;
 
     try {
       store.setVariableCrudLoading(true);
@@ -652,7 +734,7 @@ export function useDashboardActions() {
       store.setSelectedVariableId("");
       await fetchVariables();
     } catch (err: any) {
-      alert(err.message);
+      notify.error(err.message);
     } finally {
       store.setVariableCrudLoading(false);
     }
@@ -697,11 +779,15 @@ export function useDashboardActions() {
       !store.selectedAccountId ||
       !store.selectedContainerId ||
       !store.selectedWorkspaceId
-    )
-      return alert("Select workspace first");
+    ) {
+      notify.warning("Select a workspace first");
+      return;
+    }
 
-    if (!store.templateNameInput.trim())
-      return alert("Template name required");
+    if (!store.templateNameInput.trim()) {
+      notify.warning("Template name required");
+      return;
+    }
 
     try {
       store.setTemplateCrudLoading(true);
@@ -747,7 +833,7 @@ export function useDashboardActions() {
       store.setTemplateNameInput("");
       await fetchTemplates();
     } catch (err: any) {
-      alert(err.message);
+      notify.error(err.message);
     } finally {
       store.setTemplateCrudLoading(false);
     }
@@ -758,13 +844,23 @@ export function useDashboardActions() {
       !store.selectedAccountId ||
       !store.selectedContainerId ||
       !store.selectedWorkspaceId
-    )
-      return alert("Select workspace first");
+    ) {
+      notify.warning("Select a workspace first");
+      return;
+    }
 
-    if (!store.selectedTemplateId)
-      return alert("Select template first");
+    if (!store.selectedTemplateId) {
+      notify.warning("Select a template first");
+      return;
+    }
 
-    if (!confirm("Delete this template?")) return;
+    const ok = await confirmDialog({
+      title: "Delete this template?",
+      description: "Tags using this custom template will lose their backing definition. This cannot be undone.",
+      danger: true,
+      confirmLabel: "Delete template",
+    });
+    if (!ok) return;
 
     try {
       store.setTemplateCrudLoading(true);
@@ -780,7 +876,7 @@ export function useDashboardActions() {
       store.setSelectedTemplateId("");
       await fetchTemplates();
     } catch (err: any) {
-      alert(err.message);
+      notify.error(err.message);
     } finally {
       store.setTemplateCrudLoading(false);
     }

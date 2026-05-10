@@ -1,18 +1,13 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { getValidGoogleAccessToken } from "@/lib/googleAuth";
+
+// Only allow GTM v2 paths shaped like `accounts/<id>(/<segment>)*`. Disallow
+// schemes, traversal, query strings, and fragments so this route can never be
+// turned into a generic SSRF proxy with the user's Google access token.
+const SAFE_PATH = /^accounts\/[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*\/?$/;
 
 export async function GET(req: Request) {
   try {
-    const cookieStore = cookies();
-    const accessToken = (await cookieStore).get("google_access_token")?.value;
-
-    if (!accessToken) {
-      return NextResponse.json(
-        { error: "Google access token missing" },
-        { status: 401 }
-      );
-    }
-
     const url = new URL(req.url);
     const path = url.searchParams.get("path");
 
@@ -23,20 +18,30 @@ export async function GET(req: Request) {
       );
     }
 
+    if (!SAFE_PATH.test(path)) {
+      return NextResponse.json(
+        { error: "Invalid path. Must be a GTM v2 resource under accounts/." },
+        { status: 400 }
+      );
+    }
+
+    const accessToken = await getValidGoogleAccessToken().catch(() => null);
+    if (!accessToken) {
+      return NextResponse.json(
+        { error: "Google access token missing or expired" },
+        { status: 401 }
+      );
+    }
+
     const res = await fetch(
       `https://tagmanager.googleapis.com/tagmanager/v2/${path}`,
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      }
+      { headers: { Authorization: `Bearer ${accessToken}` } }
     );
 
-    const data = await res.json();
-
+    const data = await res.json().catch(() => ({}));
     return NextResponse.json(data, { status: res.status });
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   } catch (error) {
+    console.error("accounts/containers proxy error:", error);
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

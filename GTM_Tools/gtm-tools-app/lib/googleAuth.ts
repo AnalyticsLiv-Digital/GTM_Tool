@@ -47,10 +47,12 @@ export async function getValidGoogleAccessToken() {
   const expiresIn = tokenData.expires_in || 3600;
   const newExpiry = Date.now() + expiresIn * 1000;
 
+  const isProd = process.env.NODE_ENV === "production";
+
   // update cookies with new access token
   cookieStore.set("google_access_token", newAccessToken, {
     httpOnly: true,
-    secure: false,
+    secure: isProd,
     sameSite: "lax",
     path: "/",
     maxAge: expiresIn,
@@ -58,7 +60,7 @@ export async function getValidGoogleAccessToken() {
 
   cookieStore.set("google_access_token_expiry", newExpiry.toString(), {
     httpOnly: true,
-    secure: false,
+    secure: isProd,
     sameSite: "lax",
     path: "/",
     maxAge: 7 * 24 * 60 * 60,

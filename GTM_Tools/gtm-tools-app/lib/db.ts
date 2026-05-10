@@ -3,26 +3,41 @@ import { MongoClient, Collection } from 'mongodb';
 
 declare global {
   var _mongoClientPromise: Promise<MongoClient> | undefined;
+  var _mongoIndexesEnsured: boolean | undefined;
 }
 
+// Cache the connect() promise on globalThis in BOTH dev and prod. On Vercel
+// each warm function instance reuses module-level state, so without this every
+// API request would open a fresh MongoDB connection — fatal for Atlas M0's
+// connection budget on the free tier.
 function getClientPromise(): Promise<MongoClient> {
   const uri = process.env.MONGODB_URI;
   if (!uri) throw new Error('MONGODB_URI is not set');
-
-  if (process.env.NODE_ENV === 'production') {
-    return new MongoClient(uri).connect();
-  }
   if (!global._mongoClientPromise) {
     global._mongoClientPromise = new MongoClient(uri).connect();
   }
   return global._mongoClientPromise;
 }
 
+async function ensureIndexes(col: Collection<User>) {
+  if (global._mongoIndexesEnsured) return;
+  await Promise.all([
+    col.createIndex({ email: 1 }, { unique: true }),
+    col.createIndex({ googleId: 1 }, { sparse: true }),
+    col.createIndex({ id: 1 }, { unique: true }),
+  ]);
+  global._mongoIndexesEnsured = true;
+}
+
 async function users(): Promise<Collection<User>> {
   const client = await getClientPromise();
   const dbName = process.env.MONGODB_DB || 'gtm_tools';
-  return client.db(dbName).collection<User>('users');
+  const col = client.db(dbName).collection<User>('users');
+  await ensureIndexes(col);
+  return col;
 }
+
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
 export interface User {
   id: string;
@@ -32,6 +47,9 @@ export interface User {
   googleId?: string;
   picture?: string;
   createdAt: string;
+  failedLoginAttempts?: number;
+  lockedUntil?: string;
+  lastLoginAt?: string;
 }
 
 export async function getAllUsers(): Promise<User[]> {
@@ -39,7 +57,10 @@ export async function getAllUsers(): Promise<User[]> {
 }
 
 export async function getUserByEmail(email: string): Promise<User | null> {
-  return (await users()).findOne({ email }, { projection: { _id: 0 } });
+  return (await users()).findOne(
+    { email: normalizeEmail(email) },
+    { projection: { _id: 0 } }
+  );
 }
 
 export async function getUserById(id: string): Promise<User | null> {
@@ -55,6 +76,7 @@ export async function createUser(
 ): Promise<User> {
   const newUser: User = {
     ...userData,
+    email: normalizeEmail(userData.email),
     id: `user_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
     createdAt: new Date().toISOString(),
   };
@@ -67,12 +89,57 @@ export async function updateUser(
   updates: Partial<User>
 ): Promise<User | null> {
   const col = await users();
+  const sanitized = { ...updates };
+  if (sanitized.email) sanitized.email = normalizeEmail(sanitized.email);
   const result = await col.findOneAndUpdate(
     { id },
-    { $set: updates },
+    { $set: sanitized },
     { returnDocument: 'after', projection: { _id: 0 } }
   );
   return result ?? null;
+}
+
+export async function recordFailedLogin(id: string): Promise<User | null> {
+  const col = await users();
+  const LOCK_AFTER = 5;
+  const LOCK_MINUTES = 15;
+  const result = await col.findOneAndUpdate(
+    { id },
+    [
+      {
+        $set: {
+          failedLoginAttempts: { $add: [{ $ifNull: ['$failedLoginAttempts', 0] }, 1] },
+        },
+      },
+      {
+        $set: {
+          lockedUntil: {
+            $cond: [
+              { $gte: ['$failedLoginAttempts', LOCK_AFTER] },
+              new Date(Date.now() + LOCK_MINUTES * 60 * 1000).toISOString(),
+              '$lockedUntil',
+            ],
+          },
+        },
+      },
+    ],
+    { returnDocument: 'after', projection: { _id: 0 } }
+  );
+  return result ?? null;
+}
+
+export async function recordSuccessfulLogin(id: string): Promise<void> {
+  const col = await users();
+  await col.updateOne(
+    { id },
+    {
+      $set: {
+        failedLoginAttempts: 0,
+        lockedUntil: undefined,
+        lastLoginAt: new Date().toISOString(),
+      },
+    }
+  );
 }
 
 export async function hashPassword(password: string): Promise<string> {

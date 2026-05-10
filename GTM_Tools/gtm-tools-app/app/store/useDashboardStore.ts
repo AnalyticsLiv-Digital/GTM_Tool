@@ -1,6 +1,15 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import type {
+  GtmContainer,
+  GtmTag,
+  GtmTemplate,
+  GtmTrigger,
+  GtmVariable,
+  GtmWorkspace,
+} from "@/lib/gtm/types";
+
+type ModalMode = "create" | "edit";
 
 interface DashboardStore {
   workspaceModalMode: string;
@@ -10,7 +19,7 @@ interface DashboardStore {
   selectedContainerId: string;
   selectedWorkspaceId: string;
 
-  // ✅ NEW Selected Names
+  // Selected names — persisted so the navbar reads correctly across reloads.
   selectedAccountName: string;
   selectedContainerName: string;
   selectedWorkspaceName: string;
@@ -24,7 +33,6 @@ interface DashboardStore {
   setSelectedContainerId: (id: string) => void;
   setSelectedWorkspaceId: (id: string) => void;
 
-  // ✅ NEW Name Setters
   setSelectedAccountName: (name: string) => void;
   setSelectedContainerName: (name: string) => void;
   setSelectedWorkspaceName: (name: string) => void;
@@ -35,38 +43,33 @@ interface DashboardStore {
   setSelectedTemplateId: (id: string) => void;
 
   // Data
-  containers: any[];
-  workspaces: any[];
-  tags: any[];
-  triggers: any[];
-  variables: any[];
-  templates: any[];
+  containers: GtmContainer[];
+  workspaces: GtmWorkspace[];
+  tags: GtmTag[];
+  triggers: GtmTrigger[];
+  variables: GtmVariable[];
+  templates: GtmTemplate[];
 
-  // Loading & Errors
+  // Loading & errors
   containersLoading: boolean;
   containersError: string;
-
   workspacesLoading: boolean;
   workspacesError: string;
-
   tagsLoading: boolean;
   tagsError: string;
-
   triggersLoading: boolean;
   triggersError: string;
-
   variablesLoading: boolean;
   variablesError: string;
-
   templatesLoading: boolean;
   templatesError: string;
 
-  setContainers: (data: any[]) => void;
-  setWorkspaces: (data: any[]) => void;
-  setTags: (data: any[]) => void;
-  setTriggers: (data: any[]) => void;
-  setVariables: (data: any[]) => void;
-  setTemplates: (data: any[]) => void;
+  setContainers: (data: GtmContainer[]) => void;
+  setWorkspaces: (data: GtmWorkspace[]) => void;
+  setTags: (data: GtmTag[]) => void;
+  setTriggers: (data: GtmTrigger[]) => void;
+  setVariables: (data: GtmVariable[]) => void;
+  setTemplates: (data: GtmTemplate[]) => void;
 
   setContainersLoading: (val: boolean) => void;
   setWorkspacesLoading: (val: boolean) => void;
@@ -82,71 +85,65 @@ interface DashboardStore {
   setVariablesError: (msg: string) => void;
   setTemplatesError: (msg: string) => void;
 
-  // Container Modal
+  // Container modal
   showContainerModal: boolean;
-  containerModalMode: "create" | "edit";
+  containerModalMode: ModalMode;
   containerNameInput: string;
   containerCrudLoading: boolean;
-
   setShowContainerModal: (val: boolean) => void;
-  setContainerModalMode: (mode: "create" | "edit") => void;
+  setContainerModalMode: (mode: ModalMode) => void;
   setContainerNameInput: (val: string) => void;
   setContainerCrudLoading: (val: boolean) => void;
 
-  // Workspace Modal
+  // Workspace modal
   showWorkspaceModal: boolean;
   workspaceNameInput: string;
   workspaceCrudLoading: boolean;
-
   setShowWorkspaceModal: (val: boolean) => void;
   setWorkspaceNameInput: (val: string) => void;
   setWorkspaceCrudLoading: (val: boolean) => void;
 
-  // Tag Modal
+  // Tag modal
   showTagModal: boolean;
-  tagModalMode: "create" | "edit";
+  tagModalMode: ModalMode;
   tagNameInput: string;
   tagCrudLoading: boolean;
-
   setShowTagModal: (val: boolean) => void;
-  setTagModalMode: (mode: "create" | "edit") => void;
+  setTagModalMode: (mode: ModalMode) => void;
   setTagNameInput: (val: string) => void;
   setTagCrudLoading: (val: boolean) => void;
 
-  // Trigger Modal
+  // Trigger modal
   showTriggerModal: boolean;
-  triggerModalMode: "create" | "edit";
+  triggerModalMode: ModalMode;
   triggerNameInput: string;
   triggerCrudLoading: boolean;
-
   setShowTriggerModal: (val: boolean) => void;
-  setTriggerModalMode: (mode: "create" | "edit") => void;
+  setTriggerModalMode: (mode: ModalMode) => void;
   setTriggerNameInput: (val: string) => void;
   setTriggerCrudLoading: (val: boolean) => void;
 
-  // Variable Modal
+  // Variable modal
   showVariableModal: boolean;
-  variableModalMode: "create" | "edit";
+  variableModalMode: ModalMode;
   variableNameInput: string;
   variableCrudLoading: boolean;
-
   setShowVariableModal: (val: boolean) => void;
-  setVariableModalMode: (mode: "create" | "edit") => void;
+  setVariableModalMode: (mode: ModalMode) => void;
   setVariableNameInput: (val: string) => void;
   setVariableCrudLoading: (val: boolean) => void;
 
-  // Template Modal
+  // Template modal
   showTemplateModal: boolean;
-  templateModalMode: "create" | "edit";
+  templateModalMode: ModalMode;
   templateNameInput: string;
   templateCrudLoading: boolean;
-
   setShowTemplateModal: (val: boolean) => void;
-  setTemplateModalMode: (mode: "create" | "edit") => void;
+  setTemplateModalMode: (mode: ModalMode) => void;
   setTemplateNameInput: (val: string) => void;
   setTemplateCrudLoading: (val: boolean) => void;
 
-  // Unified Selection Modal (Navbar popup)
+  // Unified selection modal (navbar popup)
   showSelectionModal: boolean;
   setShowSelectionModal: (val: boolean) => void;
 }
@@ -156,12 +153,9 @@ export const useDashboardStore = create<DashboardStore>()(
     (set) => ({
       workspaceModalMode: "create",
 
-      // Selected IDs
       selectedAccountId: "",
       selectedContainerId: "",
       selectedWorkspaceId: "",
-
-      // ✅ NEW Selected Names
       selectedAccountName: "",
       selectedContainerName: "",
       selectedWorkspaceName: "",
@@ -176,16 +170,12 @@ export const useDashboardStore = create<DashboardStore>()(
           selectedAccountId: id,
           selectedContainerId: "",
           selectedWorkspaceId: "",
-
-          // ✅ reset names also
           selectedContainerName: "",
           selectedWorkspaceName: "",
-
           selectedTagId: "",
           selectedTriggerId: "",
           selectedVariableId: "",
           selectedTemplateId: "",
-
           containers: [],
           workspaces: [],
           tags: [],
@@ -198,15 +188,11 @@ export const useDashboardStore = create<DashboardStore>()(
         set({
           selectedContainerId: id,
           selectedWorkspaceId: "",
-
-          // ✅ reset workspace name
           selectedWorkspaceName: "",
-
           selectedTagId: "",
           selectedTriggerId: "",
           selectedVariableId: "",
           selectedTemplateId: "",
-
           workspaces: [],
           tags: [],
           triggers: [],
@@ -221,14 +207,12 @@ export const useDashboardStore = create<DashboardStore>()(
           selectedTriggerId: "",
           selectedVariableId: "",
           selectedTemplateId: "",
-
           tags: [],
           triggers: [],
           variables: [],
           templates: [],
         }),
 
-      // ✅ NEW Name Setters
       setSelectedAccountName: (name) => set({ selectedAccountName: name }),
       setSelectedContainerName: (name) => set({ selectedContainerName: name }),
       setSelectedWorkspaceName: (name) => set({ selectedWorkspaceName: name }),
@@ -238,7 +222,6 @@ export const useDashboardStore = create<DashboardStore>()(
       setSelectedVariableId: (id) => set({ selectedVariableId: id }),
       setSelectedTemplateId: (id) => set({ selectedTemplateId: id }),
 
-      // Data
       containers: [],
       workspaces: [],
       tags: [],
@@ -253,22 +236,16 @@ export const useDashboardStore = create<DashboardStore>()(
       setVariables: (data) => set({ variables: data }),
       setTemplates: (data) => set({ templates: data }),
 
-      // Loading + Errors
       containersLoading: false,
       containersError: "",
-
       workspacesLoading: false,
       workspacesError: "",
-
       tagsLoading: false,
       tagsError: "",
-
       triggersLoading: false,
       triggersError: "",
-
       variablesLoading: false,
       variablesError: "",
-
       templatesLoading: false,
       templatesError: "",
 
@@ -286,82 +263,67 @@ export const useDashboardStore = create<DashboardStore>()(
       setVariablesError: (msg) => set({ variablesError: msg }),
       setTemplatesError: (msg) => set({ templatesError: msg }),
 
-      // Container Modal
       showContainerModal: false,
       containerModalMode: "create",
       containerNameInput: "",
       containerCrudLoading: false,
-
       setShowContainerModal: (val) => set({ showContainerModal: val }),
       setContainerModalMode: (mode) => set({ containerModalMode: mode }),
       setContainerNameInput: (val) => set({ containerNameInput: val }),
       setContainerCrudLoading: (val) => set({ containerCrudLoading: val }),
 
-      // Workspace Modal
       showWorkspaceModal: false,
       workspaceNameInput: "",
       workspaceCrudLoading: false,
-
       setShowWorkspaceModal: (val) => set({ showWorkspaceModal: val }),
       setWorkspaceNameInput: (val) => set({ workspaceNameInput: val }),
       setWorkspaceCrudLoading: (val) => set({ workspaceCrudLoading: val }),
 
-      // Tag Modal
       showTagModal: false,
       tagModalMode: "create",
       tagNameInput: "",
       tagCrudLoading: false,
-
       setShowTagModal: (val) => set({ showTagModal: val }),
       setTagModalMode: (mode) => set({ tagModalMode: mode }),
       setTagNameInput: (val) => set({ tagNameInput: val }),
       setTagCrudLoading: (val) => set({ tagCrudLoading: val }),
 
-      // Trigger Modal
       showTriggerModal: false,
       triggerModalMode: "create",
       triggerNameInput: "",
       triggerCrudLoading: false,
-
       setShowTriggerModal: (val) => set({ showTriggerModal: val }),
       setTriggerModalMode: (mode) => set({ triggerModalMode: mode }),
       setTriggerNameInput: (val) => set({ triggerNameInput: val }),
       setTriggerCrudLoading: (val) => set({ triggerCrudLoading: val }),
 
-      // Variable Modal
       showVariableModal: false,
       variableModalMode: "create",
       variableNameInput: "",
       variableCrudLoading: false,
-
       setShowVariableModal: (val) => set({ showVariableModal: val }),
       setVariableModalMode: (mode) => set({ variableModalMode: mode }),
       setVariableNameInput: (val) => set({ variableNameInput: val }),
       setVariableCrudLoading: (val) => set({ variableCrudLoading: val }),
 
-      // Template Modal
       showTemplateModal: false,
       templateModalMode: "create",
       templateNameInput: "",
       templateCrudLoading: false,
-
       setShowTemplateModal: (val) => set({ showTemplateModal: val }),
       setTemplateModalMode: (mode) => set({ templateModalMode: mode }),
       setTemplateNameInput: (val) => set({ templateNameInput: val }),
       setTemplateCrudLoading: (val) => set({ templateCrudLoading: val }),
 
-      // Unified Selection Modal (Navbar popup)
       showSelectionModal: false,
       setShowSelectionModal: (val) => set({ showSelectionModal: val }),
     }),
     {
-      name: "gtm-dashboard-store", // localStorage key
+      name: "gtm-dashboard-store",
       partialize: (state) => ({
         selectedAccountId: state.selectedAccountId,
         selectedContainerId: state.selectedContainerId,
         selectedWorkspaceId: state.selectedWorkspaceId,
-
-        // ✅ persist names also
         selectedAccountName: state.selectedAccountName,
         selectedContainerName: state.selectedContainerName,
         selectedWorkspaceName: state.selectedWorkspaceName,

@@ -33,6 +33,12 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 
+# secrets — never commit OAuth client JSON or service-account keys
+/app/client_id/
+/client_id/
+client_secret*.json
+*-credentials.json
+
 # vercel
 .vercel
 

@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { getValidGoogleAccessToken } from "@/lib/googleAuth";
+import { gtmList } from "@/lib/gtm/list";
+import { tagBodySchema } from "@/lib/gtm/schemas";
+import { validateBody } from "@/lib/validation";
 
-// GET Tags
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-
     const accountId = searchParams.get("accountId");
     const containerId = searchParams.get("containerId");
     const workspaceId = searchParams.get("workspaceId");
@@ -18,49 +19,48 @@ export async function GET(req: Request) {
     }
 
     const accessToken = await getValidGoogleAccessToken();
+    if (!accessToken) {
+      return NextResponse.json({ error: "Missing Google access token" }, { status: 401 });
+    }
 
-    const apiUrl = `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/tags`;
-
-    const res = await fetch(apiUrl, {
-      headers: { Authorization: `Bearer ${accessToken}` },
+    const result = await gtmList<Record<string, unknown>>({
+      url: `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/tags`,
+      accessToken,
+      listKey: "tag",
     });
 
-    const data = await res.json();
-
-    if (!res.ok) {
+    if (result.error && result.items.length === 0) {
       return NextResponse.json(
-        { error: "Failed to fetch tags", details: data },
-        { status: res.status }
+        { error: "Failed to fetch tags", details: result.error.body },
+        { status: result.error.status || 502 }
       );
     }
 
-    return NextResponse.json({ tag: data.tag || [] });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } catch (err: any) {
+    return NextResponse.json({
+      tag: result.items,
+      truncated: result.truncated,
+      pages: result.pages,
+    });
+  } catch (err: unknown) {
     return NextResponse.json(
-      { error: err.message || "Internal server error" },
+      { error: err instanceof Error ? err.message : "Internal server error" },
       { status: 500 }
     );
   }
 }
 
-// CREATE Tag
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const { accountId, containerId, workspaceId, tag } = body;
-
-    if (!accountId || !containerId || !workspaceId || !tag) {
-      return NextResponse.json(
-        { error: "accountId, containerId, workspaceId, tag required" },
-        { status: 400 }
-      );
-    }
+    const parsed = await validateBody(req, tagBodySchema);
+    if (!parsed.ok) return parsed.response;
+    const { accountId, containerId, workspaceId, tag } = parsed.data;
 
     const accessToken = await getValidGoogleAccessToken();
+    if (!accessToken) {
+      return NextResponse.json({ error: "Missing Google access token" }, { status: 401 });
+    }
 
     const apiUrl = `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/tags`;
-
     const res = await fetch(apiUrl, {
       method: "POST",
       headers: {
@@ -70,7 +70,7 @@ export async function POST(req: Request) {
       body: JSON.stringify(tag),
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
       return NextResponse.json(
@@ -80,32 +80,30 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ success: true, tag: data });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } catch (err: any) {
+  } catch (err: unknown) {
     return NextResponse.json(
-      { error: err.message || "Internal server error" },
+      { error: err instanceof Error ? err.message : "Internal server error" },
       { status: 500 }
     );
   }
 }
 
-// UPDATE Tag
 export async function PUT(req: Request) {
   try {
-    const body = await req.json();
-    const { accountId, containerId, workspaceId, tagId, tag } = body;
+    const parsed = await validateBody(req, tagBodySchema);
+    if (!parsed.ok) return parsed.response;
+    const { accountId, containerId, workspaceId, tagId, tag } = parsed.data;
 
-    if (!accountId || !containerId || !workspaceId || !tagId || !tag) {
-      return NextResponse.json(
-        { error: "accountId, containerId, workspaceId, tagId, tag required" },
-        { status: 400 }
-      );
+    if (!tagId) {
+      return NextResponse.json({ error: "tagId required" }, { status: 400 });
     }
 
     const accessToken = await getValidGoogleAccessToken();
+    if (!accessToken) {
+      return NextResponse.json({ error: "Missing Google access token" }, { status: 401 });
+    }
 
     const apiUrl = `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/tags/${tagId}`;
-
     const res = await fetch(apiUrl, {
       method: "PUT",
       headers: {
@@ -115,7 +113,7 @@ export async function PUT(req: Request) {
       body: JSON.stringify(tag),
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
 
     if (!res.ok) {
       return NextResponse.json(
@@ -125,20 +123,17 @@ export async function PUT(req: Request) {
     }
 
     return NextResponse.json({ success: true, tag: data });
-   
   } catch (err: unknown) {
     return NextResponse.json(
-      { error: (err instanceof Error ? err.message : String(err)) || "Internal server error" },
+      { error: err instanceof Error ? err.message : "Internal server error" },
       { status: 500 }
     );
   }
 }
 
-// DELETE Tag
 export async function DELETE(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-
     const accountId = searchParams.get("accountId");
     const containerId = searchParams.get("containerId");
     const workspaceId = searchParams.get("workspaceId");
@@ -152,16 +147,18 @@ export async function DELETE(req: Request) {
     }
 
     const accessToken = await getValidGoogleAccessToken();
+    if (!accessToken) {
+      return NextResponse.json({ error: "Missing Google access token" }, { status: 401 });
+    }
 
     const apiUrl = `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/tags/${tagId}`;
-
     const res = await fetch(apiUrl, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${accessToken}` },
     });
 
     if (!res.ok) {
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       return NextResponse.json(
         { error: "Failed to delete tag", details: data },
         { status: res.status }
@@ -169,10 +166,9 @@ export async function DELETE(req: Request) {
     }
 
     return NextResponse.json({ success: true });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } catch (err: any) {
+  } catch (err: unknown) {
     return NextResponse.json(
-      { error: err.message || "Internal server error" },
+      { error: err instanceof Error ? err.message : "Internal server error" },
       { status: 500 }
     );
   }

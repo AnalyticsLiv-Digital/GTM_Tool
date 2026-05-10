@@ -15,7 +15,6 @@ interface AuthContextType {
   error: string | null;
   login: (email: string, password: string) => Promise<void>;
   register: (name: string, email: string, password: string) => Promise<void>;
-  googleLogin: (googleId: string, name: string, email: string, picture?: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -32,9 +31,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function checkAuth() {
     try {
-      const response = await fetch('/api/auth/user', {
-        credentials: 'include',
-      });
+      const response = await fetch('/api/auth/user', { credentials: 'include' });
       if (response.ok) {
         const data = await response.json();
         setUser(data.user);
@@ -55,12 +52,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         body: JSON.stringify({ email, password }),
         credentials: 'include',
       });
-
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error || 'Login failed');
       }
-
       const data = await response.json();
       setUser(data.user);
     } catch (err) {
@@ -79,12 +74,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         credentials: 'include',
         body: JSON.stringify({ name, email, password }),
       });
-
       if (!response.ok) {
         const data = await response.json();
         throw new Error(data.error || 'Registration failed');
       }
-
       const data = await response.json();
       setUser(data.user);
     } catch (err) {
@@ -94,37 +87,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function googleLogin(googleId: string, name: string, email: string, picture?: string) {
-    setError(null);
-    try {
-      const response = await fetch('/api/auth/google', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ googleId, name, email, picture }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Google login failed');
-      }
-
-      const data = await response.json();
-      setUser(data.user);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Google login failed';
-      setError(message);
-      throw err;
-    }
-  }
-
   async function logout() {
     setError(null);
     try {
-      await fetch('/api/auth/logout', {
-        method: 'POST',
-        credentials: 'include',
-      });
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
       setUser(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Logout failed';
@@ -134,17 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        loading,
-        error,
-        login,
-        register,
-        googleLogin,
-        logout,
-      }}
-    >
+    <AuthContext.Provider value={{ user, loading, error, login, register, logout }}>
       {children}
     </AuthContext.Provider>
   );

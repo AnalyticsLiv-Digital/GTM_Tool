@@ -1,21 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getUserByEmail, verifyPassword } from '@/lib/db';
+import {
+  getUserByEmail,
+  recordFailedLogin,
+  recordSuccessfulLogin,
+  verifyPassword,
+} from '@/lib/db';
 import { generateToken } from '@/lib/auth';
+import { loginSchema, validateBody } from '@/lib/validation';
+import { rateLimit } from '@/lib/rateLimit';
+import { assertSameOrigin } from '@/lib/csrf';
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { email, password } = body;
+    if (!assertSameOrigin(request)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
-    // Validation
-    if (!email || !password) {
+    const ipKey = `login:${request.headers.get('x-forwarded-for') || 'anon'}`;
+    if (!rateLimit(ipKey, 10, 60_000)) {
       return NextResponse.json(
-        { error: 'Email and password are required' },
-        { status: 400 }
+        { error: 'Too many attempts. Please try again in a minute.' },
+        { status: 429 }
       );
     }
 
-    // Find user
+    const parsed = await validateBody(request, loginSchema);
+    if (!parsed.ok) return parsed.response;
+    const { email, password } = parsed.data;
+
     const user = await getUserByEmail(email);
     if (!user || !user.password) {
       return NextResponse.json(
@@ -24,19 +36,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify password
+    if (user.lockedUntil && new Date(user.lockedUntil) > new Date()) {
+      return NextResponse.json(
+        { error: 'Account temporarily locked. Try again later.' },
+        { status: 423 }
+      );
+    }
+
     const isPasswordValid = await verifyPassword(password, user.password);
     if (!isPasswordValid) {
+      await recordFailedLogin(user.id);
       return NextResponse.json(
         { error: 'Invalid email or password' },
         { status: 401 }
       );
     }
 
-    // Generate token
+    await recordSuccessfulLogin(user.id);
     const token = generateToken(user);
 
-    // Create response with cookie
     const response = NextResponse.json(
       {
         user: {
@@ -45,7 +63,6 @@ export async function POST(request: NextRequest) {
           email: user.email,
           picture: user.picture,
         },
-        token,
       },
       { status: 200 }
     );

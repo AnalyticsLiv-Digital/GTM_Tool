@@ -1,42 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createUser, getUserByEmail, hashPassword } from '@/lib/db';
 import { generateToken } from '@/lib/auth';
+import { registerSchema, validateBody } from '@/lib/validation';
+import { rateLimit } from '@/lib/rateLimit';
+import { assertSameOrigin } from '@/lib/csrf';
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { name, email, password } = body;
+    if (!assertSameOrigin(request)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
-    // Validation
-    if (!name || !email || !password) {
+    const ipKey = `register:${request.headers.get('x-forwarded-for') || 'anon'}`;
+    if (!rateLimit(ipKey, 5, 60_000)) {
       return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
+        { error: 'Too many attempts. Try again in a minute.' },
+        { status: 429 }
       );
     }
 
-    // Check if user already exists
+    const parsed = await validateBody(request, registerSchema);
+    if (!parsed.ok) return parsed.response;
+    const { name, email, password } = parsed.data;
+
     if (await getUserByEmail(email)) {
       return NextResponse.json(
-        { error: 'User already exists' },
+        { error: 'An account with this email already exists' },
         { status: 409 }
       );
     }
 
-    // Hash password
     const hashedPassword = await hashPassword(password);
-
-    // Create user
-    const user = await createUser({
-      name,
-      email,
-      password: hashedPassword,
-    });
-
-    // Generate token
+    const user = await createUser({ name, email, password: hashedPassword });
     const token = generateToken(user);
 
-    // Create response with cookie
     const response = NextResponse.json(
       {
         user: {
@@ -44,7 +41,6 @@ export async function POST(request: NextRequest) {
           name: user.name,
           email: user.email,
         },
-        token,
       },
       { status: 201 }
     );
@@ -53,7 +49,8 @@ export async function POST(request: NextRequest) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60, // 7 days
+      path: '/',
+      maxAge: 7 * 24 * 60 * 60,
     });
 
     return response;
