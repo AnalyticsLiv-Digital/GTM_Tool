@@ -4,6 +4,27 @@ import { gtmList } from "@/lib/gtm/list";
 import { triggerBodySchema } from "@/lib/gtm/schemas";
 import { validateBody } from "@/lib/validation";
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+function cleanTriggerPayload(trigger: Record<string, unknown>) {
+  const cleaned = { ...trigger };
+
+  // ❌ remove readonly fields
+  delete cleaned.triggerId;
+  delete cleaned.path;
+  delete cleaned.fingerprint;
+  delete cleaned.accountId;
+  delete cleaned.containerId;
+  delete cleaned.workspaceId;
+
+  // ❌ these also break trigger export
+  delete cleaned.parentFolderId;
+  delete cleaned.tagManagerUrl;
+  delete cleaned.notes;
+
+  return cleaned;
+}
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -20,7 +41,10 @@ export async function GET(req: Request) {
 
     const accessToken = await getValidGoogleAccessToken();
     if (!accessToken) {
-      return NextResponse.json({ error: "Missing Google access token" }, { status: 401 });
+      return NextResponse.json(
+        { error: "Missing Google access token" },
+        { status: 401 }
+      );
     }
 
     const result = await gtmList<Record<string, unknown>>({
@@ -53,33 +77,58 @@ export async function POST(req: Request) {
   try {
     const parsed = await validateBody(req, triggerBodySchema);
     if (!parsed.ok) return parsed.response;
+
     const { accountId, containerId, workspaceId, trigger } = parsed.data;
 
     const accessToken = await getValidGoogleAccessToken();
     if (!accessToken) {
-      return NextResponse.json({ error: "Missing Google access token" }, { status: 401 });
+      return NextResponse.json(
+        { error: "Missing Google access token" },
+        { status: 401 }
+      );
     }
 
+    const cleanedTrigger = cleanTriggerPayload(trigger);
+
     const apiUrl = `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/triggers`;
-    const res = await fetch(apiUrl, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(trigger),
-    });
 
-    const data = await res.json().catch(() => ({}));
+    const maxRetries = 10;
+    let attempt = 0;
 
-    if (!res.ok) {
+    while (attempt < maxRetries) {
+      const res = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(cleanedTrigger),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok) {
+        return NextResponse.json({ success: true, trigger: data });
+      }
+
+      // ✅ Retry for rate limit + Google backend temporary errors
+      if ([429, 502, 503, 504].includes(res.status)) {
+        attempt++;
+        const waitTime = 1000 * attempt; // 1s,2s,3s...
+        await sleep(waitTime);
+        continue;
+      }
+
       return NextResponse.json(
         { error: "Failed to create trigger", details: data },
         { status: res.status }
       );
     }
 
-    return NextResponse.json({ success: true, trigger: data });
+    return NextResponse.json(
+      { error: "Failed to create trigger after retries" },
+      { status: 502 }
+    );
   } catch (err: unknown) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Internal server error" },
@@ -92,7 +141,9 @@ export async function PUT(req: Request) {
   try {
     const parsed = await validateBody(req, triggerBodySchema);
     if (!parsed.ok) return parsed.response;
-    const { accountId, containerId, workspaceId, triggerId, trigger } = parsed.data;
+
+    const { accountId, containerId, workspaceId, triggerId, trigger } =
+      parsed.data;
 
     if (!triggerId) {
       return NextResponse.json({ error: "triggerId required" }, { status: 400 });
@@ -100,17 +151,23 @@ export async function PUT(req: Request) {
 
     const accessToken = await getValidGoogleAccessToken();
     if (!accessToken) {
-      return NextResponse.json({ error: "Missing Google access token" }, { status: 401 });
+      return NextResponse.json(
+        { error: "Missing Google access token" },
+        { status: 401 }
+      );
     }
 
+    const cleanedTrigger = cleanTriggerPayload(trigger);
+
     const apiUrl = `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/triggers/${triggerId}`;
+
     const res = await fetch(apiUrl, {
       method: "PUT",
       headers: {
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(trigger),
+      body: JSON.stringify(cleanedTrigger),
     });
 
     const data = await res.json().catch(() => ({}));
@@ -148,10 +205,14 @@ export async function DELETE(req: Request) {
 
     const accessToken = await getValidGoogleAccessToken();
     if (!accessToken) {
-      return NextResponse.json({ error: "Missing Google access token" }, { status: 401 });
+      return NextResponse.json(
+        { error: "Missing Google access token" },
+        { status: 401 }
+      );
     }
 
     const apiUrl = `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/triggers/${triggerId}`;
+
     const res = await fetch(apiUrl, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${accessToken}` },

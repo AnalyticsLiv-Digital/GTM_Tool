@@ -6,18 +6,12 @@ import { Search, Download, Plus } from "lucide-react";
 import { useDashboardStore } from "@/app/store/useDashboardStore";
 import { EntityTableSkeleton } from "@/components/ui/Skeleton";
 
-// Generic list page used by tags / triggers / variables / templates.
-// All four entities share the same shape: workspace-gated table with search,
-// multi-select, "+ New" button, and an "Export selected" modal. We collapse
-// them into one component + small per-entity configs.
-
 export type EntityColumn<T> = {
   label: string;
   render: (item: T) => ReactNode;
 };
 
 export type EntityListPageProps<T> = {
-  // Header
   title: string;
   description: string;
   singularName: string;
@@ -25,7 +19,6 @@ export type EntityListPageProps<T> = {
   newButtonLabel: string;
   searchPlaceholder: string;
 
-  // Data
   items: T[];
   loading: boolean;
   error?: string | null;
@@ -34,14 +27,11 @@ export type EntityListPageProps<T> = {
 
   columns: EntityColumn<T>[];
 
-  // Workspace gating
   workspaceSelected: boolean;
 
-  // Actions
   onFetch: () => void;
   onCreate: () => void;
 
-  // Slot renderers for entity-specific modals
   renderCreateEditModal: () => ReactNode;
   renderExportModal: (props: {
     show: boolean;
@@ -49,6 +39,12 @@ export type EntityListPageProps<T> = {
     onExportSuccess: () => void;
     selectedItems: T[];
   }) => ReactNode;
+
+  // ✅ NEW (Optional filter UI like dropdowns)
+  filters?: ReactNode;
+
+  // ✅ NEW (Optional additional filtering logic)
+  customFilter?: (item: T) => boolean;
 };
 
 export function EntityListPage<T>({
@@ -69,6 +65,8 @@ export function EntityListPage<T>({
   onCreate,
   renderCreateEditModal,
   renderExportModal,
+  filters,
+  customFilter,
 }: EntityListPageProps<T>) {
   const store = useDashboardStore();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -87,17 +85,26 @@ export function EntityListPage<T>({
   const filtered = useMemo(() => {
     const q = searchText.toLowerCase();
     const getStr = filterField ?? ((it: T) => (it as any)?.name ?? "");
-    return items.filter((it) => String(getStr(it) ?? "").toLowerCase().includes(q));
-  }, [items, searchText, filterField]);
+
+    return items.filter((it) => {
+      const searchMatch = String(getStr(it) ?? "")
+        .toLowerCase()
+        .includes(q);
+
+      const extraMatch = customFilter ? customFilter(it) : true;
+
+      return searchMatch && extraMatch;
+    });
+  }, [items, searchText, filterField, customFilter]);
 
   const allSelected = useMemo(
     () => filtered.length > 0 && selectedIds.length === filtered.length,
-    [filtered, selectedIds],
+    [filtered, selectedIds]
   );
 
   const selectedItems = useMemo(
     () => items.filter((it) => selectedIds.includes(getId(it))),
-    [items, selectedIds, getId],
+    [items, selectedIds, getId]
   );
 
   const toggleSelectAll = () => {
@@ -107,7 +114,7 @@ export function EntityListPage<T>({
 
   const toggleOne = (id: string) =>
     setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
 
   return (
@@ -141,7 +148,7 @@ export function EntityListPage<T>({
             type="button"
             onClick={() => setShowExportModal(true)}
             disabled={selectedIds.length === 0}
-            className="btn-secondary !py-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-secondary py-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Download size={14} strokeWidth={2} />
             Export ({selectedIds.length})
@@ -151,7 +158,7 @@ export function EntityListPage<T>({
             type="button"
             onClick={onCreate}
             disabled={!workspaceSelected}
-            className="btn-primary !py-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-primary py-2! disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Plus size={14} strokeWidth={2.4} />
             {newButtonLabel.replace(/^\+\s*/, "")}
@@ -159,30 +166,39 @@ export function EntityListPage<T>({
         </div>
       </div>
 
-      {/* SEARCH */}
-      <div className="mb-5 relative">
-        <Search
-          size={14}
-          strokeWidth={2}
-          className="absolute left-3.5 top-1/2 -translate-y-1/2 text-faint pointer-events-none"
-        />
-        <input
-          type="search"
-          placeholder={searchPlaceholder}
-          value={searchText}
-          onChange={(e) => setSearchText(e.target.value)}
-          className="w-full bg-card pl-10 pr-4 py-2.5 text-[13.5px]"
-          aria-label={searchPlaceholder}
-        />
+      {/* SEARCH + FILTERS */}
+      <div className="mb-5 flex flex-col md:flex-row gap-3 md:items-center">
+        <div className="relative flex-1">
+          <Search
+            size={14}
+            strokeWidth={2}
+            className="absolute left-3.5 top-1/2 -translate-y-1/2 text-faint pointer-events-none"
+          />
+          <input
+            type="search"
+            placeholder={searchPlaceholder}
+            value={searchText}
+            onChange={(e) => setSearchText(e.target.value)}
+            className="w-full bg-card pl-10 pr-4 py-2.5 text-[13.5px]"
+            aria-label={searchPlaceholder}
+          />
+        </div>
+
+        {/* ✅ FILTER SLOT */}
+        {filters && <div className="min-w-55">{filters}</div>}
       </div>
 
       {!workspaceSelected && (
-        <div className="mb-4 bg-[color:var(--warn)]/10 border border-[color:var(--warn)]/25 text-[color:var(--warn)] px-4 py-3 rounded-lg text-[13px]">
+        <div className="mb-4 bg-(--warn)/10 border border-(--warn)/25 text-(--warn) px-4 py-3 rounded-lg text-[13px]">
           Please select a workspace first.
         </div>
       )}
 
-      {error && <p className="text-[13px] text-[color:var(--danger)] mt-2 mb-3">{error}</p>}
+      {error && (
+        <p className="text-[13px] text-(--danger) mt-2 mb-3">
+          {error}
+        </p>
+      )}
 
       {loading && items.length === 0 ? (
         <EntityTableSkeleton rows={6} />
@@ -197,7 +213,7 @@ export function EntityListPage<T>({
                       type="checkbox"
                       checked={allSelected}
                       onChange={toggleSelectAll}
-                      className="w-3.5 h-3.5 cursor-pointer accent-[color:var(--accent)]"
+                      className="w-3.5 h-3.5 cursor-pointer accent-(--accent)"
                       aria-label={`Select all ${pluralName}`}
                     />
                   </th>
@@ -216,22 +232,23 @@ export function EntityListPage<T>({
                 {filtered.map((item) => {
                   const id = getId(item);
                   const isChecked = selectedIds.includes(id);
+
                   return (
                     <tr
                       key={id}
-                      className={`border-b border-line transition-colors ${
-                        isChecked ? "bg-accent-soft" : "hover:bg-card-hi"
-                      }`}
+                      className={`border-b border-line transition-colors ${isChecked ? "bg-accent-soft" : "hover:bg-card-hi"
+                        }`}
                     >
                       <td className="px-4 py-3">
                         <input
                           type="checkbox"
                           checked={isChecked}
                           onChange={() => toggleOne(id)}
-                          className="w-3.5 h-3.5 cursor-pointer accent-[color:var(--accent)]"
+                          className="w-3.5 h-3.5 cursor-pointer accent-(--accent)"
                           aria-label={`Select ${singularName}`}
                         />
                       </td>
+
                       {columns.map((c) => (
                         <td key={c.label} className="px-4 py-3 text-fg align-top">
                           {c.render(item)}

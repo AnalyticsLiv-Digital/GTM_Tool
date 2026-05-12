@@ -12,6 +12,7 @@ import type {
 type ModalMode = "create" | "edit";
 
 interface DashboardStore {
+  searchQuery: string;
   workspaceModalMode: string;
 
   // Selected IDs

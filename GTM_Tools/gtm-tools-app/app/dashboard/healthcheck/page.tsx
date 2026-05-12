@@ -147,7 +147,7 @@ Vars: ${(r.affectedVariables || []).map((x: any) => x.name).join(", ") || "-"}`,
               <button
                 onClick={handleRunHealthCheck}
                 disabled={loading || !store.selectedWorkspaceId}
-                className="btn-primary !px-5 !py-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="btn-primary px-5! py-2.5! disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? (
                   <>
@@ -164,7 +164,7 @@ Vars: ${(r.affectedVariables || []).map((x: any) => x.name).join(", ") || "-"}`,
             </div>
 
             {!store.selectedWorkspaceId && (
-              <p className="mt-4 text-[12.5px] text-[color:var(--warn)]">
+              <p className="mt-4 text-[12.5px] text-(--warn)">
                 Select a workspace before running the audit.
               </p>
             )}
@@ -198,7 +198,7 @@ Vars: ${(r.affectedVariables || []).map((x: any) => x.name).join(", ") || "-"}`,
                   </span>
                   <span className="text-faint">·</span>
                   <span className="inline-flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[color:var(--danger)]" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-(--danger)" />
                     {report.failedCount} failed
                   </span>
                 </p>
@@ -230,13 +230,13 @@ Vars: ${(r.affectedVariables || []).map((x: any) => x.name).join(", ") || "-"}`,
               <button
                 onClick={handleRunHealthCheck}
                 disabled={loading}
-                className="btn-secondary !py-2 disabled:opacity-50"
+                className="btn-secondary py-2! disabled:opacity-50"
               >
                 <RefreshCw size={13} strokeWidth={2} className={loading ? "animate-spin" : ""} />
                 {loading ? "Refreshing…" : "Refresh"}
               </button>
 
-              <button onClick={handleDownloadPDF} className="btn-primary !py-2">
+              <button onClick={handleDownloadPDF} className="btn-primary py-2!">
                 <Download size={13} strokeWidth={2.2} />
                 Download PDF
               </button>
@@ -248,7 +248,7 @@ Vars: ${(r.affectedVariables || []).map((x: any) => x.name).join(", ") || "-"}`,
             {/* Failed checks */}
             <div>
               <div className="flex items-center gap-2 mb-5">
-                <XCircle size={15} strokeWidth={2.2} className="text-[color:var(--danger)]" />
+                <XCircle size={15} strokeWidth={2.2} className="text-(--danger)" />
                 <h3 className="text-[15px] font-semibold text-fg">
                   Failed checks
                   <span className="text-faint font-normal ml-1.5">({failedChecks.length})</span>
@@ -296,7 +296,7 @@ Vars: ${(r.affectedVariables || []).map((x: any) => x.name).join(", ") || "-"}`,
                             {r.description}
                           </p>
                         </div>
-                        <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-[0.1em] bg-accent-soft text-accent border border-accent/25">
+                        <span className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-widest bg-accent-soft text-accent border border-accent/25">
                           Pass
                         </span>
                       </div>
@@ -308,7 +308,7 @@ Vars: ${(r.affectedVariables || []).map((x: any) => x.name).join(", ") || "-"}`,
 
             {/* Note */}
             <div className="mt-10 flex items-start gap-3 p-4 rounded-lg border border-line bg-card-hi">
-              <AlertTriangle size={15} strokeWidth={2} className="text-[color:var(--warn)] mt-0.5 shrink-0" />
+              <AlertTriangle size={15} strokeWidth={2} className="text-(--warn) mt-0.5 shrink-0" />
               <p className="text-[13px] text-muted leading-relaxed">
                 <span className="font-medium text-fg">Note:</span> This report is based on best-practice
                 GTM rules and automated scanning. Always validate in Preview Mode before publishing.
@@ -390,7 +390,7 @@ function SeverityBadge({ severity }: { severity: string }) {
 
 function FailedCheckCard({ r }: { r: HealthCheckResult }) {
   return (
-    <div className="rounded-lg border border-[color:var(--danger)]/25 bg-card p-5">
+    <div className="rounded-lg border border-(--danger)/25 bg-card p-5">
       <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-3">
         <div className="flex-1 min-w-0">
           <p className="text-[14px] font-semibold text-fg">
@@ -401,7 +401,7 @@ function FailedCheckCard({ r }: { r: HealthCheckResult }) {
           <p className="text-[13px] text-muted mt-2 leading-relaxed">{r.description}</p>
 
           {r.recommendation && (
-            <div className="mt-3 px-3 py-2 rounded-md text-[12.5px] bg-[color:var(--danger)]/8 border border-[color:var(--danger)]/20 text-[color:var(--danger)]">
+            <div className="mt-3 px-3 py-2 rounded-md text-[12.5px] bg-(--danger)/8 border border-(--danger)/20 text-(--danger)">
               <span className="font-semibold">Fix:</span> {r.recommendation}
             </div>
           )}
