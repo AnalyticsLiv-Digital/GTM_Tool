@@ -60,6 +60,12 @@ export default function TagsPage() {
     );
   }, [tagTypeCounts]);
 
+  const builtInTriggerMap: Record<string, string> = {
+    "2147479553": "All Pages",
+    "2147479554": "DOM Ready",
+    "2147479555": "Window Loaded",
+  };
+
   return (
     <EntityListPage<any>
       title="Tags"
@@ -97,15 +103,43 @@ export default function TagsPage() {
           ))}
         </select>
       }
+      
+      // columns={[
+      //   {
+      //     label: "Tag Name",
+      //     render: (t) => (
+      //       <>
+      //         <p className="font-medium text-fg">{t.name}</p>
+      //         <p className="text-[11px] font-mono text-faint mt-0.5">
+      //           {t.tagId}
+      //         </p>
+      //       </>
+      //     ),
+      //   },
+      //   {
+      //     label: "Tag Type",
+      //     render: (t) => (
+      //       <span
+      //         className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium border"
+      //         style={{
+      //           background: "color-mix(in srgb, #3b82f6 14%, transparent)",
+      //           color: "#3b82f6",
+      //           borderColor: "color-mix(in srgb, #3b82f6 25%, transparent)",
+      //         }}
+      //       >
+      //         {tagTypeMap[t.type] || t.type || "Unknown"}
+      //       </span>
+      //     ),
+      //   },
+      // ]}
+
       columns={[
         {
           label: "Tag Name",
           render: (t) => (
             <>
               <p className="font-medium text-fg">{t.name}</p>
-              <p className="text-[11px] font-mono text-faint mt-0.5">
-                {t.tagId}
-              </p>
+              <p className="text-[11px] font-mono text-faint mt-0.5">{t.tagId}</p>
             </>
           ),
         },
@@ -124,6 +158,75 @@ export default function TagsPage() {
             </span>
           ),
         },
+        // {
+        //   label: "Firing Triggers",
+        //   render: (t) => {
+        //     const triggerNames =
+        //       (t.firingTriggerId || [])
+        //         .map((id: string) => {
+        //           const trig = (store.triggers || []).find(
+        //             (tr: any) => tr.triggerId === id
+        //           );
+        //           return trig?.name || id;
+        //         })
+        //         .filter(Boolean);
+
+        //     if (triggerNames.length === 0) {
+        //       return <span className="text-faint text-[12px]">No trigger</span>;
+        //     }
+
+        //     return (
+        //       <div className="flex flex-col gap-1">
+        //         {triggerNames.slice(0, 3).map((name: string, idx: number) => (
+        //           <span
+        //             key={idx}
+        //             className="text-[12px] px-2 py-0.5 rounded-md border border-line bg-card-hi"
+        //           >
+        //             {name}
+        //           </span>
+        //         ))}
+
+        //         {triggerNames.length > 3 && (
+        //           <span className="text-[11px] text-faint">
+        //             +{triggerNames.length - 3} more
+        //           </span>
+        //         )}
+        //       </div>
+        //     );
+        //   },
+        // },
+        {
+          label: "Firing Triggers",
+          render: (t) => {
+            const triggerNames =
+              (t.firingTriggerId || [])
+                .map((id: string) => {
+                  const trig = (store.triggers || []).find(
+                    (tr: any) => tr.triggerId === id
+                  );
+
+                  return trig?.name || builtInTriggerMap[id] || id;
+                })
+                .filter(Boolean);
+
+            if (triggerNames.length === 0) {
+              return <span className="text-faint text-[12px]">No trigger</span>;
+            }
+
+            return (
+              <div className="flex flex-wrap gap-1 max-w-70">
+                {triggerNames.map((name: string, idx: number) => (
+                  <span
+                    key={idx}
+                    className="text-[11px] px-2 py-0.5 rounded-md border border-line bg-card-hi whitespace-nowrap"
+                  >
+                    {name}
+                  </span>
+                ))}
+              </div>
+            );
+          },
+        }
       ]}
       renderCreateEditModal={() => <TagModal />}
       renderExportModal={({ show, onClose, onExportSuccess, selectedItems }) => (

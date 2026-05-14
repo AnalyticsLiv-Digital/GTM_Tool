@@ -61,34 +61,70 @@ export function useDashboardActions() {
   // -----------------------------
   // FETCH TAGS
   // -----------------------------
+  // const fetchTags = async () => {
+  //   if (
+  //     !store.selectedAccountId ||
+  //     !store.selectedContainerId ||
+  //     !store.selectedWorkspaceId
+  //   )
+  //     return;
+
+  //   try {
+  //     store.setTagsLoading(true);
+  //     store.setTagsError("");
+
+  //     const res = await fetch(
+  //       `/api/auth/gtm/tags?accountId=${store.selectedAccountId}&containerId=${store.selectedContainerId}&workspaceId=${store.selectedWorkspaceId}`
+  //     );
+
+  //     const data = await res.json();
+
+  //     if (!res.ok) throw new Error(data?.error || "Failed to fetch tags");
+
+  //     store.setTags(data.tag || []);
+  //   } catch (err: any) {
+  //     store.setTagsError(err.message);
+  //   } finally {
+  //     store.setTagsLoading(false);
+  //   }
+  // };
+
+
   const fetchTags = async () => {
-    if (
-      !store.selectedAccountId ||
-      !store.selectedContainerId ||
-      !store.selectedWorkspaceId
-    )
-      return;
+    const { selectedAccountId, selectedContainerId, selectedWorkspaceId } =
+      useDashboardStore.getState();
+
+    if (!selectedAccountId || !selectedContainerId || !selectedWorkspaceId) return;
 
     try {
-      store.setTagsLoading(true);
-      store.setTagsError("");
+      useDashboardStore.getState().setTagsLoading(true);
+      useDashboardStore.getState().setTagsError("");
+
+      // ✅ Auto load triggers if not already loaded
+      if (
+        !useDashboardStore.getState().triggers ||
+        useDashboardStore.getState().triggers.length === 0
+      ) {
+        await fetchTriggers();
+      }
 
       const res = await fetch(
-        `/api/auth/gtm/tags?accountId=${store.selectedAccountId}&containerId=${store.selectedContainerId}&workspaceId=${store.selectedWorkspaceId}`
+        `/api/auth/gtm/tags?accountId=${selectedAccountId}&containerId=${selectedContainerId}&workspaceId=${selectedWorkspaceId}`
       );
 
       const data = await res.json();
 
-      if (!res.ok) throw new Error(data?.error || "Failed to fetch tags");
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to fetch tags");
+      }
 
-      store.setTags(data.tag || []);
+      useDashboardStore.getState().setTags(data.tag || []);
     } catch (err: any) {
-      store.setTagsError(err.message);
+      useDashboardStore.getState().setTagsError(err.message);
     } finally {
-      store.setTagsLoading(false);
+      useDashboardStore.getState().setTagsLoading(false);
     }
   };
-
   // -----------------------------
   // FETCH TRIGGERS
   // -----------------------------

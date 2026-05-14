@@ -4,6 +4,26 @@ import { gtmList } from "@/lib/gtm/list";
 import { variableBodySchema } from "@/lib/gtm/schemas";
 import { validateBody } from "@/lib/validation";
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+function cleanVariablePayload(variable: Record<string, unknown>) {
+  const cleaned = { ...variable };
+
+  // remove readonly fields
+  delete cleaned.variableId;
+  delete cleaned.path;
+  delete cleaned.fingerprint;
+  delete cleaned.accountId;
+  delete cleaned.containerId;
+  delete cleaned.workspaceId;
+
+  delete cleaned.tagManagerUrl;
+  delete cleaned.parentFolderId;
+  delete cleaned.notes;
+
+  return cleaned;
+}
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -20,7 +40,10 @@ export async function GET(req: Request) {
 
     const accessToken = await getValidGoogleAccessToken();
     if (!accessToken) {
-      return NextResponse.json({ error: "Missing Google access token" }, { status: 401 });
+      return NextResponse.json(
+        { error: "Missing Google access token" },
+        { status: 401 }
+      );
     }
 
     const result = await gtmList<Record<string, unknown>>({
@@ -53,33 +76,58 @@ export async function POST(req: Request) {
   try {
     const parsed = await validateBody(req, variableBodySchema);
     if (!parsed.ok) return parsed.response;
+
     const { accountId, containerId, workspaceId, variable } = parsed.data;
 
     const accessToken = await getValidGoogleAccessToken();
     if (!accessToken) {
-      return NextResponse.json({ error: "Missing Google access token" }, { status: 401 });
+      return NextResponse.json(
+        { error: "Missing Google access token" },
+        { status: 401 }
+      );
     }
 
+    const cleanedVariable = cleanVariablePayload(variable);
+
     const apiUrl = `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/variables`;
-    const res = await fetch(apiUrl, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(variable),
-    });
 
-    const data = await res.json().catch(() => ({}));
+    const maxRetries = 10;
+    let attempt = 0;
 
-    if (!res.ok) {
+    while (attempt < maxRetries) {
+      const res = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(cleanedVariable),
+      });
+
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok) {
+        return NextResponse.json({ success: true, variable: data });
+      }
+
+      // ✅ Retry for rate limit + google backend errors
+      if ([429, 502, 503, 504].includes(res.status)) {
+        attempt++;
+        const waitTime = 1000 * attempt; // 1s,2s,3s...
+        await sleep(waitTime);
+        continue;
+      }
+
       return NextResponse.json(
         { error: "Failed to create variable", details: data },
         { status: res.status }
       );
     }
 
-    return NextResponse.json({ success: true, variable: data });
+    return NextResponse.json(
+      { error: "Failed to create variable after retries" },
+      { status: 502 }
+    );
   } catch (err: unknown) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Internal server error" },
@@ -92,25 +140,36 @@ export async function PUT(req: Request) {
   try {
     const parsed = await validateBody(req, variableBodySchema);
     if (!parsed.ok) return parsed.response;
-    const { accountId, containerId, workspaceId, variableId, variable } = parsed.data;
+
+    const { accountId, containerId, workspaceId, variableId, variable } =
+      parsed.data;
 
     if (!variableId) {
-      return NextResponse.json({ error: "variableId required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "variableId required" },
+        { status: 400 }
+      );
     }
 
     const accessToken = await getValidGoogleAccessToken();
     if (!accessToken) {
-      return NextResponse.json({ error: "Missing Google access token" }, { status: 401 });
+      return NextResponse.json(
+        { error: "Missing Google access token" },
+        { status: 401 }
+      );
     }
 
+    const cleanedVariable = cleanVariablePayload(variable);
+
     const apiUrl = `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/variables/${variableId}`;
+
     const res = await fetch(apiUrl, {
       method: "PUT",
       headers: {
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(variable),
+      body: JSON.stringify(cleanedVariable),
     });
 
     const data = await res.json().catch(() => ({}));
@@ -148,10 +207,14 @@ export async function DELETE(req: Request) {
 
     const accessToken = await getValidGoogleAccessToken();
     if (!accessToken) {
-      return NextResponse.json({ error: "Missing Google access token" }, { status: 401 });
+      return NextResponse.json(
+        { error: "Missing Google access token" },
+        { status: 401 }
+      );
     }
 
     const apiUrl = `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/variables/${variableId}`;
+
     const res = await fetch(apiUrl, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${accessToken}` },

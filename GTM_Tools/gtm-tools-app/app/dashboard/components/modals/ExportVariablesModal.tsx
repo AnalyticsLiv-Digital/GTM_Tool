@@ -346,7 +346,7 @@ export default function ExportVariablesModal({
         <div className="px-5 py-3 border-t border-line bg-page-soft flex justify-between items-center">
           <button
             onClick={onClose}
-            className="btn-secondary !py-1.5 !px-3"
+            className="btn-secondary py-1.5! px-3!"
           >
             Cancel
           </button>
@@ -360,7 +360,7 @@ export default function ExportVariablesModal({
               !selectedWorkspaceId ||
               selectedVariables.length === 0
             }
-            className="btn-primary !py-1.5 !px-3 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-primary py-1.5! px-3! disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {exportLoading ? "Exporting..." : "Export Selected Variables"}
           </button>

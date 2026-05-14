@@ -17,10 +17,8 @@ function cleanTagPayload(tag: Record<string, unknown>) {
   delete cleaned.containerId;
   delete cleaned.workspaceId;
 
-  // ❌ these also break export sometimes
-  delete cleaned.parentFolderId;
+  // ❌ optional fields which often break export
   delete cleaned.tagManagerUrl;
-  delete cleaned.notes;
 
   return cleaned;
 }
@@ -34,7 +32,7 @@ export async function GET(req: Request) {
 
     if (!accountId || !containerId || !workspaceId) {
       return NextResponse.json(
-        { error: "accountId, containerId, workspaceId required" },
+        { error: "accountId, containerId, workspaceId are required" },
         { status: 400 }
       );
     }
@@ -111,10 +109,10 @@ export async function POST(req: Request) {
         return NextResponse.json({ success: true, tag: data });
       }
 
-      // ✅ Retry for rate limit + Google backend temporary errors
+      // ✅ Retry for quota/backend errors
       if ([429, 502, 503, 504].includes(res.status)) {
         attempt++;
-        const waitTime = 1000 * attempt; // 1s,2s,3s...
+        const waitTime = 1000 * attempt;
         await sleep(waitTime);
         continue;
       }
@@ -233,7 +231,6 @@ export async function DELETE(req: Request) {
     );
   }
 }
-
 // import { NextResponse } from "next/server";
 // import { getValidGoogleAccessToken } from "@/lib/googleAuth";
 // import { gtmList } from "@/lib/gtm/list";

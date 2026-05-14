@@ -13,6 +13,7 @@ type ModalMode = "create" | "edit";
 
 interface DashboardStore {
   searchQuery: string;
+  setSearchQuery: (val: string) => void;
   workspaceModalMode: string;
 
   // Selected IDs
@@ -152,6 +153,8 @@ interface DashboardStore {
 export const useDashboardStore = create<DashboardStore>()(
   persist(
     (set) => ({
+      searchQuery: "",
+      setSearchQuery: (val) => set({ searchQuery: val }),
       workspaceModalMode: "create",
 
       selectedAccountId: "",
