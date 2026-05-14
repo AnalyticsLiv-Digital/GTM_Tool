@@ -1,12 +1,28 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { useDashboardStore } from "@/app/store/useDashboardStore";
 import { useDashboardActions } from "@/hooks/useDashboardActions";
 import { EntityListPage } from "@/app/dashboard/components/EntityListPage";
 import TagModal from "@/app/dashboard/components/modals/TagModal";
 import ExportTagsModal from "@/app/dashboard/components/modals/ExportTagsModal";
+
+import {
+  SiGoogleanalytics,
+  SiGoogleads,
+  SiFacebook,
+  SiLinkerd,
+  SiPinterest,
+  SiSnapchat,
+  SiTiktok,
+  SiX,
+  SiHtml5,
+  SiGoogletagmanager,
+} from "react-icons/si";
+
+import { MdOutlineTag } from "react-icons/md";
+import { ChevronDown, Search } from "lucide-react";
 
 const tagTypeMap: Record<string, string> = {
   html: "Custom HTML",
@@ -35,13 +51,88 @@ const tagTypeMap: Record<string, string> = {
   pntr: "Pinterest Tag",
 };
 
+function getTagIcon(type: string) {
+  // GA4
+  if (type === "gaawc" || type === "gaawe") {
+    return <SiGoogleanalytics size={16} color="#E37400" />;
+  }
+
+  // Universal Analytics
+  if (type === "ua") {
+    return <SiGoogleanalytics size={16} color="#F9AB00" />;
+  }
+
+  // Google Ads
+  if (type.startsWith("aw")) {
+    return <SiGoogleads size={16} color="#4285F4" />;
+  }
+
+  // Google Tag
+  if (type === "googtag") {
+    return <SiGoogletagmanager size={16} color="#246FDB" />;
+  }
+
+  // HTML / IMG
+  if (type === "html" || type === "img") {
+    return <SiHtml5 size={16} color="#E34F26" />;
+  }
+
+  // Facebook
+  if (type === "fbq") {
+    return <SiFacebook size={16} color="#1877F2" />;
+  }
+
+  // LinkedIn
+  if (type === "linkedin") {
+    return <SiLinkerd size={16} color="#0A66C2" />;
+  }
+
+  // Pinterest
+  if (type === "pinterest" || type === "pntr") {
+    return <SiPinterest size={16} color="#E60023" />;
+  }
+
+  // Twitter / X
+  if (type === "twitter") {
+    return <SiX size={16} color="#111827" />;
+  }
+
+  // Snapchat
+  if (type === "snapchat") {
+    return <SiSnapchat size={16} color="#FFFC00" />;
+  }
+
+  // TikTok
+  if (type === "tiktok") {
+    return <SiTiktok size={16} color="#000000" />;
+  }
+
+  return <MdOutlineTag size={16} color="#6b7280" />;
+}
+
 export default function TagsPage() {
   const store = useDashboardStore();
   const { fetchTags, openCreateTagModal } = useDashboardActions();
 
   const [selectedTagType, setSelectedTagType] = useState("");
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [search, setSearch] = useState("");
 
-  // ✅ Count tag types
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleOutsideClick(e: MouseEvent) {
+      if (!dropdownRef.current?.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, []);
+
+  // Count tag types
   const tagTypeCounts = useMemo(() => {
     const counts: Record<string, number> = {};
 
@@ -53,18 +144,33 @@ export default function TagsPage() {
     return counts;
   }, [store.tags]);
 
-  // ✅ Unique sorted types
+  // Unique sorted types
   const uniqueTagTypes = useMemo(() => {
     return Object.keys(tagTypeCounts).sort((a, b) =>
       (tagTypeMap[a] || a).localeCompare(tagTypeMap[b] || b)
     );
   }, [tagTypeCounts]);
 
+  // Filtered types for search
+  const filteredTagTypes = useMemo(() => {
+    if (!search.trim()) return uniqueTagTypes;
+
+    return uniqueTagTypes.filter((type) =>
+      (tagTypeMap[type] || type).toLowerCase().includes(search.toLowerCase())
+    );
+  }, [uniqueTagTypes, search]);
+
   const builtInTriggerMap: Record<string, string> = {
     "2147479553": "All Pages",
     "2147479554": "DOM Ready",
     "2147479555": "Window Loaded",
   };
+
+  const selectedLabel = selectedTagType
+    ? `${tagTypeMap[selectedTagType] || selectedTagType} (${
+        tagTypeCounts[selectedTagType] || 0
+      })`
+    : `All Tag Types (${store.tags?.length || 0})`;
 
   return (
     <EntityListPage<any>
@@ -81,65 +187,127 @@ export default function TagsPage() {
       workspaceSelected={!!store.selectedWorkspaceId}
       onFetch={fetchTags}
       onCreate={openCreateTagModal}
-      filterField={(t) => t.name} // ✅ Search only Tag Name
+      filterField={(t) => t.name}
       customFilter={(t) => {
         if (!selectedTagType) return true;
         return t.type === selectedTagType;
       }}
       filters={
-        <select
-          value={selectedTagType}
-          onChange={(e) => setSelectedTagType(e.target.value)}
-          className="w-full border border-gray-300 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">
-            All Tag Types ({store.tags?.length || 0})
-          </option>
+        <div className="relative w-full" ref={dropdownRef}>
+          {/* Trigger Button */}
+          <button
+            type="button"
+            onClick={() => setDropdownOpen((prev) => !prev)}
+            className="w-full flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl border border-line bg-card text-fg shadow-sm hover:bg-card-hi transition text-sm"
+          >
+            <div className="flex items-center gap-2 truncate">
+              <span className="shrink-0">
+                {selectedTagType ? (
+                  getTagIcon(selectedTagType)
+                ) : (
+                  <MdOutlineTag size={16} color="#6b7280" />
+                )}
+              </span>
 
-          {uniqueTagTypes.map((type) => (
-            <option key={type} value={type}>
-              {(tagTypeMap[type] || type) + ` (${tagTypeCounts[type]})`}
-            </option>
-          ))}
-        </select>
+              <span className="truncate font-medium text-fg">
+                {selectedLabel}
+              </span>
+            </div>
+
+            <ChevronDown
+              size={16}
+              className={`text-muted transition ${
+                dropdownOpen ? "rotate-180" : ""
+              }`}
+            />
+          </button>
+
+          {/* Dropdown */}
+          {dropdownOpen && (
+            <div className="absolute mt-2 w-full z-50 rounded-xl border border-line bg-card shadow-xl overflow-hidden">
+              {/* Search */}
+              <div className="p-2 border-b border-line bg-card-hi">
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-line bg-card">
+                  <Search size={15} className="text-muted" />
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search tag types..."
+                    className="w-full bg-transparent outline-none text-sm text-fg placeholder:text-muted"
+                  />
+                </div>
+              </div>
+
+              {/* Options */}
+              <div className="max-h-72 overflow-y-auto">
+                {/* All */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedTagType("");
+                    setDropdownOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-card-hi transition ${
+                    selectedTagType === "" ? "bg-card-hi" : ""
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <MdOutlineTag size={16} color="#6b7280" />
+                    <span className="text-fg font-medium">
+                      All Tag Types
+                    </span>
+                  </div>
+
+                  <span className="text-[12px] px-2 py-0.5 rounded-md border border-line bg-card-hi text-muted font-mono">
+                    {store.tags?.length || 0}
+                  </span>
+                </button>
+
+                {/* Types */}
+                {filteredTagTypes.map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => {
+                      setSelectedTagType(type);
+                      setDropdownOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-card-hi transition ${
+                      selectedTagType === type ? "bg-card-hi" : ""
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="shrink-0">{getTagIcon(type)}</span>
+                      <span className="text-fg font-medium">
+                        {tagTypeMap[type] || type}
+                      </span>
+                    </div>
+
+                    <span className="text-[12px] px-2 py-0.5 rounded-md border border-line bg-card-hi text-muted font-mono">
+                      {tagTypeCounts[type]}
+                    </span>
+                  </button>
+                ))}
+
+                {filteredTagTypes.length === 0 && (
+                  <p className="text-sm text-muted px-4 py-3">
+                    No matching tag types.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       }
-      
-      // columns={[
-      //   {
-      //     label: "Tag Name",
-      //     render: (t) => (
-      //       <>
-      //         <p className="font-medium text-fg">{t.name}</p>
-      //         <p className="text-[11px] font-mono text-faint mt-0.5">
-      //           {t.tagId}
-      //         </p>
-      //       </>
-      //     ),
-      //   },
-      //   {
-      //     label: "Tag Type",
-      //     render: (t) => (
-      //       <span
-      //         className="inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium border"
-      //         style={{
-      //           background: "color-mix(in srgb, #3b82f6 14%, transparent)",
-      //           color: "#3b82f6",
-      //           borderColor: "color-mix(in srgb, #3b82f6 25%, transparent)",
-      //         }}
-      //       >
-      //         {tagTypeMap[t.type] || t.type || "Unknown"}
-      //       </span>
-      //     ),
-      //   },
-      // ]}
-
       columns={[
         {
           label: "Tag Name",
           render: (t) => (
             <>
               <p className="font-medium text-fg">{t.name}</p>
-              <p className="text-[11px] font-mono text-faint mt-0.5">{t.tagId}</p>
+              <p className="text-[11px] font-mono text-faint mt-0.5">
+                {t.tagId}
+              </p>
             </>
           ),
         },
@@ -158,43 +326,6 @@ export default function TagsPage() {
             </span>
           ),
         },
-        // {
-        //   label: "Firing Triggers",
-        //   render: (t) => {
-        //     const triggerNames =
-        //       (t.firingTriggerId || [])
-        //         .map((id: string) => {
-        //           const trig = (store.triggers || []).find(
-        //             (tr: any) => tr.triggerId === id
-        //           );
-        //           return trig?.name || id;
-        //         })
-        //         .filter(Boolean);
-
-        //     if (triggerNames.length === 0) {
-        //       return <span className="text-faint text-[12px]">No trigger</span>;
-        //     }
-
-        //     return (
-        //       <div className="flex flex-col gap-1">
-        //         {triggerNames.slice(0, 3).map((name: string, idx: number) => (
-        //           <span
-        //             key={idx}
-        //             className="text-[12px] px-2 py-0.5 rounded-md border border-line bg-card-hi"
-        //           >
-        //             {name}
-        //           </span>
-        //         ))}
-
-        //         {triggerNames.length > 3 && (
-        //           <span className="text-[11px] text-faint">
-        //             +{triggerNames.length - 3} more
-        //           </span>
-        //         )}
-        //       </div>
-        //     );
-        //   },
-        // },
         {
           label: "Firing Triggers",
           render: (t) => {
@@ -210,7 +341,9 @@ export default function TagsPage() {
                 .filter(Boolean);
 
             if (triggerNames.length === 0) {
-              return <span className="text-faint text-[12px]">No trigger</span>;
+              return (
+                <span className="text-faint text-[12px]">No trigger</span>
+              );
             }
 
             return (
@@ -226,7 +359,7 @@ export default function TagsPage() {
               </div>
             );
           },
-        }
+        },
       ]}
       renderCreateEditModal={() => <TagModal />}
       renderExportModal={({ show, onClose, onExportSuccess, selectedItems }) => (
@@ -240,7 +373,6 @@ export default function TagsPage() {
     />
   );
 }
-
 
 // /* eslint-disable @typescript-eslint/no-explicit-any */
 // "use client";

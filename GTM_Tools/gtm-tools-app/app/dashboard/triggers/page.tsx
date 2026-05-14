@@ -1,12 +1,25 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { useDashboardStore } from "@/app/store/useDashboardStore";
 import { useDashboardActions } from "@/hooks/useDashboardActions";
 import { EntityListPage } from "@/app/dashboard/components/EntityListPage";
 import TriggerModal from "@/app/dashboard/components/modals/TriggerModal";
 import ExportTriggersModal from "@/app/dashboard/components/modals/ExportTriggersModal";
+
+import {
+  MdOutlineBolt,
+  MdOutlineTimer,
+  MdOutlineMouse,
+  MdOutlineLink,
+  MdOutlineTouchApp,
+  MdOutlineHistory,
+  MdOutlineCode,
+  MdOutlineKeyboardArrowDown,
+} from "react-icons/md";
+import { SiYoutube } from "react-icons/si";
+import { Search } from "lucide-react";
 
 const triggerTypeMap: Record<string, string> = {
   pageview: "Page View",
@@ -23,13 +36,77 @@ const triggerTypeMap: Record<string, string> = {
   allPages: "All Pages",
 };
 
+function getTriggerIcon(type: string) {
+  if (type === "pageview" || type === "allPages") {
+    return <MdOutlineBolt size={16} color="#22c55e" />;
+  }
+
+  if (type === "domReady") {
+    return <MdOutlineBolt size={16} color="#f59e0b" />;
+  }
+
+  if (type === "windowLoaded") {
+    return <MdOutlineBolt size={16} color="#3b82f6" />;
+  }
+
+  if (type === "click") {
+    return <MdOutlineMouse size={16} color="#9333ea" />;
+  }
+
+  if (type === "linkClick") {
+    return <MdOutlineLink size={16} color="#0ea5e9" />;
+  }
+
+  if (type === "formSubmission") {
+    return <MdOutlineTouchApp size={16} color="#ec4899" />;
+  }
+
+  if (type === "timer") {
+    return <MdOutlineTimer size={16} color="#f97316" />;
+  }
+
+  if (type === "scrollDepth") {
+    return <MdOutlineTouchApp size={16} color="#14b8a6" />;
+  }
+
+  if (type === "youtubeVideo") {
+    return <SiYoutube size={16} color="#FF0000" />;
+  }
+
+  if (type === "historyChange") {
+    return <MdOutlineHistory size={16} color="#64748b" />;
+  }
+
+  if (type === "customEvent") {
+    return <MdOutlineCode size={16} color="#6366f1" />;
+  }
+
+  return <MdOutlineBolt size={16} color="#6b7280" />;
+}
+
 export default function TriggersPage() {
   const store = useDashboardStore();
   const { fetchTriggers } = useDashboardActions();
 
   const [selectedTriggerType, setSelectedTriggerType] = useState("");
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [search, setSearch] = useState("");
 
-  // ✅ Count trigger types
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleOutsideClick(e: MouseEvent) {
+      if (!dropdownRef.current?.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, []);
+
+  // Count trigger types
   const triggerTypeCounts = useMemo(() => {
     const counts: Record<string, number> = {};
 
@@ -41,12 +118,27 @@ export default function TriggersPage() {
     return counts;
   }, [store.triggers]);
 
-  // ✅ Unique trigger types sorted
+  // Unique trigger types sorted
   const uniqueTriggerTypes = useMemo(() => {
     return Object.keys(triggerTypeCounts).sort((a, b) =>
       (triggerTypeMap[a] || a).localeCompare(triggerTypeMap[b] || b)
     );
   }, [triggerTypeCounts]);
+
+  // Filter trigger types by search
+  const filteredTriggerTypes = useMemo(() => {
+    if (!search.trim()) return uniqueTriggerTypes;
+
+    return uniqueTriggerTypes.filter((type) =>
+      (triggerTypeMap[type] || type).toLowerCase().includes(search.toLowerCase())
+    );
+  }, [uniqueTriggerTypes, search]);
+
+  const selectedLabel = selectedTriggerType
+    ? `${triggerTypeMap[selectedTriggerType] || selectedTriggerType} (${
+        triggerTypeCounts[selectedTriggerType] || 0
+      })`
+    : `All Trigger Types (${store.triggers?.length || 0})`;
 
   return (
     <EntityListPage<any>
@@ -63,28 +155,117 @@ export default function TriggersPage() {
       workspaceSelected={!!store.selectedWorkspaceId}
       onFetch={fetchTriggers}
       onCreate={() => store.setShowTriggerModal(true)}
-      filterField={(t) => t.name} // ✅ Search only Trigger Name
+      filterField={(t) => t.name}
       customFilter={(t) => {
         if (!selectedTriggerType) return true;
         return t.type === selectedTriggerType;
       }}
       filters={
-        <select
-          value={selectedTriggerType}
-          onChange={(e) => setSelectedTriggerType(e.target.value)}
-          className="w-full border border-gray-300 rounded-xl px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
-        >
-          <option value="">
-            All Trigger Types ({store.triggers?.length || 0})
-          </option>
+        <div className="relative w-full" ref={dropdownRef}>
+          {/* Trigger Button */}
+          <button
+            type="button"
+            onClick={() => setDropdownOpen((prev) => !prev)}
+            className="w-full flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl border border-line bg-card text-fg shadow-sm hover:bg-card-hi transition text-sm"
+          >
+            <div className="flex items-center gap-2 truncate">
+              <span className="shrink-0">
+                {selectedTriggerType ? (
+                  getTriggerIcon(selectedTriggerType)
+                ) : (
+                  <MdOutlineBolt size={16} color="#6b7280" />
+                )}
+              </span>
 
-          {uniqueTriggerTypes.map((type) => (
-            <option key={type} value={type}>
-              {(triggerTypeMap[type] || type) +
-                ` (${triggerTypeCounts[type]})`}
-            </option>
-          ))}
-        </select>
+              <span className="truncate font-medium text-fg">
+                {selectedLabel}
+              </span>
+            </div>
+
+            <MdOutlineKeyboardArrowDown
+              size={18}
+              className={`text-muted transition ${
+                dropdownOpen ? "rotate-180" : ""
+              }`}
+            />
+          </button>
+
+          {/* Dropdown */}
+          {dropdownOpen && (
+            <div className="absolute mt-2 w-full z-50 rounded-xl border border-line bg-card shadow-xl overflow-hidden">
+              {/* Search */}
+              <div className="p-2 border-b border-line bg-card-hi">
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-line bg-card">
+                  <Search size={15} className="text-muted" />
+                  <input
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search trigger types..."
+                    className="w-full bg-transparent outline-none text-sm text-fg placeholder:text-muted"
+                  />
+                </div>
+              </div>
+
+              {/* Options */}
+              <div className="max-h-72 overflow-y-auto">
+                {/* All */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedTriggerType("");
+                    setDropdownOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-card-hi transition ${
+                    selectedTriggerType === "" ? "bg-card-hi" : ""
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <MdOutlineBolt size={16} color="#6b7280" />
+                    <span className="text-fg font-medium">
+                      All Trigger Types
+                    </span>
+                  </div>
+
+                  <span className="text-[12px] px-2 py-0.5 rounded-md border border-line bg-card-hi text-muted font-mono">
+                    {store.triggers?.length || 0}
+                  </span>
+                </button>
+
+                {/* Types */}
+                {filteredTriggerTypes.map((type) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => {
+                      setSelectedTriggerType(type);
+                      setDropdownOpen(false);
+                    }}
+                    className={`w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-card-hi transition ${
+                      selectedTriggerType === type ? "bg-card-hi" : ""
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="shrink-0">{getTriggerIcon(type)}</span>
+                      <span className="text-fg font-medium">
+                        {triggerTypeMap[type] || type}
+                      </span>
+                    </div>
+
+                    <span className="text-[12px] px-2 py-0.5 rounded-md border border-line bg-card-hi text-muted font-mono">
+                      {triggerTypeCounts[type]}
+                    </span>
+                  </button>
+                ))}
+
+                {filteredTriggerTypes.length === 0 && (
+                  <p className="text-sm text-muted px-4 py-3">
+                    No matching trigger types.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       }
       columns={[
         {
