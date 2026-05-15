@@ -52,7 +52,7 @@ export default function WorkspaceCrudModal() {
           </div>
 
           {atLimit && (
-            <p className="text-[12px] text-[color:var(--danger)] flex items-start gap-1.5">
+            <p className="text-[12px] text-(--danger) flex items-start gap-1.5">
               <span aria-hidden>⚠</span>
               You can only create a maximum of 3 workspaces.
             </p>
@@ -64,14 +64,14 @@ export default function WorkspaceCrudModal() {
           <button
             onClick={() => store.setShowWorkspaceModal(false)}
             disabled={store.workspaceCrudLoading}
-            className="btn-secondary !py-1.5 !px-3 disabled:opacity-50"
+            className="btn-secondary py-1.5! px-3! disabled:opacity-50"
           >
             Cancel
           </button>
           <button
             onClick={handleSaveWorkspace}
             disabled={store.workspaceCrudLoading || atLimit}
-            className="btn-primary !py-1.5 !px-3 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-primary py-1.5! px-3! disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {store.workspaceCrudLoading
               ? "Saving…"

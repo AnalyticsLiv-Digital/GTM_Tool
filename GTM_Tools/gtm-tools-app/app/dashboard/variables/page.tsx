@@ -9,16 +9,16 @@ import VariableModal from "@/app/dashboard/components/modals/VariableModal";
 import ExportVariablesModal from "@/app/dashboard/components/modals/ExportVariablesModal";
 
 import {
-  MdOutlineDataObject,
-  MdOutlineCookie,
-  MdOutlineLink,
-  MdOutlineCode,
-  MdOutlineStorage,
-  MdOutlineTag,
-  MdOutlineKeyboardArrowDown,
-} from "react-icons/md";
-import { FaRegClock } from "react-icons/fa";
-import { Search } from "lucide-react";
+  Search,
+  Database,
+  Cookie,
+  Link2,
+  Code2,
+  HardDrive,
+  Tag,
+  ChevronDown,
+  Clock,
+} from "lucide-react";
 
 const variableTypeMap: Record<string, string> = {
   c: "Constant",
@@ -40,34 +40,34 @@ const variableTypeMap: Record<string, string> = {
 
 function getVariableIcon(type: string) {
   if (type === "c") {
-    return <MdOutlineTag size={16} color="#3b82f6" />;
+    return <Tag size={16} color="#3b82f6" />;
   }
 
   if (type === "v") {
-    return <MdOutlineDataObject size={16} color="#22c55e" />;
+    return <Database size={16} color="#22c55e" />;
   }
 
   if (type === "u") {
-    return <MdOutlineLink size={16} color="#0ea5e9" />;
+    return <Link2 size={16} color="#0ea5e9" />;
   }
 
   if (type === "js" || type === "jsm") {
-    return <MdOutlineCode size={16} color="#9333ea" />;
+    return <Code2 size={16} color="#9333ea" />;
   }
 
   if (type === "k" || type === "cookie") {
-    return <MdOutlineCookie size={16} color="#f59e0b" />;
+    return <Cookie size={16} color="#f59e0b" />;
   }
 
   if (type === "s" || type === "localStorage") {
-    return <MdOutlineStorage size={16} color="#64748b" />;
+    return <HardDrive size={16} color="#64748b" />;
   }
 
   if (type === "timestamp") {
-    return <FaRegClock size={15} color="#f97316" />;
+    return <Clock size={15} color="#f97316" />;
   }
 
-  return <MdOutlineTag size={16} color="#6b7280" />;
+  return <Tag size={16} color="#6b7280" />;
 }
 
 export default function VariablesPage() {
@@ -161,7 +161,7 @@ export default function VariablesPage() {
                 {selectedVariableType ? (
                   getVariableIcon(selectedVariableType)
                 ) : (
-                  <MdOutlineDataObject size={16} color="#6b7280" />
+                  <Database size={16} color="#6b7280" />
                 )}
               </span>
 
@@ -170,7 +170,7 @@ export default function VariablesPage() {
               </span>
             </div>
 
-            <MdOutlineKeyboardArrowDown
+            <ChevronDown
               size={18}
               className={`text-muted transition ${
                 dropdownOpen ? "rotate-180" : ""
@@ -208,7 +208,7 @@ export default function VariablesPage() {
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <MdOutlineDataObject size={16} color="#6b7280" />
+                    <Database size={16} color="#6b7280" />
                     <span className="text-fg font-medium">
                       All Variable Types
                     </span>

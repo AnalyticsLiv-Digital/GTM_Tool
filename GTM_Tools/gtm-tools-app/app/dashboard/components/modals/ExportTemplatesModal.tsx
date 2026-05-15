@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { ChevronDown, Search } from "lucide-react";
+import WorkspaceCrudSection from "@/app/dashboard/components/modals/WorkspaceCrudSection";
 
 export default function ExportTemplatesModal({
   show,
@@ -30,9 +31,6 @@ export default function ExportTemplatesModal({
 
   const [exportLoading, setExportLoading] = useState(false);
 
-  // ============================================================
-  // HELPERS
-  // ============================================================
   async function safeJsonParse(res: Response) {
     const text = await res.text();
     try {
@@ -42,9 +40,6 @@ export default function ExportTemplatesModal({
     }
   }
 
-  // ============================================================
-  // CUSTOM DROPDOWN COMPONENT
-  // ============================================================
   function CustomDropdown({
     label,
     value,
@@ -89,7 +84,7 @@ export default function ExportTemplatesModal({
     }, [options, search]);
 
     return (
-      <div className="w-full" ref={ref}>
+      <div className="w-full relative" ref={ref}>
         <label className="block text-[12.5px] font-medium text-fg mb-2">
           {label}
         </label>
@@ -113,8 +108,7 @@ export default function ExportTemplatesModal({
         </button>
 
         {open && !disabled && (
-          <div className="absolute mt-2 w-[calc(100%-3rem)] max-w-105 z-50 rounded-xl border border-line bg-card shadow-lg overflow-hidden">
-            {/* Search */}
+          <div className="absolute mt-2 w-full z-50 rounded-xl border border-line bg-card shadow-lg overflow-hidden">
             <div className="p-2 border-b border-line bg-card-hi">
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-line bg-card">
                 <Search size={15} className="text-muted" />
@@ -127,7 +121,6 @@ export default function ExportTemplatesModal({
               </div>
             </div>
 
-            {/* Options */}
             <div className="max-h-72 overflow-y-auto">
               {filtered.map((o) => (
                 <button
@@ -157,9 +150,6 @@ export default function ExportTemplatesModal({
     );
   }
 
-  // ============================================================
-  // LOAD ACCOUNTS
-  // ============================================================
   useEffect(() => {
     if (!show) return;
 
@@ -183,9 +173,6 @@ export default function ExportTemplatesModal({
     loadAccounts();
   }, [show]);
 
-  // ============================================================
-  // LOAD CONTAINERS
-  // ============================================================
   useEffect(() => {
     if (!selectedAccountId) return;
 
@@ -216,9 +203,6 @@ export default function ExportTemplatesModal({
     loadContainers();
   }, [selectedAccountId]);
 
-  // ============================================================
-  // LOAD WORKSPACES
-  // ============================================================
   useEffect(() => {
     if (!selectedAccountId || !selectedContainerId) return;
 
@@ -247,9 +231,6 @@ export default function ExportTemplatesModal({
     loadWorkspaces();
   }, [selectedAccountId, selectedContainerId]);
 
-  // ============================================================
-  // EXPORT TEMPLATE FUNCTION
-  // ============================================================
   async function handleExportTemplates() {
     if (!selectedAccountId) return toast.warning("Please select an Account");
     if (!selectedContainerId) return toast.warning("Please select a Container");
@@ -292,9 +273,6 @@ export default function ExportTemplatesModal({
 
   if (!show) return null;
 
-  // ============================================================
-  // DROPDOWN OPTIONS
-  // ============================================================
   const accountOptions = accounts.map((a: any) => ({
     value: a.accountId,
     label: a.name,
@@ -313,7 +291,6 @@ export default function ExportTemplatesModal({
   return (
     <div className="fixed inset-0 bg-black/55 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-card text-fg w-full max-w-3xl rounded-xl border border-edge shadow-lg overflow-hidden">
-        {/* HEADER */}
         <div className="flex justify-between items-center px-5 py-3 border-b border-line">
           <h2 className="text-[15px] font-semibold text-fg">
             Export Templates
@@ -327,9 +304,7 @@ export default function ExportTemplatesModal({
           </button>
         </div>
 
-        {/* BODY */}
         <div className="grid grid-cols-12 min-h-90">
-          {/* LEFT */}
           <div className="col-span-5 border-r border-line bg-card-hi p-4">
             <p className="text-[12.5px] font-medium text-faint mb-3 uppercase tracking-[0.05em]">
               Selected Templates ({selectedTemplates.length})
@@ -356,7 +331,6 @@ export default function ExportTemplatesModal({
             </div>
           </div>
 
-          {/* RIGHT */}
           <div className="col-span-7 p-6 relative">
             <h3 className="text-[14px] font-semibold text-fg mb-5">
               Select Destination
@@ -394,10 +368,21 @@ export default function ExportTemplatesModal({
                 placeholder="-- Select Workspace --"
               />
             </div>
+
+            {/* WORKSPACE CRUD */}
+            <div className="mt-5">
+              <WorkspaceCrudSection
+                selectedAccountId={selectedAccountId}
+                selectedContainerId={selectedContainerId}
+                selectedWorkspaceId={selectedWorkspaceId}
+                setSelectedWorkspaceId={setSelectedWorkspaceId}
+                workspaces={workspaces}
+                setWorkspaces={setWorkspaces}
+              />
+            </div>
           </div>
         </div>
 
-        {/* FOOTER */}
         <div className="px-5 py-3 border-t border-line bg-page-soft flex justify-between items-center">
           <button onClick={onClose} className="btn-secondary py-1.5! px-3!">
             Cancel

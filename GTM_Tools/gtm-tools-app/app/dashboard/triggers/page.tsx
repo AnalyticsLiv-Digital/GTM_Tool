@@ -9,17 +9,17 @@ import TriggerModal from "@/app/dashboard/components/modals/TriggerModal";
 import ExportTriggersModal from "@/app/dashboard/components/modals/ExportTriggersModal";
 
 import {
-  MdOutlineBolt,
-  MdOutlineTimer,
-  MdOutlineMouse,
-  MdOutlineLink,
-  MdOutlineTouchApp,
-  MdOutlineHistory,
-  MdOutlineCode,
-  MdOutlineKeyboardArrowDown,
-} from "react-icons/md";
-import { SiYoutube } from "react-icons/si";
-import { Search } from "lucide-react";
+  Search,
+  Zap,
+  Timer,
+  MousePointerClick,
+  Link2,
+  Touchpad,
+  History,
+  Code2,
+  ChevronDown,
+  PlayCircle,
+} from "lucide-react";
 
 const triggerTypeMap: Record<string, string> = {
   pageview: "Page View",
@@ -38,50 +38,50 @@ const triggerTypeMap: Record<string, string> = {
 
 function getTriggerIcon(type: string) {
   if (type === "pageview" || type === "allPages") {
-    return <MdOutlineBolt size={16} color="#22c55e" />;
+    return <Zap size={16} color="#22c55e" />;
   }
 
   if (type === "domReady") {
-    return <MdOutlineBolt size={16} color="#f59e0b" />;
+    return <Zap size={16} color="#f59e0b" />;
   }
 
   if (type === "windowLoaded") {
-    return <MdOutlineBolt size={16} color="#3b82f6" />;
+    return <Zap size={16} color="#3b82f6" />;
   }
 
   if (type === "click") {
-    return <MdOutlineMouse size={16} color="#9333ea" />;
+    return <MousePointerClick size={16} color="#9333ea" />;
   }
 
   if (type === "linkClick") {
-    return <MdOutlineLink size={16} color="#0ea5e9" />;
+    return <Link2 size={16} color="#0ea5e9" />;
   }
 
   if (type === "formSubmission") {
-    return <MdOutlineTouchApp size={16} color="#ec4899" />;
+    return <Touchpad size={16} color="#ec4899" />;
   }
 
   if (type === "timer") {
-    return <MdOutlineTimer size={16} color="#f97316" />;
+    return <Timer size={16} color="#f97316" />;
   }
 
   if (type === "scrollDepth") {
-    return <MdOutlineTouchApp size={16} color="#14b8a6" />;
+    return <Touchpad size={16} color="#14b8a6" />;
   }
 
   if (type === "youtubeVideo") {
-    return <SiYoutube size={16} color="#FF0000" />;
+    return <PlayCircle size={16} color="#FF0000" />;
   }
 
   if (type === "historyChange") {
-    return <MdOutlineHistory size={16} color="#64748b" />;
+    return <History size={16} color="#64748b" />;
   }
 
   if (type === "customEvent") {
-    return <MdOutlineCode size={16} color="#6366f1" />;
+    return <Code2 size={16} color="#6366f1" />;
   }
 
-  return <MdOutlineBolt size={16} color="#6b7280" />;
+  return <Zap size={16} color="#6b7280" />;
 }
 
 export default function TriggersPage() {
@@ -173,7 +173,7 @@ export default function TriggersPage() {
                 {selectedTriggerType ? (
                   getTriggerIcon(selectedTriggerType)
                 ) : (
-                  <MdOutlineBolt size={16} color="#6b7280" />
+                  <Zap size={16} color="#6b7280" />
                 )}
               </span>
 
@@ -182,7 +182,7 @@ export default function TriggersPage() {
               </span>
             </div>
 
-            <MdOutlineKeyboardArrowDown
+            <ChevronDown
               size={18}
               className={`text-muted transition ${
                 dropdownOpen ? "rotate-180" : ""
@@ -220,7 +220,7 @@ export default function TriggersPage() {
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <MdOutlineBolt size={16} color="#6b7280" />
+                    <Zap size={16} color="#6b7280" />
                     <span className="text-fg font-medium">
                       All Trigger Types
                     </span>

@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import { ChevronDown, Search } from "lucide-react";
+import WorkspaceCrudSection from "@/app/dashboard/components/modals/WorkspaceCrudSection";
 
 function CustomDropdown({
   label,
@@ -47,7 +48,7 @@ function CustomDropdown({
   }, [options, search]);
 
   return (
-    <div className="w-full" ref={dropdownRef}>
+    <div className="w-full relative" ref={dropdownRef}>
       <label className="block text-[12.5px] font-medium text-fg mb-2">
         {label}
       </label>
@@ -68,7 +69,7 @@ function CustomDropdown({
       </button>
 
       {open && !disabled && (
-        <div className="mt-2 w-full z-50 rounded-xl border border-line bg-card shadow-xl overflow-hidden">
+        <div className="absolute mt-2 w-full z-50 rounded-xl border border-line bg-card shadow-xl overflow-hidden">
           <div className="p-2 border-b border-line bg-card-hi">
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-line bg-card">
               <Search size={15} className="text-muted" />
@@ -336,6 +337,16 @@ export default function ExportVariablesModal({
                 label: w.name,
               }))}
               onChange={(val) => setSelectedWorkspaceId(val)}
+            />
+
+            {/* WORKSPACE CRUD */}
+            <WorkspaceCrudSection
+              selectedAccountId={selectedAccountId}
+              selectedContainerId={selectedContainerId}
+              selectedWorkspaceId={selectedWorkspaceId}
+              setSelectedWorkspaceId={setSelectedWorkspaceId}
+              workspaces={workspaces}
+              setWorkspaces={setWorkspaces}
             />
           </div>
         </div>

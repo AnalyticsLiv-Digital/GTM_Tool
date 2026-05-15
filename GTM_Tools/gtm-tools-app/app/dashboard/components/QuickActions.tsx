@@ -74,7 +74,7 @@ export default function QuickActions() {
           </div>
 
           {disabled && (
-            <p className="mt-3 text-[11px] text-[color:var(--danger)] font-medium">
+            <p className="mt-3 text-[11px] text-(--danger) font-medium">
               Select workspace first
             </p>
           )}

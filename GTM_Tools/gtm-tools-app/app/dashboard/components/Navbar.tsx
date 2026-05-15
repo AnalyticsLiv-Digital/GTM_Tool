@@ -48,11 +48,11 @@ export default function Navbar({
             >
               {hasSelection ? (
                 <span className="flex items-center gap-1.5 text-[13px] text-fg min-w-0">
-                  <span className="truncate max-w-[120px]">{selectedAccountName}</span>
+                  <span className="truncate max-w-30">{selectedAccountName}</span>
                   <span className="text-faint">/</span>
-                  <span className="truncate max-w-[140px]">{selectedContainerName}</span>
+                  <span className="truncate max-w-35">{selectedContainerName}</span>
                   <span className="text-faint">/</span>
-                  <span className="truncate max-w-[140px] text-accent font-medium">
+                  <span className="truncate max-w-35 text-accent font-medium">
                     {selectedWorkspaceName}
                   </span>
                 </span>
@@ -83,7 +83,7 @@ export default function Navbar({
                   {user?.name?.[0]?.toUpperCase() ?? "U"}
                 </div>
               )}
-              <span className="text-[13px] text-fg max-w-[140px] truncate">
+              <span className="text-[13px] text-fg max-w-35 truncate">
                 {user?.name ?? "User"}
               </span>
             </div>
