@@ -222,7 +222,7 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
                   <button
                     onClick={handleCreateWorkspace}
                     disabled={workspaceCrudLoading || !newWorkspaceName.trim()}
-                    className="btn-primary !py-1.5 !px-3 flex-1 justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="btn-primary py-1.5! px-3! flex-1 justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {workspaceCrudLoading ? "Creating…" : "Create"}
                   </button>
@@ -231,7 +231,7 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
                       setIsCreatingWorkspace(false);
                       setNewWorkspaceName("");
                     }}
-                    className="btn-secondary !py-1.5 !px-3 flex-1 justify-center"
+                    className="btn-secondary py-1.5! px-3! flex-1 justify-center"
                   >
                     Cancel
                   </button>
@@ -243,7 +243,7 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
 
         {/* FOOTER */}
         <div className="px-5 py-3 border-t border-line bg-page-soft flex justify-end gap-2">
-          <button onClick={onClose} className="btn-secondary !py-1.5 !px-3">
+          <button onClick={onClose} className="btn-secondary py-1.5! px-3!">
             Close
           </button>
         </div>

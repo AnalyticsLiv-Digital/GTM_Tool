@@ -31,14 +31,14 @@ export default function TagModal() {
       footer={
         selectedWorkspaceId ? (
           <>
-            <button type="button" onClick={close} className="btn-secondary !py-1.5 !px-3">
+            <button type="button" onClick={close} className="btn-secondary py-1.5! px-3!">
               Cancel
             </button>
             <button
               type="button"
               disabled={tagCrudLoading}
               onClick={handleSaveTag}
-              className="btn-primary !py-1.5 !px-3 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn-primary py-1.5! px-3! disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {tagCrudLoading ? "Saving…" : "Save tag"}
             </button>

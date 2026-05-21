@@ -83,9 +83,9 @@ export default function Sidebar({ onLogout }: { onLogout: () => void }) {
         <div className="px-3 pb-5 border-t border-line pt-3 mt-3">
           <button
             onClick={onLogout}
-            className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted hover:bg-card hover:text-[color:var(--danger)] transition-colors duration-200"
+            className="group w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted hover:bg-card hover:text-(--danger) transition-colors duration-200"
           >
-            <span className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 group-hover:bg-[color:var(--danger)]/10 transition-colors">
+            <span className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 group-hover:bg-(--danger)/10 transition-colors">
               <LogOut size={13} strokeWidth={2} />
             </span>
             <span className="text-[13px] font-medium">Sign out</span>

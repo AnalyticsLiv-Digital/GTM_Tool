@@ -1,8 +1,105 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect,useRef, useState } from "react";
 import { toast } from "react-toastify";
+
+import {
+  ChevronDown,
+  CheckCircle2,
+  Folder,
+  Boxes,
+  Workflow,
+} from "lucide-react";
+
+import WorkspaceCrudSection from "@/app/dashboard/components/modals/WorkspaceCrudSection";
+
+function CustomDropdown({
+  label,
+  value,
+  options,
+  placeholder,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  value: string;
+  options: { value: string; label: string }[];
+  placeholder: string;
+  onChange: (val: string) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  const selectedLabel =
+    options.find((o) => o.value === value)?.label || placeholder;
+
+  useEffect(() => {
+    function handleOutside(e: MouseEvent) {
+      if (!dropdownRef.current?.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handleOutside);
+
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, []);
+
+  return (
+    <div className="w-full relative" ref={dropdownRef}>
+      <label className="block text-[12.5px] font-medium text-fg mb-2">
+        {label}
+      </label>
+
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((p) => !p)}
+        className={`w-full flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl border border-line bg-card text-fg shadow-sm hover:bg-card-hi transition text-sm ${
+          disabled ? "opacity-50 cursor-not-allowed" : ""
+        }`}
+      >
+        <span className="truncate">{selectedLabel}</span>
+
+        <ChevronDown
+          size={16}
+          className={`text-muted transition ${open ? "rotate-180" : ""}`}
+        />
+      </button>
+
+      {open && !disabled && (
+        <div className="absolute mt-2 w-full z-9999 rounded-xl border border-line bg-card shadow-xl overflow-hidden">
+          <div className="max-h-60 overflow-y-auto">
+            {options.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => {
+                  onChange(opt.value);
+                  setOpen(false);
+                }}
+                className={`w-full text-left px-4 py-2.5 text-sm hover:bg-card-hi transition ${
+                  value === opt.value ? "bg-card-hi" : ""
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+
+            {options.length === 0 && (
+              <p className="text-sm text-muted px-4 py-3">
+                No results found.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function ExportTemplatesModal({
   show,
@@ -29,16 +126,16 @@ export default function ExportTemplatesModal({
 
   const [exportLoading, setExportLoading] = useState(false);
 
-  // ----------------------------
-  // SAFE ARRAY (IMPORTANT FIX)
-  // ----------------------------
-  const safeTemplates = Array.isArray(selectedTemplates)
-    ? selectedTemplates
-    : [];
+  async function safeJsonParse(res: Response) {
+    const text = await res.text();
 
-  // ----------------------------
-  // FETCH ACCOUNTS
-  // ----------------------------
+    try {
+      return text ? JSON.parse(text) : {};
+    } catch {
+      return { raw: text };
+    }
+  }
+
   useEffect(() => {
     if (!show) return;
 
@@ -47,12 +144,14 @@ export default function ExportTemplatesModal({
         setLoadingAccounts(true);
 
         const res = await fetch("/api/auth/gtm/accounts");
-        const data = await res.json();
 
-        if (!res.ok)
+        const data = await safeJsonParse(res);
+
+        if (!res.ok) {
           throw new Error(data?.error || "Failed to fetch accounts");
+        }
 
-        setAccounts(Array.isArray(data.account) ? data.account : []);
+        setAccounts(data.account || []);
       } catch (err: any) {
         toast.error(err.message);
       } finally {
@@ -63,9 +162,6 @@ export default function ExportTemplatesModal({
     loadAccounts();
   }, [show]);
 
-  // ----------------------------
-  // FETCH CONTAINERS
-  // ----------------------------
   useEffect(() => {
     if (!selectedAccountId) return;
 
@@ -76,12 +172,14 @@ export default function ExportTemplatesModal({
         const res = await fetch(
           `/api/auth/gtm/containers?accountId=${selectedAccountId}`
         );
-        const data = await res.json();
 
-        if (!res.ok)
+        const data = await safeJsonParse(res);
+
+        if (!res.ok) {
           throw new Error(data?.error || "Failed to fetch containers");
+        }
 
-        setContainers(Array.isArray(data.container) ? data.container : []);
+        setContainers(data.container || []);
 
         setSelectedContainerId("");
         setSelectedWorkspaceId("");
@@ -96,9 +194,6 @@ export default function ExportTemplatesModal({
     loadContainers();
   }, [selectedAccountId]);
 
-  // ----------------------------
-  // FETCH WORKSPACES
-  // ----------------------------
   useEffect(() => {
     if (!selectedAccountId || !selectedContainerId) return;
 
@@ -110,12 +205,13 @@ export default function ExportTemplatesModal({
           `/api/auth/gtm/workspaces?accountId=${selectedAccountId}&containerId=${selectedContainerId}`
         );
 
-        const data = await res.json();
+        const data = await safeJsonParse(res);
 
-        if (!res.ok)
+        if (!res.ok) {
           throw new Error(data?.error || "Failed to fetch workspaces");
+        }
 
-        setWorkspaces(Array.isArray(data.workspace) ? data.workspace : []);
+        setWorkspaces(data.workspace || []);
 
         setSelectedWorkspaceId("");
       } catch (err: any) {
@@ -128,86 +224,56 @@ export default function ExportTemplatesModal({
     loadWorkspaces();
   }, [selectedAccountId, selectedContainerId]);
 
-  // ----------------------------
-  // EXPORT FUNCTION
-  // ----------------------------
-  async function handleExportTemplates() {
-    if (!selectedAccountId) return toast.warning("Please select an Account");
-    if (!selectedContainerId) return toast.warning("Please select a Container");
-    if (!selectedWorkspaceId) return toast.warning("Please select a Workspace");
+  async function handleExport() {
+    if (!selectedAccountId) {
+      return toast.warning("Please select an Account");
+    }
 
-    if (safeTemplates.length === 0)
+    if (!selectedContainerId) {
+      return toast.warning("Please select a Container");
+    }
+
+    if (!selectedWorkspaceId) {
+      return toast.warning("Please select a Workspace");
+    }
+
+    if (!selectedTemplates.length) {
       return toast.warning("No templates selected for export.");
-
-    setExportLoading(true);
-
-    const failedTemplates: string[] = [];
+    }
 
     try {
-      for (const template of safeTemplates) {
-        try {
-          let exportSuccess = false;
-          let attempt = 0;
-          const maxAttempts = 5;
+      setExportLoading(true);
 
-          while (!exportSuccess && attempt < maxAttempts) {
-            const updatedName =
-              attempt === 0 ? template.name : `${template.name}_${attempt}`;
+      for (const template of selectedTemplates) {
+        const res = await fetch("/api/auth/gtm/templates", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            accountId: selectedAccountId,
+            containerId: selectedContainerId,
+            workspaceId: selectedWorkspaceId,
+            template,
+          }),
+        });
 
-            const cleanedTemplate = {
-              name: updatedName,
-              templateData: template.templateData,
-            };
+        const data = await safeJsonParse(res);
 
-            const res = await fetch("/api/auth/gtm/templates", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                accountId: selectedAccountId,
-                containerId: selectedContainerId,
-                workspaceId: selectedWorkspaceId,
-                template: cleanedTemplate,
-              }),
-            });
+        console.log(
+          "Template Export Response:",
+          template?.name,
+          res.status,
+          data
+        );
 
-            const data = await res.json();
-
-            if (!res.ok) {
-              const errorMsg =
-                data?.details?.error?.message ||
-                data?.error ||
-                "Failed to export template";
-
-              if (
-                errorMsg.toLowerCase().includes("already exists") ||
-                errorMsg.toLowerCase().includes("duplicate")
-              ) {
-                attempt++;
-                continue;
-              }
-
-              throw new Error(errorMsg);
-            }
-
-            exportSuccess = true;
-          }
-
-          if (!exportSuccess) {
-            throw new Error("Failed after retries");
-          }
-        } catch {
-          failedTemplates.push(template?.name || "Unknown Template");
+        if (!res.ok) {
+          throw new Error(data?.error || "Template export failed");
         }
       }
 
-      if (failedTemplates.length > 0) {
-        toast.warning(
-          `Export finished with failures: ${failedTemplates.join(", ")}`
-        );
-        return;
-      }
-
       toast.success("Templates exported successfully!");
+
       onExportSuccess();
     } catch (err: any) {
       toast.error(err.message);
@@ -218,12 +284,33 @@ export default function ExportTemplatesModal({
 
   if (!show) return null;
 
+  const steps = [
+    {
+      id: 1,
+      icon: Folder,
+      done: !!selectedAccountId,
+    },
+    {
+      id: 2,
+      icon: Boxes,
+      done: !!selectedContainerId,
+    },
+    {
+      id: 3,
+      icon: Workflow,
+      done: !!selectedWorkspaceId,
+    },
+  ];
+
   return (
     <div className="fixed inset-0 bg-black/55 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-card text-fg w-full max-w-3xl rounded-xl border border-edge shadow-lg overflow-hidden">
+      <div className="bg-card text-fg w-full max-w-3xl rounded-xl border border-edge shadow-lg overflow-visible">
         {/* HEADER */}
         <div className="flex justify-between items-center px-5 py-3 border-b border-line">
-          <h2 className="text-[15px] font-semibold text-fg">Export Templates</h2>
+          <h2 className="text-[15px] font-semibold text-fg">
+            Export Templates ({selectedTemplates.length})
+          </h2>
+
           <button
             onClick={onClose}
             className="w-8 h-8 inline-flex items-center justify-center rounded-md text-muted hover:text-fg hover:bg-card-hi text-base"
@@ -233,96 +320,145 @@ export default function ExportTemplatesModal({
         </div>
 
         {/* BODY */}
-        <div className="grid grid-cols-12 min-h-100">
+        <div className="grid grid-cols-12 min-h-135">
           {/* LEFT */}
           <div className="col-span-5 border-r border-line bg-card-hi p-4">
-            <p className="text-[12.5px] font-medium text-faint mb-3 uppercase tracking-[0.05em]">
-              Selected Templates ({safeTemplates.length})
+            <p className="text-[12px] font-medium text-faint mb-3 uppercase tracking-[0.05em]">
+              Selected Templates ({selectedTemplates.length})
             </p>
 
-            <div className="bg-card border border-line rounded-lg overflow-y-auto max-h-80">
-              {safeTemplates.length === 0 ? (
-                <p className="text-[12px] text-faint p-4">No templates found.</p>
-              ) : (
-                safeTemplates.map((template: any, idx: number) => (
-                  <div
-                    key={template.templateId || template.name || idx}
-                    className="px-4 py-3 border-b border-line last:border-none"
-                  >
-                    <p className="text-[13px] font-medium text-fg">
-                      {template.name}
-                    </p>
-                    <p className="text-[11px] text-faint">
-                      ID: {template.templateId}
-                    </p>
-                  </div>
-                ))
-              )}
+            <div className="bg-card border border-line rounded-lg overflow-y-auto max-h-107.5">
+              {selectedTemplates.map((t: any) => (
+                <div
+                  key={t.templateId || t.name}
+                  className="px-4 py-3 border-b border-line last:border-none"
+                >
+                  <p className="text-[13px] font-medium text-fg">
+                    {t.name}
+                  </p>
+
+                  <p className="text-[11px] text-faint">
+                    Type: {t.type || "Template"} | ID:{" "}
+                    {t.templateId || "N/A"}
+                  </p>
+                </div>
+              ))}
             </div>
           </div>
 
           {/* RIGHT */}
           <div className="col-span-7 p-6">
-            <h3 className="text-[14px] font-semibold text-fg mb-5">
-              Select Destination
-            </h3>
+            {/* STEPPER */}
+            <div className="flex items-center justify-between w-full mb-7 px-2">
+              {steps.map((s, idx) => {
+                const Icon = s.icon;
 
-            <select
-              value={selectedAccountId}
-              onChange={(e) => setSelectedAccountId(e.target.value)}
-              disabled={loadingAccounts}
-              className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm"
-            >
-              <option value="">-- Select Account --</option>
-              {accounts.map((acc: any) => (
-                <option key={acc.accountId} value={acc.accountId}>
-                  {acc.name}
-                </option>
-              ))}
-            </select>
+                const done = s.done;
 
-            <select
-              value={selectedContainerId}
-              onChange={(e) => setSelectedContainerId(e.target.value)}
-              disabled={!selectedAccountId || loadingContainers}
-              className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm mt-5"
-            >
-              <option value="">-- Select Container --</option>
-              {containers.map((c: any) => (
-                <option key={c.containerId} value={c.containerId}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+                const isLast = idx === steps.length - 1;
 
-            <select
-              value={selectedWorkspaceId}
-              onChange={(e) => setSelectedWorkspaceId(e.target.value)}
-              disabled={!selectedContainerId || loadingWorkspaces}
-              className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm mt-5"
-            >
-              <option value="">-- Select Workspace --</option>
-              {workspaces.map((w: any) => (
-                <option key={w.workspaceId} value={w.workspaceId}>
-                  {w.name}
-                </option>
-              ))}
-            </select>
+                return (
+                  <div key={s.id} className="flex items-center flex-1">
+                    <div
+                      className={`w-9 h-9 rounded-full flex items-center justify-center border transition-all duration-300 ${
+                        done
+                          ? "bg-green-500/15 border-green-500 text-green-500"
+                          : "bg-card border-line text-muted"
+                      }`}
+                    >
+                      {done ? (
+                        <CheckCircle2 size={18} />
+                      ) : (
+                        <Icon size={18} />
+                      )}
+                    </div>
+
+                    {!isLast && (
+                      <div
+                        className={`flex-1 h-0.5 mx-3 transition-all duration-300 ${
+                          done ? "bg-green-500/60" : "bg-line"
+                        }`}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="space-y-5">
+              <h3 className="text-[14px] font-semibold text-fg">
+                Select Destination
+              </h3>
+
+              <CustomDropdown
+                label="Account"
+                value={selectedAccountId}
+                placeholder="-- Select Account --"
+                disabled={loadingAccounts}
+                options={accounts.map((a) => ({
+                  value: a.accountId,
+                  label: a.name,
+                }))}
+                onChange={(val) => setSelectedAccountId(val)}
+              />
+
+              <CustomDropdown
+                label="Container"
+                value={selectedContainerId}
+                placeholder="-- Select Container --"
+                disabled={!selectedAccountId || loadingContainers}
+                options={containers.map((c) => ({
+                  value: c.containerId,
+                  label: c.name,
+                }))}
+                onChange={(val) => setSelectedContainerId(val)}
+              />
+
+              <CustomDropdown
+                label="Workspace"
+                value={selectedWorkspaceId}
+                placeholder="-- Select Workspace --"
+                disabled={!selectedContainerId || loadingWorkspaces}
+                options={workspaces.map((w) => ({
+                  value: w.workspaceId,
+                  label: w.name,
+                }))}
+                onChange={(val) => setSelectedWorkspaceId(val)}
+              />
+
+              <WorkspaceCrudSection
+                selectedAccountId={selectedAccountId}
+                selectedContainerId={selectedContainerId}
+                selectedWorkspaceId={selectedWorkspaceId}
+                setSelectedWorkspaceId={setSelectedWorkspaceId}
+                workspaces={workspaces}
+                setWorkspaces={setWorkspaces}
+              />
+            </div>
           </div>
         </div>
 
         {/* FOOTER */}
-        <div className="px-6 py-4 border-t flex justify-between">
-          <button onClick={onClose} className="px-4 py-2 border rounded-xl">
+        <div className="px-5 py-3 border-t border-line bg-page-soft flex justify-between items-center">
+          <button
+            onClick={onClose}
+            className="btn-secondary py-1.5! px-3!"
+          >
             Cancel
           </button>
 
           <button
-            onClick={handleExportTemplates}
-            disabled={exportLoading}
-            className="px-5 py-2 bg-blue-600 text-white rounded-xl"
+            onClick={handleExport}
+            disabled={
+              exportLoading ||
+              !selectedAccountId ||
+              !selectedContainerId ||
+              !selectedWorkspaceId ||
+              selectedTemplates.length === 0
+            }
+            className="btn-primary py-1.5! px-3! disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {exportLoading ? "Exporting..." : "Export"}
+            {exportLoading ? "Exporting..." : "Export Templates"}
           </button>
         </div>
       </div>
