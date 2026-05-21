@@ -5,7 +5,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useDashboardStore } from "@/app/store/useDashboardStore";
 import { toast } from "react-toastify";
 import { confirmDialog } from "@/lib/ui/dialog";
-import { ChevronDown } from "lucide-react";
+import {
+  ChevronDown,
+  CheckCircle2,
+  Building2,
+  Layers,
+  Workflow,
+} from "lucide-react";
 import WorkspaceCrudSection from "@/app/dashboard/components/modals/WorkspaceCrudSection";
 
 // ============================================================
@@ -53,9 +59,8 @@ function CustomDropdown({
         type="button"
         disabled={disabled}
         onClick={() => setOpen((p) => !p)}
-        className={`w-full flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl border border-line bg-card text-fg shadow-sm hover:bg-card-hi transition text-sm ${
-          disabled ? "opacity-50 cursor-not-allowed" : ""
-        }`}
+        className={`w-full flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl border border-line bg-card text-fg shadow-sm hover:bg-card-hi transition text-sm ${disabled ? "opacity-50 cursor-not-allowed" : ""
+          }`}
       >
         <span className="truncate">{selectedLabel}</span>
         <ChevronDown
@@ -65,7 +70,7 @@ function CustomDropdown({
       </button>
 
       {open && !disabled && (
-        <div className="absolute mt-2 w-full z-9999 rounded-xl border border-line bg-card shadow-xl overflow-hidden">
+        <div className="absolute mt-2 w-full z-50 rounded-xl border border-line bg-card shadow-xl overflow-hidden">
           <div className="max-h-60 overflow-y-auto">
             {options.map((opt) => (
               <button
@@ -75,9 +80,8 @@ function CustomDropdown({
                   onChange(opt.value);
                   setOpen(false);
                 }}
-                className={`w-full text-left px-4 py-2.5 text-sm hover:bg-card-hi transition ${
-                  value === opt.value ? "bg-card-hi" : ""
-                }`}
+                className={`w-full text-left px-4 py-2.5 text-sm hover:bg-card-hi transition ${value === opt.value ? "bg-card-hi" : ""
+                  }`}
               >
                 {opt.label}
               </button>
@@ -626,18 +630,6 @@ export default function ExportTagsModal({
   }
 
   // ============================================================
-  // TAG TYPE SUMMARY
-  // ============================================================
-  const tagTypeSummary = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const t of selectedTags || []) {
-      const type = t?.type || "unknown";
-      counts[type] = (counts[type] || 0) + 1;
-    }
-    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
-  }, [selectedTags]);
-
-  // ============================================================
   // MAIN EXPORT FUNCTION
   // ============================================================
   async function handleExportTags() {
@@ -723,7 +715,7 @@ export default function ExportTagsModal({
         });
       }
 
-      let destinationVariables = await fetchDestinationVariables();
+      const destinationVariables = await fetchDestinationVariables();
 
       const missingVariables = requiredVariables.filter((v: any) => {
         return !destinationVariables.some((dv: any) => dv.name === v.name);
@@ -746,9 +738,7 @@ export default function ExportTagsModal({
         });
       }
 
-      destinationVariables = await fetchDestinationVariables();
-
-      let destinationTriggers = await fetchDestinationTriggers();
+      const destinationTriggers = await fetchDestinationTriggers();
       const triggerMap: Record<string, string> = {};
 
       let triggersDone = 0;
@@ -776,19 +766,8 @@ export default function ExportTagsModal({
         setProgress((p) => ({ ...p, triggersDone }));
 
         toast.update(toastId, {
-          render: `Exporting... Templates ${templatesDone}/${templateIds.size}, Variables ${variablesDone}/${missingVariables.length}, Triggers ${triggersDone}/${requiredTriggers.length}`,
+          render: `Exporting... Tags ${progress.tagsDone}/${selectedTags.length}`,
         });
-      }
-
-      destinationTriggers = await fetchDestinationTriggers();
-
-      for (const t of requiredTriggers) {
-        if (!triggerMap[t.triggerId]) {
-          const destTrigger = destinationTriggers.find(
-            (dt: any) => dt.name === t.name
-          );
-          if (destTrigger) triggerMap[t.triggerId] = destTrigger.triggerId;
-        }
       }
 
       let destinationTags = await fetchDestinationTags();
@@ -810,10 +789,6 @@ export default function ExportTagsModal({
 
         tagsDone++;
         setProgress((p) => ({ ...p, tagsDone }));
-
-        toast.update(toastId, {
-          render: `Exporting... Tags ${tagsDone}/${selectedTags.length}`,
-        });
       }
 
       destinationTags = await fetchDestinationTags();
@@ -849,10 +824,6 @@ export default function ExportTagsModal({
 
         tagsDone++;
         setProgress((p) => ({ ...p, tagsDone }));
-
-        toast.update(toastId, {
-          render: `Exporting... Tags ${tagsDone}/${selectedTags.length}`,
-        });
       }
 
       for (const tag of otherTags) {
@@ -877,10 +848,6 @@ export default function ExportTagsModal({
 
         tagsDone++;
         setProgress((p) => ({ ...p, tagsDone }));
-
-        toast.update(toastId, {
-          render: `Exporting... Tags ${tagsDone}/${selectedTags.length}`,
-        });
       }
 
       if (failedTags.length > 0) {
@@ -891,8 +858,6 @@ export default function ExportTagsModal({
           type: "warning",
           position: "bottom-right",
           autoClose: 8000,
-          closeOnClick: true,
-          draggable: true,
         });
         return;
       }
@@ -902,8 +867,6 @@ export default function ExportTagsModal({
         type: "success",
         position: "bottom-right",
         autoClose: 4000,
-        closeOnClick: true,
-        draggable: true,
       });
 
       onExportSuccess();
@@ -919,122 +882,238 @@ export default function ExportTagsModal({
     }
   }
 
+  // ============================================================
+  // STEPPER
+  // ============================================================
+  const steps = useMemo(() => {
+    return [
+      {
+        id: "account",
+        title: "Account",
+        done: !!selectedAccountId,
+        icon: Building2,
+      },
+      {
+        id: "container",
+        title: "Container",
+        done: !!selectedContainerId,
+        icon: Layers,
+      },
+      {
+        id: "workspace",
+        title: "Workspace",
+        done: !!selectedWorkspaceId,
+        icon: Workflow,
+      },
+    ];
+  }, [selectedAccountId, selectedContainerId, selectedWorkspaceId]);
+
   if (!show) return null;
 
   return (
     <div className="fixed inset-0 bg-black/55 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-card text-fg w-full max-w-3xl rounded-xl border border-edge shadow-lg overflow-hidden">
+      <div className="bg-card text-fg w-full max-w-6xl rounded-2xl border border-edge shadow-xl overflow-hidden">
         {/* HEADER */}
-        <div className="flex justify-between items-center px-5 py-3 border-b border-line">
-          <h2 className="text-[15px] font-semibold text-fg">
-            Export Tags (Full Export)
-          </h2>
+        <div className="flex justify-between items-center px-6 py-4 border-b border-line bg-card-hi">
+          <div>
+            <h2 className="text-[15px] font-semibold text-fg">
+              Export Tags (Full Export)
+            </h2>
+            <p className="text-[12.5px] text-muted mt-0.5">
+              Export selected tags and dependencies into a destination workspace.
+            </p>
+          </div>
 
           <button
             onClick={onClose}
-            className="w-8 h-8 inline-flex items-center justify-center rounded-md text-muted hover:text-fg hover:bg-card-hi text-base"
+            className="w-9 h-9 inline-flex items-center justify-center rounded-lg text-muted hover:text-fg hover:bg-card transition"
           >
             ✕
           </button>
         </div>
 
         {/* BODY */}
-        <div className="grid grid-cols-12 min-h-90">
+        <div className="grid grid-cols-12 h-140">
           {/* LEFT */}
-          <div className="col-span-5 border-r border-line bg-card-hi p-4">
-            <p className="text-[12.5px] font-medium text-faint mb-3 uppercase tracking-[0.05em]">
+          <div className="col-span-5 border-r border-line bg-card-hi p-5 flex flex-col min-h-0">
+            <p className="text-[12px] font-medium text-faint mb-3 uppercase tracking-[0.08em]">
               Selected Tags ({selectedTags.length})
             </p>
 
-            <div className="bg-card border border-line rounded-lg p-3 mb-3">
-              <p className="text-[11px] font-mono uppercase tracking-[0.08em] text-faint mb-2">
-                Tag Type Summary
-              </p>
-
-              <div className="flex flex-wrap gap-2">
-                {tagTypeSummary.map(([type, count]) => (
-                  <span
-                    key={type}
-                    className="inline-flex items-center px-2 py-1 rounded-md text-[11px] border border-line bg-card-hi"
+            <div className="bg-card border border-line rounded-xl overflow-hidden flex-1 min-h-0">
+              <div className="overflow-y-auto h-full">
+                {selectedTags.map((tag: any) => (
+                  <div
+                    key={tag.tagId}
+                    className="px-4 py-3 border-b border-line last:border-none hover:bg-card-hi transition"
                   >
-                    {type}: {count}
-                  </span>
+                    <p className="text-[13px] font-medium text-fg">
+                      {tag.name}
+                    </p>
+                    <p className="text-[11px] text-faint mt-0.5">
+                      Type: {tag.type} · ID: {tag.tagId}
+                    </p>
+                  </div>
                 ))}
-              </div>
-            </div>
 
-            <div className="bg-card border border-line rounded-lg overflow-y-auto max-h-72">
-              {selectedTags.map((tag: any) => (
-                <div
-                  key={tag.tagId}
-                  className="px-4 py-3 border-b border-line last:border-none"
-                >
-                  <p className="text-[13px] font-medium text-fg">{tag.name}</p>
-                  <p className="text-[11px] text-faint">
-                    Type: {tag.type} | ID: {tag.tagId}
-                  </p>
-                </div>
-              ))}
+                {selectedTags.length === 0 && (
+                  <div className="p-6 text-center text-muted text-sm">
+                    No tags selected.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
           {/* RIGHT */}
-          <div className="col-span-7 p-6 space-y-5">
-            <h3 className="text-[14px] font-semibold text-fg mb-2">
-              Select Destination
-            </h3>
+          <div className="col-span-7 p-6 min-h-0">
+            <div className="flex flex-col h-full">
 
-            <CustomDropdown
-              label="Account"
-              value={selectedAccountId}
-              placeholder="-- Select Account --"
-              disabled={loadingAccounts}
-              options={accounts.map((a) => ({
-                value: a.accountId,
-                label: a.name,
-              }))}
-              onChange={(val) => setSelectedAccountId(val)}
-            />
+              {/* TOP HORIZONTAL STEPPER */}
+              <div className="flex items-center justify-between w-full mb-6 px-2">
+                {steps.map((s, idx) => {
+                  const Icon = s.icon;
+                  const done = s.done;
+                  const isLast = idx === steps.length - 1;
 
-            <CustomDropdown
-              label="Container"
-              value={selectedContainerId}
-              placeholder="-- Select Container --"
-              disabled={!selectedAccountId || loadingContainers}
-              options={containers.map((c) => ({
-                value: c.containerId,
-                label: c.name,
-              }))}
-              onChange={(val) => setSelectedContainerId(val)}
-            />
+                  return (
+                    <div key={s.id} className="flex items-center flex-1">
+                      {/* CIRCLE */}
+                      <div
+                        className={`w-9 h-9 rounded-full flex items-center justify-center border transition-all duration-300 ${done
+                            ? "bg-green-500/15 border-green-500 text-green-500"
+                            : "bg-card border-line text-muted"
+                          }`}
+                      >
+                        {done ? <CheckCircle2 size={18} /> : <Icon size={18} />}
+                      </div>
 
-            <CustomDropdown
-              label="Workspace"
-              value={selectedWorkspaceId}
-              placeholder="-- Select Workspace --"
-              disabled={!selectedContainerId || loadingWorkspaces}
-              options={workspaces.map((w) => ({
-                value: w.workspaceId,
-                label: w.name,
-              }))}
-              onChange={(val) => setSelectedWorkspaceId(val)}
-            />
+                      {/* LINE */}
+                      {!isLast && (
+                        <div
+                          className={`flex-1 h-0.5 mx-3 transition-all duration-300 ${steps[idx].done ? "bg-green-500/60" : "bg-line"
+                            }`}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
 
-            {/* WORKSPACE CRUD UI (CORRECT PLACE) */}
-            <WorkspaceCrudSection
-              selectedAccountId={selectedAccountId}
-              selectedContainerId={selectedContainerId}
-              selectedWorkspaceId={selectedWorkspaceId}
-              setSelectedWorkspaceId={setSelectedWorkspaceId}
-              workspaces={workspaces}
-              setWorkspaces={setWorkspaces}
-            />
+              {/* INPUTS */}
+              <div className="flex-1 min-w-0 flex flex-col min-h-0">
+                <div className="mb-5">
+                  <h3 className="text-[15px] font-semibold text-fg">
+                    Destination Setup
+                  </h3>
+                  <p className="text-[12.5px] text-muted mt-1">
+                    Select the account, container, and workspace where tags will
+                    be exported.
+                  </p>
+                </div>
+
+                <div className="space-y-4 overflow-y-auto pr-1">
+                  <CustomDropdown
+                    label="Account"
+                    value={selectedAccountId}
+                    placeholder="-- Select Account --"
+                    disabled={loadingAccounts}
+                    options={accounts.map((a) => ({
+                      value: a.accountId,
+                      label: a.name,
+                    }))}
+                    onChange={(val) => {
+                      setSelectedAccountId(val);
+                      setSelectedContainerId("");
+                      setSelectedWorkspaceId("");
+                      setContainers([]);
+                      setWorkspaces([]);
+                    }}
+                  />
+
+                  <CustomDropdown
+                    label="Container"
+                    value={selectedContainerId}
+                    placeholder="-- Select Container --"
+                    disabled={!selectedAccountId || loadingContainers}
+                    options={containers.map((c) => ({
+                      value: c.containerId,
+                      label: c.name,
+                    }))}
+                    onChange={(val) => {
+                      setSelectedContainerId(val);
+                      setSelectedWorkspaceId("");
+                      setWorkspaces([]);
+                    }}
+                  />
+
+                  <CustomDropdown
+                    label="Workspace"
+                    value={selectedWorkspaceId}
+                    placeholder="-- Select Workspace --"
+                    disabled={!selectedContainerId || loadingWorkspaces}
+                    options={workspaces.map((w) => ({
+                      value: w.workspaceId,
+                      label: w.name,
+                    }))}
+                    onChange={(val) => setSelectedWorkspaceId(val)}
+                  />
+
+                  <WorkspaceCrudSection
+                    selectedAccountId={selectedAccountId}
+                    selectedContainerId={selectedContainerId}
+                    selectedWorkspaceId={selectedWorkspaceId}
+                    setSelectedWorkspaceId={setSelectedWorkspaceId}
+                    workspaces={workspaces}
+                    setWorkspaces={setWorkspaces}
+                  />
+
+                  {exportLoading && (
+                    <div className="mt-2 bg-card border border-line rounded-xl p-4">
+                      <p className="text-[12px] font-mono uppercase tracking-[0.12em] text-faint mb-2">
+                        Export Progress
+                      </p>
+
+                      <div className="grid grid-cols-2 gap-3 text-[12.5px] text-muted">
+                        <p>
+                          Templates:{" "}
+                          <span className="text-fg font-medium">
+                            {progress.templatesDone}/{progress.templatesTotal}
+                          </span>
+                        </p>
+
+                        <p>
+                          Variables:{" "}
+                          <span className="text-fg font-medium">
+                            {progress.variablesDone}/{progress.variablesTotal}
+                          </span>
+                        </p>
+
+                        <p>
+                          Triggers:{" "}
+                          <span className="text-fg font-medium">
+                            {progress.triggersDone}/{progress.triggersTotal}
+                          </span>
+                        </p>
+
+                        <p>
+                          Tags:{" "}
+                          <span className="text-fg font-medium">
+                            {progress.tagsDone}/{progress.tagsTotal}
+                          </span>
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
         {/* FOOTER */}
-        <div className="px-5 py-3 border-t border-line bg-page-soft flex justify-between items-center">
-          <button onClick={onClose} className="btn-secondary py-1.5! px-3!">
+        <div className="px-6 py-4 border-t border-line bg-page-soft flex justify-between items-center">
+          <button onClick={onClose} className="btn-secondary py-2! px-4!">
             Cancel
           </button>
 
@@ -1046,16 +1125,15 @@ export default function ExportTagsModal({
               !selectedContainerId ||
               !selectedWorkspaceId
             }
-            className="btn-primary py-1.5! px-3! disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-primary py-2! px-4! disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {exportLoading ? "Exporting..." : "Export Selected Setup"}
+            {exportLoading ? "Cloning..." : "Clone Selected Setup"}
           </button>
         </div>
       </div>
     </div>
   );
 }
-
 
 // /* eslint-disable @typescript-eslint/no-explicit-any */
 // "use client";
@@ -1064,7 +1142,14 @@ export default function ExportTagsModal({
 // import { useDashboardStore } from "@/app/store/useDashboardStore";
 // import { toast } from "react-toastify";
 // import { confirmDialog } from "@/lib/ui/dialog";
-// import { ChevronDown } from "lucide-react";
+// import {
+//   ChevronDown,
+//   CheckCircle2,
+//   Building2,
+//   Layers,
+//   Workflow,
+// } from "lucide-react";
+// import WorkspaceCrudSection from "@/app/dashboard/components/modals/WorkspaceCrudSection";
 
 // // ============================================================
 // // CUSTOM DROPDOWN (SHADCN STYLE) - NO SEARCH
@@ -1123,7 +1208,7 @@ export default function ExportTagsModal({
 //       </button>
 
 //       {open && !disabled && (
-//         <div className="absolute mt-2 w-full z-9999 rounded-xl border border-line bg-card shadow-xl overflow-hidden">
+//         <div className="absolute mt-2 w-full z-50 rounded-xl border border-line bg-card shadow-xl overflow-hidden">
 //           <div className="max-h-60 overflow-y-auto">
 //             {options.map((opt) => (
 //               <button
@@ -1142,9 +1227,7 @@ export default function ExportTagsModal({
 //             ))}
 
 //             {options.length === 0 && (
-//               <p className="text-sm text-muted px-4 py-3">
-//                 No results found.
-//               </p>
+//               <p className="text-sm text-muted px-4 py-3">No results found.</p>
 //             )}
 //           </div>
 //         </div>
@@ -1154,7 +1237,7 @@ export default function ExportTagsModal({
 // }
 
 // // ============================================================
-// // DUPLICATE NAME HELPER (casestudy_download_GA4 -> casestudy_download_GA4(1))
+// // DUPLICATE NAME HELPER
 // // ============================================================
 // function getNextDuplicateName(existingNames: string[], baseName: string) {
 //   if (!existingNames.includes(baseName)) return baseName;
@@ -1172,11 +1255,18 @@ export default function ExportTagsModal({
 //   onClose,
 //   onExportSuccess,
 //   selectedTags,
+//   selectedTriggerIds,
+//   selectedVariableNames,
+//   selectedTemplateIds,
 // }: {
 //   show: boolean;
 //   onClose: () => void;
 //   onExportSuccess: () => void;
 //   selectedTags: any[];
+
+//   selectedTriggerIds: string[];
+//   selectedVariableNames: string[];
+//   selectedTemplateIds: string[];
 // }) {
 //   const store = useDashboardStore();
 
@@ -1278,61 +1368,6 @@ export default function ExportTagsModal({
 
 //   function isGA4EventTag(tag: any) {
 //     return tag?.type === "gaawe";
-//   }
-
-//   // ============================================================
-//   // EXTRACT VARIABLE NAMES RECURSIVELY
-//   // ============================================================
-//   function extractVariablesFromAny(input: any, set: Set<string>) {
-//     if (!input) return;
-
-//     if (typeof input === "string") {
-//       const matches = input.match(/{{(.*?)}}/g);
-//       if (matches) {
-//         matches.forEach((m) => {
-//           const clean = m.replace("{{", "").replace("}}", "").trim();
-//           if (clean) set.add(clean);
-//         });
-//       }
-//       return;
-//     }
-
-//     if (Array.isArray(input)) {
-//       input.forEach((x) => extractVariablesFromAny(x, set));
-//       return;
-//     }
-
-//     if (typeof input === "object") {
-//       Object.values(input).forEach((val) => extractVariablesFromAny(val, set));
-//     }
-//   }
-
-//   function collectVariableDependencies(
-//     sourceVariables: any[],
-//     initialNames: Set<string>
-//   ) {
-//     const all = new Set(initialNames);
-
-//     let changed = true;
-//     while (changed) {
-//       changed = false;
-
-//       for (const v of sourceVariables) {
-//         if (!all.has(v.name)) continue;
-
-//         const temp = new Set<string>();
-//         extractVariablesFromAny(v.parameter, temp);
-
-//         for (const dep of temp) {
-//           if (!all.has(dep)) {
-//             all.add(dep);
-//             changed = true;
-//           }
-//         }
-//       }
-//     }
-
-//     return all;
 //   }
 
 //   // ============================================================
@@ -1484,7 +1519,7 @@ export default function ExportTagsModal({
 //   }
 
 //   // ============================================================
-//   // EXPORT VARIABLE (WITH DUPLICATE RETRY)
+//   // EXPORT VARIABLE
 //   // ============================================================
 //   async function exportVariable(variable: any) {
 //     let attempt = 0;
@@ -1546,7 +1581,7 @@ export default function ExportTagsModal({
 //   }
 
 //   // ============================================================
-//   // EXPORT TRIGGER (WITH DUPLICATE RETRY)
+//   // EXPORT TRIGGER
 //   // ============================================================
 //   async function exportTrigger(trigger: any) {
 //     let attempt = 0;
@@ -1653,7 +1688,7 @@ export default function ExportTagsModal({
 //   }
 
 //   // ============================================================
-//   // EXPORT TAG (ALLOW DUPLICATES WITH (1), (2) ... )
+//   // EXPORT TAG
 //   // ============================================================
 //   async function exportTag(
 //     tag: any,
@@ -1734,18 +1769,6 @@ export default function ExportTagsModal({
 //   }
 
 //   // ============================================================
-//   // TAG TYPE SUMMARY
-//   // ============================================================
-//   const tagTypeSummary = useMemo(() => {
-//     const counts: Record<string, number> = {};
-//     for (const t of selectedTags || []) {
-//       const type = t?.type || "unknown";
-//       counts[type] = (counts[type] || 0) + 1;
-//     }
-//     return Object.entries(counts).sort((a, b) => b[1] - a[1]);
-//   }, [selectedTags]);
-
-//   // ============================================================
 //   // MAIN EXPORT FUNCTION
 //   // ============================================================
 //   async function handleExportTags() {
@@ -1758,7 +1781,7 @@ export default function ExportTagsModal({
 //     }
 
 //     const ok = await confirmDialog({
-//       title: `Export ${selectedTags.length} tag(s) with their dependencies?`,
+//       title: `Export ${selectedTags.length} tag(s) with selected dependencies?`,
 //       description:
 //         "Templates, variables, triggers will be created first if missing. Existing items are not modified.",
 //       confirmLabel: "Export",
@@ -1766,24 +1789,18 @@ export default function ExportTagsModal({
 
 //     if (!ok) return;
 
-//     const toastId = toast.info(
-//       `Exporting... Templates ${progress.templatesDone}/${progress.templatesTotal}, Variables ${progress.variablesDone}/${progress.variablesTotal}, Triggers ${progress.triggersDone}/${progress.triggersTotal}, Tags ${progress.tagsDone}/${progress.tagsTotal}`,
-//       {
-//         position: "bottom-right",
-//         autoClose: false,
-//         closeOnClick: false,
-//         draggable: false,
-//       }
-//     );
+//     const toastId = toast.info(`Exporting...`, {
+//       position: "bottom-right",
+//       autoClose: false,
+//       closeOnClick: false,
+//       draggable: false,
+//     });
 
 //     const failedTags: string[] = [];
 
 //     try {
 //       setExportLoading(true);
 
-//       // ============================================================
-//       // LOAD SOURCE TRIGGERS + VARIABLES
-//       // ============================================================
 //       const sourceTriggersRes = await fetch(
 //         `/api/auth/gtm/triggers?accountId=${sourceAccountId}&containerId=${sourceContainerId}&workspaceId=${sourceWorkspaceId}`
 //       );
@@ -1796,64 +1813,17 @@ export default function ExportTagsModal({
 //       const sourceVariablesData = await safeJsonParse(sourceVariablesRes);
 //       const sourceVariables = sourceVariablesData.variable || [];
 
-//       // ============================================================
-//       // REQUIRED TRIGGERS (ONLY ATTACHED TO TAGS)
-//       // ============================================================
-//       const requiredTriggerIds = new Set<string>();
-
-//       for (const tag of selectedTags) {
-//         (tag.firingTriggerId || []).forEach((id: string) =>
-//           requiredTriggerIds.add(id)
-//         );
-//         (tag.blockingTriggerId || []).forEach((id: string) =>
-//           requiredTriggerIds.add(id)
-//         );
-//       }
-
 //       const requiredTriggers = sourceTriggers.filter((t: any) =>
-//         requiredTriggerIds.has(t.triggerId)
-//       );
-
-//       // ============================================================
-//       // REQUIRED VARIABLES (FROM TAG + FROM REQUIRED TRIGGERS)
-//       // ============================================================
-//       const requiredVariableNames = new Set<string>();
-
-//       // variables from tag parameters
-//       for (const tag of selectedTags) {
-//         extractVariablesFromAny(tag.parameter, requiredVariableNames);
-//       }
-
-//       // variables from trigger filters (IMPORTANT FIX)
-//       for (const trig of requiredTriggers) {
-//         extractVariablesFromAny(trig.filter, requiredVariableNames);
-//         extractVariablesFromAny(trig.autoEventFilter, requiredVariableNames);
-//         extractVariablesFromAny(trig.customEventFilter, requiredVariableNames);
-//       }
-
-//       // recursive nested variable dependencies (IMPORTANT FIX)
-//       const finalVariableSet = collectVariableDependencies(
-//         sourceVariables,
-//         requiredVariableNames
+//         (selectedTriggerIds || []).includes(t.triggerId)
 //       );
 
 //       const requiredVariables = sourceVariables.filter((v: any) =>
-//         finalVariableSet.has(v.name)
+//         (selectedVariableNames || []).includes(v.name)
 //       );
 
-//       // ============================================================
-//       // REQUIRED TEMPLATES
-//       // ============================================================
 //       const templateIds = new Set<string>();
+//       (selectedTemplateIds || []).forEach((id) => templateIds.add(id));
 
-//       for (const tag of selectedTags) {
-//         const templateId = getTemplateIdFromTagType(tag.type);
-//         if (templateId) templateIds.add(templateId);
-//       }
-
-//       // ============================================================
-//       // SET PROGRESS TOTALS
-//       // ============================================================
 //       setProgress({
 //         templatesTotal: templateIds.size,
 //         templatesDone: 0,
@@ -1865,9 +1835,6 @@ export default function ExportTagsModal({
 //         tagsDone: 0,
 //       });
 
-//       // ============================================================
-//       // EXPORT REQUIRED TEMPLATES FIRST
-//       // ============================================================
 //       const templateMap: Record<string, string> = {};
 //       let templatesDone = 0;
 
@@ -1883,14 +1850,11 @@ export default function ExportTagsModal({
 //         setProgress((p) => ({ ...p, templatesDone }));
 
 //         toast.update(toastId, {
-//           render: `Exporting... Templates ${templatesDone}/${templateIds.size}, Variables ${progress.variablesDone}/${progress.variablesTotal}, Triggers ${progress.triggersDone}/${progress.triggersTotal}, Tags ${progress.tagsDone}/${progress.tagsTotal}`,
+//           render: `Exporting... Templates ${templatesDone}/${templateIds.size}`,
 //         });
 //       }
 
-//       // ============================================================
-//       // EXPORT VARIABLES
-//       // ============================================================
-//       let destinationVariables = await fetchDestinationVariables();
+//       const destinationVariables = await fetchDestinationVariables();
 
 //       const missingVariables = requiredVariables.filter((v: any) => {
 //         return !destinationVariables.some((dv: any) => dv.name === v.name);
@@ -1909,16 +1873,11 @@ export default function ExportTagsModal({
 //         setProgress((p) => ({ ...p, variablesDone }));
 
 //         toast.update(toastId, {
-//           render: `Exporting... Templates ${templatesDone}/${templateIds.size}, Variables ${variablesDone}/${missingVariables.length}, Triggers ${progress.triggersDone}/${progress.triggersTotal}, Tags ${progress.tagsDone}/${progress.tagsTotal}`,
+//           render: `Exporting... Templates ${templatesDone}/${templateIds.size}, Variables ${variablesDone}/${missingVariables.length}`,
 //         });
 //       }
 
-//       destinationVariables = await fetchDestinationVariables();
-
-//       // ============================================================
-//       // EXPORT TRIGGERS + CREATE TRIGGER MAP
-//       // ============================================================
-//       let destinationTriggers = await fetchDestinationTriggers();
+//       const destinationTriggers = await fetchDestinationTriggers();
 //       const triggerMap: Record<string, string> = {};
 
 //       let triggersDone = 0;
@@ -1946,24 +1905,10 @@ export default function ExportTagsModal({
 //         setProgress((p) => ({ ...p, triggersDone }));
 
 //         toast.update(toastId, {
-//           render: `Exporting... Templates ${templatesDone}/${templateIds.size}, Variables ${variablesDone}/${missingVariables.length}, Triggers ${triggersDone}/${requiredTriggers.length}, Tags ${progress.tagsDone}/${progress.tagsTotal}`,
+//           render: `Exporting... Tags ${progress.tagsDone}/${selectedTags.length}`,
 //         });
 //       }
 
-//       destinationTriggers = await fetchDestinationTriggers();
-
-//       for (const t of requiredTriggers) {
-//         if (!triggerMap[t.triggerId]) {
-//           const destTrigger = destinationTriggers.find(
-//             (dt: any) => dt.name === t.name
-//           );
-//           if (destTrigger) triggerMap[t.triggerId] = destTrigger.triggerId;
-//         }
-//       }
-
-//       // ============================================================
-//       // EXPORT TAGS
-//       // ============================================================
 //       let destinationTags = await fetchDestinationTags();
 
 //       const ga4ConfigTags = selectedTags.filter(isGA4ConfigTag);
@@ -1974,7 +1919,6 @@ export default function ExportTagsModal({
 
 //       let tagsDone = 0;
 
-//       // export GA4 config tags first
 //       for (const tag of ga4ConfigTags) {
 //         try {
 //           await exportTag(tag, tag.type, triggerMap, destinationTags);
@@ -1984,10 +1928,6 @@ export default function ExportTagsModal({
 
 //         tagsDone++;
 //         setProgress((p) => ({ ...p, tagsDone }));
-
-//         toast.update(toastId, {
-//           render: `Exporting... Templates ${templatesDone}/${templateIds.size}, Variables ${variablesDone}/${missingVariables.length}, Triggers ${triggersDone}/${requiredTriggers.length}, Tags ${tagsDone}/${selectedTags.length}`,
-//         });
 //       }
 
 //       destinationTags = await fetchDestinationTags();
@@ -2003,7 +1943,6 @@ export default function ExportTagsModal({
 //         }
 //       }
 
-//       // export GA4 event tags
 //       for (const tag of ga4EventTags) {
 //         try {
 //           const cloned = JSON.parse(JSON.stringify(tag));
@@ -2024,13 +1963,8 @@ export default function ExportTagsModal({
 
 //         tagsDone++;
 //         setProgress((p) => ({ ...p, tagsDone }));
-
-//         toast.update(toastId, {
-//           render: `Exporting... Templates ${templatesDone}/${templateIds.size}, Variables ${variablesDone}/${missingVariables.length}, Triggers ${triggersDone}/${requiredTriggers.length}, Tags ${tagsDone}/${selectedTags.length}`,
-//         });
 //       }
 
-//       // export other tags
 //       for (const tag of otherTags) {
 //         try {
 //           let finalTagType = tag.type;
@@ -2053,10 +1987,6 @@ export default function ExportTagsModal({
 
 //         tagsDone++;
 //         setProgress((p) => ({ ...p, tagsDone }));
-
-//         toast.update(toastId, {
-//           render: `Exporting... Templates ${templatesDone}/${templateIds.size}, Variables ${variablesDone}/${missingVariables.length}, Triggers ${triggersDone}/${requiredTriggers.length}, Tags ${tagsDone}/${selectedTags.length}`,
-//         });
 //       }
 
 //       if (failedTags.length > 0) {
@@ -2067,8 +1997,6 @@ export default function ExportTagsModal({
 //           type: "warning",
 //           position: "bottom-right",
 //           autoClose: 8000,
-//           closeOnClick: true,
-//           draggable: true,
 //         });
 //         return;
 //       }
@@ -2078,8 +2006,6 @@ export default function ExportTagsModal({
 //         type: "success",
 //         position: "bottom-right",
 //         autoClose: 4000,
-//         closeOnClick: true,
-//         draggable: true,
 //       });
 
 //       onExportSuccess();
@@ -2095,112 +2021,247 @@ export default function ExportTagsModal({
 //     }
 //   }
 
+//   // ============================================================
+//   // STEPPER
+//   // ============================================================
+//   const steps = useMemo(() => {
+//     return [
+//       {
+//         id: "account",
+//         title: "Account",
+//         done: !!selectedAccountId,
+//         icon: Building2,
+//       },
+//       {
+//         id: "container",
+//         title: "Container",
+//         done: !!selectedContainerId,
+//         icon: Layers,
+//       },
+//       {
+//         id: "workspace",
+//         title: "Workspace",
+//         done: !!selectedWorkspaceId,
+//         icon: Workflow,
+//       },
+//     ];
+//   }, [selectedAccountId, selectedContainerId, selectedWorkspaceId]);
+
 //   if (!show) return null;
 
 //   return (
 //     <div className="fixed inset-0 bg-black/55 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-//       <div className="bg-card text-fg w-full max-w-3xl rounded-xl border border-edge shadow-lg overflow-hidden">
+//       <div className="bg-card text-fg w-full max-w-6xl rounded-2xl border border-edge shadow-xl overflow-hidden">
 //         {/* HEADER */}
-//         <div className="flex justify-between items-center px-5 py-3 border-b border-line">
-//           <h2 className="text-[15px] font-semibold text-fg">
-//             Export Tags (Full Export)
-//           </h2>
+//         <div className="flex justify-between items-center px-6 py-4 border-b border-line bg-card-hi">
+//           <div>
+//             <h2 className="text-[15px] font-semibold text-fg">
+//               Export Tags (Full Export)
+//             </h2>
+//             <p className="text-[12.5px] text-muted mt-0.5">
+//               Export selected tags and dependencies into a destination workspace.
+//             </p>
+//           </div>
 
 //           <button
 //             onClick={onClose}
-//             className="w-8 h-8 inline-flex items-center justify-center rounded-md text-muted hover:text-fg hover:bg-card-hi text-base"
+//             className="w-9 h-9 inline-flex items-center justify-center rounded-lg text-muted hover:text-fg hover:bg-card transition"
 //           >
 //             ✕
 //           </button>
 //         </div>
 
 //         {/* BODY */}
-//         <div className="grid grid-cols-12 min-h-90">
+//         <div className="grid grid-cols-12 h-140">
 //           {/* LEFT */}
-//           <div className="col-span-5 border-r border-line bg-card-hi p-4">
-//             <p className="text-[12.5px] font-medium text-faint mb-3 uppercase tracking-[0.05em]">
+//           <div className="col-span-5 border-r border-line bg-card-hi p-5 flex flex-col min-h-0">
+//             <p className="text-[12px] font-medium text-faint mb-3 uppercase tracking-[0.08em]">
 //               Selected Tags ({selectedTags.length})
 //             </p>
 
-//             <div className="bg-card border border-line rounded-lg p-3 mb-3">
-//               <p className="text-[11px] font-mono uppercase tracking-[0.08em] text-faint mb-2">
-//                 Tag Type Summary
-//               </p>
-
-//               <div className="flex flex-wrap gap-2">
-//                 {tagTypeSummary.map(([type, count]) => (
-//                   <span
-//                     key={type}
-//                     className="inline-flex items-center px-2 py-1 rounded-md text-[11px] border border-line bg-card-hi"
+//             <div className="bg-card border border-line rounded-xl overflow-hidden flex-1 min-h-0">
+//               <div className="overflow-y-auto h-full">
+//                 {selectedTags.map((tag: any) => (
+//                   <div
+//                     key={tag.tagId}
+//                     className="px-4 py-3 border-b border-line last:border-none hover:bg-card-hi transition"
 //                   >
-//                     {type}: {count}
-//                   </span>
+//                     <p className="text-[13px] font-medium text-fg">
+//                       {tag.name}
+//                     </p>
+//                     <p className="text-[11px] text-faint mt-0.5">
+//                       Type: {tag.type} · ID: {tag.tagId}
+//                     </p>
+//                   </div>
 //                 ))}
-//               </div>
-//             </div>
 
-//             <div className="bg-card border border-line rounded-lg overflow-y-auto max-h-72">
-//               {selectedTags.map((tag: any) => (
-//                 <div
-//                   key={tag.tagId}
-//                   className="px-4 py-3 border-b border-line last:border-none"
-//                 >
-//                   <p className="text-[13px] font-medium text-fg">{tag.name}</p>
-//                   <p className="text-[11px] text-faint">
-//                     Type: {tag.type} | ID: {tag.tagId}
-//                   </p>
-//                 </div>
-//               ))}
+//                 {selectedTags.length === 0 && (
+//                   <div className="p-6 text-center text-muted text-sm">
+//                     No tags selected.
+//                   </div>
+//                 )}
+//               </div>
 //             </div>
 //           </div>
 
 //           {/* RIGHT */}
-//           <div className="col-span-7 p-6 space-y-5">
-//             <h3 className="text-[14px] font-semibold text-fg mb-2">
-//               Select Destination
-//             </h3>
+//           <div className="col-span-7 p-6 min-h-0">
+//             <div className="flex gap-5 h-full">
+//               {/* ROAD STEPPER */}
+//               <div className="w-20 shrink-0 flex flex-col items-center pt-2">
+//                 {steps.map((s, idx) => {
+//                   const Icon = s.icon;
+//                   const done = s.done;
 
-//             <CustomDropdown
-//               label="Account"
-//               value={selectedAccountId}
-//               placeholder="-- Select Account --"
-//               disabled={loadingAccounts}
-//               options={accounts.map((a) => ({
-//                 value: a.accountId,
-//                 label: a.name,
-//               }))}
-//               onChange={(val) => setSelectedAccountId(val)}
-//             />
+//                   const isLast = idx === steps.length - 1;
 
-//             <CustomDropdown
-//               label="Container"
-//               value={selectedContainerId}
-//               placeholder="-- Select Container --"
-//               disabled={!selectedAccountId || loadingContainers}
-//               options={containers.map((c) => ({
-//                 value: c.containerId,
-//                 label: c.name,
-//               }))}
-//               onChange={(val) => setSelectedContainerId(val)}
-//             />
+//                   return (
+//                     <div
+//                       key={s.id}
+//                       className="flex flex-col items-center w-full"
+//                     >
+//                       <div
+//                         className={`w-9 h-9 rounded-full flex items-center justify-center border transition-all duration-300 ${
+//                           done
+//                             ? "bg-green-500/15 border-green-500 text-green-500"
+//                             : "bg-card border-line text-muted"
+//                         }`}
+//                       >
+//                         {done ? (
+//                           <CheckCircle2 size={18} />
+//                         ) : (
+//                           <Icon size={16} />
+//                         )}
+//                       </div>
 
-//             <CustomDropdown
-//               label="Workspace"
-//               value={selectedWorkspaceId}
-//               placeholder="-- Select Workspace --"
-//               disabled={!selectedContainerId || loadingWorkspaces}
-//               options={workspaces.map((w) => ({
-//                 value: w.workspaceId,
-//                 label: w.name,
-//               }))}
-//               onChange={(val) => setSelectedWorkspaceId(val)}
-//             />
+//                       {!isLast && (
+//                         <div
+//                           className={`w-px flex-1 my-2 transition-all duration-300 ${
+//                             steps[idx].done
+//                               ? "bg-green-500/60"
+//                               : "bg-line"
+//                           }`}
+//                         />
+//                       )}
+//                     </div>
+//                   );
+//                 })}
+//               </div>
+
+//               {/* INPUTS */}
+//               <div className="flex-1 min-w-0 flex flex-col min-h-0">
+//                 <div className="mb-5">
+//                   <h3 className="text-[15px] font-semibold text-fg">
+//                     Destination Setup
+//                   </h3>
+//                   <p className="text-[12.5px] text-muted mt-1">
+//                     Select the account, container, and workspace where tags will
+//                     be exported.
+//                   </p>
+//                 </div>
+
+//                 <div className="space-y-4 overflow-y-auto pr-1">
+//                   <CustomDropdown
+//                     label="Account"
+//                     value={selectedAccountId}
+//                     placeholder="-- Select Account --"
+//                     disabled={loadingAccounts}
+//                     options={accounts.map((a) => ({
+//                       value: a.accountId,
+//                       label: a.name,
+//                     }))}
+//                     onChange={(val) => {
+//                       setSelectedAccountId(val);
+//                       setSelectedContainerId("");
+//                       setSelectedWorkspaceId("");
+//                       setContainers([]);
+//                       setWorkspaces([]);
+//                     }}
+//                   />
+
+//                   <CustomDropdown
+//                     label="Container"
+//                     value={selectedContainerId}
+//                     placeholder="-- Select Container --"
+//                     disabled={!selectedAccountId || loadingContainers}
+//                     options={containers.map((c) => ({
+//                       value: c.containerId,
+//                       label: c.name,
+//                     }))}
+//                     onChange={(val) => {
+//                       setSelectedContainerId(val);
+//                       setSelectedWorkspaceId("");
+//                       setWorkspaces([]);
+//                     }}
+//                   />
+
+//                   <CustomDropdown
+//                     label="Workspace"
+//                     value={selectedWorkspaceId}
+//                     placeholder="-- Select Workspace --"
+//                     disabled={!selectedContainerId || loadingWorkspaces}
+//                     options={workspaces.map((w) => ({
+//                       value: w.workspaceId,
+//                       label: w.name,
+//                     }))}
+//                     onChange={(val) => setSelectedWorkspaceId(val)}
+//                   />
+
+//                   <WorkspaceCrudSection
+//                     selectedAccountId={selectedAccountId}
+//                     selectedContainerId={selectedContainerId}
+//                     selectedWorkspaceId={selectedWorkspaceId}
+//                     setSelectedWorkspaceId={setSelectedWorkspaceId}
+//                     workspaces={workspaces}
+//                     setWorkspaces={setWorkspaces}
+//                   />
+
+//                   {exportLoading && (
+//                     <div className="mt-2 bg-card border border-line rounded-xl p-4">
+//                       <p className="text-[12px] font-mono uppercase tracking-[0.12em] text-faint mb-2">
+//                         Export Progress
+//                       </p>
+
+//                       <div className="grid grid-cols-2 gap-3 text-[12.5px] text-muted">
+//                         <p>
+//                           Templates:{" "}
+//                           <span className="text-fg font-medium">
+//                             {progress.templatesDone}/{progress.templatesTotal}
+//                           </span>
+//                         </p>
+
+//                         <p>
+//                           Variables:{" "}
+//                           <span className="text-fg font-medium">
+//                             {progress.variablesDone}/{progress.variablesTotal}
+//                           </span>
+//                         </p>
+
+//                         <p>
+//                           Triggers:{" "}
+//                           <span className="text-fg font-medium">
+//                             {progress.triggersDone}/{progress.triggersTotal}
+//                           </span>
+//                         </p>
+
+//                         <p>
+//                           Tags:{" "}
+//                           <span className="text-fg font-medium">
+//                             {progress.tagsDone}/{progress.tagsTotal}
+//                           </span>
+//                         </p>
+//                       </div>
+//                     </div>
+//                   )}
+//                 </div>
+//               </div>
+//             </div>
 //           </div>
 //         </div>
 
 //         {/* FOOTER */}
-//         <div className="px-5 py-3 border-t border-line bg-page-soft flex justify-between items-center">
-//           <button onClick={onClose} className="btn-secondary py-1.5! px-3!">
+//         <div className="px-6 py-4 border-t border-line bg-page-soft flex justify-between items-center">
+//           <button onClick={onClose} className="btn-secondary py-2! px-4!">
 //             Cancel
 //           </button>
 
@@ -2212,9 +2273,9 @@ export default function ExportTagsModal({
 //               !selectedContainerId ||
 //               !selectedWorkspaceId
 //             }
-//             className="btn-primary py-1.5! px-3! disabled:opacity-50 disabled:cursor-not-allowed"
+//             className="btn-primary py-2! px-4! disabled:opacity-50 disabled:cursor-not-allowed"
 //           >
-//             {exportLoading ? "Exporting..." : "Export Full Setup"}
+//             {exportLoading ? "Exporting..." : "Export Selected Setup"}
 //           </button>
 //         </div>
 //       </div>

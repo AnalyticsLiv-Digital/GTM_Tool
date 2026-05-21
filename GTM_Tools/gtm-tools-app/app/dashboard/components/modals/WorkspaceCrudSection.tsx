@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import { confirmDialog } from "@/lib/ui/dialog";
 
@@ -16,20 +16,17 @@ export default function WorkspaceCrudSection({
   selectedAccountId: string;
   selectedContainerId: string;
   selectedWorkspaceId: string;
-  setSelectedWorkspaceId: (val: string) => void;
+  setSelectedWorkspaceId: React.Dispatch<React.SetStateAction<string>>;
   workspaces: any[];
-  setWorkspaces: (ws: any[]) => void;
+  setWorkspaces: React.Dispatch<React.SetStateAction<any[]>>;
 }) {
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
   const [workspaceCrudLoading, setWorkspaceCrudLoading] = useState(false);
 
-  const [deleteWorkspaceId, setDeleteWorkspaceId] = useState("");
-
   useEffect(() => {
     setIsCreatingWorkspace(false);
     setNewWorkspaceName("");
-    setDeleteWorkspaceId("");
   }, [selectedAccountId, selectedContainerId]);
 
   const workspaceLimitReached = (workspaces || []).length >= 3;
@@ -92,9 +89,7 @@ export default function WorkspaceCrudSection({
         body: JSON.stringify({
           accountId: selectedAccountId,
           containerId: selectedContainerId,
-          workspace: {
-            name: newWorkspaceName.trim(),
-          },
+          name: newWorkspaceName.trim(),
         }),
       });
 
@@ -121,12 +116,14 @@ export default function WorkspaceCrudSection({
       return;
     }
 
-    if (!deleteWorkspaceId) {
+    if (!selectedWorkspaceId) {
       toast.warning("Please select workspace to delete.");
       return;
     }
 
-    const ws = workspaces.find((w: any) => w.workspaceId === deleteWorkspaceId);
+    const ws = workspaces.find(
+      (w: any) => w.workspaceId === selectedWorkspaceId
+    );
 
     const ok = await confirmDialog({
       title: "Delete workspace?",
@@ -139,15 +136,13 @@ export default function WorkspaceCrudSection({
     try {
       setWorkspaceCrudLoading(true);
 
-      const res = await fetch("/api/auth/gtm/workspaces", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          accountId: selectedAccountId,
-          containerId: selectedContainerId,
-          workspaceId: deleteWorkspaceId,
-        }),
-      });
+      // ✅ FIX: backend DELETE reads query params, NOT JSON body
+      const res = await fetch(
+        `/api/auth/gtm/workspaces?accountId=${selectedAccountId}&containerId=${selectedContainerId}&workspaceId=${selectedWorkspaceId}`,
+        {
+          method: "DELETE",
+        }
+      );
 
       const data = await safeJsonParse(res);
 
@@ -155,13 +150,11 @@ export default function WorkspaceCrudSection({
 
       toast.success("Workspace deleted successfully!");
 
-      if (selectedWorkspaceId === deleteWorkspaceId) {
-        setSelectedWorkspaceId("");
-      }
+      setWorkspaces((prev) =>
+        prev.filter((w: any) => w.workspaceId !== selectedWorkspaceId)
+      );
 
-      setDeleteWorkspaceId("");
-
-      await reloadWorkspaces();
+      setSelectedWorkspaceId("");
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -171,7 +164,6 @@ export default function WorkspaceCrudSection({
 
   return (
     <div className="space-y-3 pt-2">
-      {/* WARNING */}
       {workspaceLimitReached && (
         <div className="p-3 rounded-lg border border-line bg-card-hi text-[12px] text-black-300">
           Max 3 workspaces allowed. Please review/delete existing workspace.
@@ -250,8 +242,8 @@ export default function WorkspaceCrudSection({
         </p>
 
         <select
-          value={deleteWorkspaceId}
-          onChange={(e) => setDeleteWorkspaceId(e.target.value)}
+          value={selectedWorkspaceId}
+          onChange={(e) => setSelectedWorkspaceId(e.target.value)}
           className="w-full bg-card text-[13px] py-2 px-3 rounded-md border border-line outline-none"
         >
           <option value="">-- Select workspace --</option>
@@ -264,7 +256,12 @@ export default function WorkspaceCrudSection({
 
         <button
           onClick={handleDeleteWorkspace}
-          disabled={!deleteWorkspaceId || workspaceCrudLoading}
+          disabled={
+            workspaceCrudLoading ||
+            !selectedAccountId ||
+            !selectedContainerId ||
+            !selectedWorkspaceId
+          }
           className="btn-danger py-1.5! px-3! mt-3 w-full justify-center disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {workspaceCrudLoading ? "Deleting…" : "Delete Workspace"}

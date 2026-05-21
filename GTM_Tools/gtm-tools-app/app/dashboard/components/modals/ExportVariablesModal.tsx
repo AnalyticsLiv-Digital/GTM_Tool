@@ -238,7 +238,7 @@ export default function ExportVariablesModal({
       setExportLoading(true);
 
       for (const variable of selectedVariables) {
-        await fetch("/api/auth/gtm/variables", {
+        const res = await fetch("/api/auth/gtm/variables", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -248,6 +248,20 @@ export default function ExportVariablesModal({
             variable,
           }),
         });
+
+        const data = await safeJsonParse(res);
+
+        console.log(
+          "Variable Export Response:",
+          variable?.name,
+          res.status,
+          data
+        );
+
+        if (!res.ok) {
+          console.log("❌ Variable export failed:", variable?.name, data);
+          throw new Error(data?.error || "Variable export failed");
+        }
       }
 
       toast.success("✅ Variables exported successfully!");
@@ -339,7 +353,6 @@ export default function ExportVariablesModal({
               onChange={(val) => setSelectedWorkspaceId(val)}
             />
 
-            {/* WORKSPACE CRUD */}
             <WorkspaceCrudSection
               selectedAccountId={selectedAccountId}
               selectedContainerId={selectedContainerId}

@@ -257,8 +257,11 @@ export default function ExportTemplatesModal({
 
         const data = await safeJsonParse(res);
 
+        console.log("Template Export Response:", t?.name, res.status, data);
+
         if (!res.ok) {
           console.log("❌ Template export failed:", t.name, data);
+          throw new Error(data?.error || "Template export failed");
         }
       }
 
@@ -369,7 +372,6 @@ export default function ExportTemplatesModal({
               />
             </div>
 
-            {/* WORKSPACE CRUD */}
             <div className="mt-5">
               <WorkspaceCrudSection
                 selectedAccountId={selectedAccountId}

@@ -243,7 +243,7 @@ export default function ExportTagDependenciesModal({
                 <div className="flex justify-between items-center px-5 py-3 border-b border-line">
                     <div>
                         <h2 className="text-[15px] font-semibold text-fg">
-                            Select Export Dependencies
+                            Below List of Dependencies will be exported along with the selected Entites
                         </h2>
                         <p className="text-[12px] text-muted mt-0.5">
                             Tags: {selectedTags.length} | Triggers: {globalCounts.triggers} |

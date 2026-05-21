@@ -124,7 +124,7 @@ export default function TagsPage() {
   // Store selected items before dependency modal opens
   const [pendingSelectedTags, setPendingSelectedTags] = useState<any[]>([]);
 
-  // store modal callbacks (safe to keep in ref because not used in render)
+  // store modal callbacks
   const exportCallbacksRef = useRef<any>(null);
 
   // store dependency selection payload
@@ -248,6 +248,15 @@ export default function TagsPage() {
         workspaceSelected={!!store.selectedWorkspaceId}
         onFetch={fetchTags}
         onCreate={openCreateTagModal}
+        onExport={(selectedItems) => {
+          // ✅ clean export handler
+          setPendingSelectedTags(selectedItems || []);
+          exportCallbacksRef.current = {
+            onClose: () => {},
+            onExportSuccess: () => {},
+          };
+          setShowDependenciesModal(true);
+        }}
         filterField={(t) => t.name}
         customFilter={(t) => {
           if (!selectedTagType) return true;
@@ -417,15 +426,6 @@ export default function TagsPage() {
           },
         ]}
         renderCreateEditModal={() => <TagModal />}
-        renderExportModal={({ show, onClose, onExportSuccess, selectedItems }) => {
-          if (show && !showDependenciesModal && !showExportModal) {
-            setPendingSelectedTags(selectedItems || []);
-            exportCallbacksRef.current = { onClose, onExportSuccess };
-            setShowDependenciesModal(true);
-          }
-
-          return null;
-        }}
       />
     </>
   );

@@ -69,7 +69,7 @@ function CustomDropdown({
       </button>
 
       {open && !disabled && (
-        <div className="absolute mt-2 w-full z-50 rounded-xl border border-line bg-card shadow-xl overflow-hidden">
+        <div className="absolute mt-2 w-full z-9999 rounded-xl border border-line bg-card shadow-xl overflow-hidden">
           <div className="p-2 border-b border-line bg-card-hi">
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-line bg-card">
               <Search size={15} className="text-muted" />
@@ -89,6 +89,7 @@ function CustomDropdown({
                 type="button"
                 onClick={() => {
                   onChange(opt.value);
+                  setSearch("");
                   setOpen(false);
                 }}
                 className={`w-full text-left px-4 py-2.5 text-sm hover:bg-card-hi transition ${
@@ -238,7 +239,7 @@ export default function ExportTriggersModal({
       setExportLoading(true);
 
       for (const trigger of selectedTriggers) {
-        await fetch("/api/auth/gtm/triggers", {
+        const res = await fetch("/api/auth/gtm/triggers", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -248,9 +249,18 @@ export default function ExportTriggersModal({
             trigger,
           }),
         });
+
+        const data = await safeJsonParse(res);
+
+        console.log("Trigger Export Response:", trigger?.name, res.status, data);
+
+        if (!res.ok) {
+          console.log("Trigger export failed:", trigger?.name, data);
+          throw new Error(data?.error || "Trigger export failed");
+        }
       }
 
-      toast.success("✅ Triggers exported successfully!");
+      toast.success("Triggers exported successfully!");
       onExportSuccess();
     } catch (err: any) {
       toast.error(err.message);
@@ -263,7 +273,7 @@ export default function ExportTriggersModal({
 
   return (
     <div className="fixed inset-0 bg-black/55 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-card text-fg w-full max-w-3xl rounded-xl border border-edge shadow-lg overflow-hidden">
+      <div className="bg-card text-fg w-full max-w-3xl rounded-xl border border-edge shadow-lg overflow-visible">
         <div className="flex justify-between items-center px-5 py-3 border-b border-line">
           <h2 className="text-[15px] font-semibold text-fg">
             Export Triggers ({selectedTriggers.length})
@@ -339,7 +349,6 @@ export default function ExportTriggersModal({
               onChange={(val) => setSelectedWorkspaceId(val)}
             />
 
-            {/* WORKSPACE CRUD */}
             <WorkspaceCrudSection
               selectedAccountId={selectedAccountId}
               selectedContainerId={selectedContainerId}
@@ -375,13 +384,13 @@ export default function ExportTriggersModal({
   );
 }
 
-
 // /* eslint-disable @typescript-eslint/no-explicit-any */
 // "use client";
 
 // import { useEffect, useMemo, useRef, useState } from "react";
 // import { toast } from "react-toastify";
 // import { ChevronDown, Search } from "lucide-react";
+// import WorkspaceCrudSection from "@/app/dashboard/components/modals/WorkspaceCrudSection";
 
 // function CustomDropdown({
 //   label,
@@ -425,7 +434,7 @@ export default function ExportTriggersModal({
 //   }, [options, search]);
 
 //   return (
-//     <div className="w-full" ref={dropdownRef}>
+//     <div className="w-full relative" ref={dropdownRef}>
 //       <label className="block text-[12.5px] font-medium text-fg mb-2">
 //         {label}
 //       </label>
@@ -446,7 +455,7 @@ export default function ExportTriggersModal({
 //       </button>
 
 //       {open && !disabled && (
-//         <div className="mt-2 w-full z-50 rounded-xl border border-line bg-card shadow-xl overflow-hidden">
+//         <div className="absolute mt-2 w-full z-50 rounded-xl border border-line bg-card shadow-xl overflow-hidden">
 //           <div className="p-2 border-b border-line bg-card-hi">
 //             <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-line bg-card">
 //               <Search size={15} className="text-muted" />
@@ -714,6 +723,16 @@ export default function ExportTriggersModal({
 //                 label: w.name,
 //               }))}
 //               onChange={(val) => setSelectedWorkspaceId(val)}
+//             />
+
+//             {/* WORKSPACE CRUD */}
+//             <WorkspaceCrudSection
+//               selectedAccountId={selectedAccountId}
+//               selectedContainerId={selectedContainerId}
+//               selectedWorkspaceId={selectedWorkspaceId}
+//               setSelectedWorkspaceId={setSelectedWorkspaceId}
+//               workspaces={workspaces}
+//               setWorkspaces={setWorkspaces}
 //             />
 //           </div>
 //         </div>
