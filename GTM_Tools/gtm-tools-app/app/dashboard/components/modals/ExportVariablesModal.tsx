@@ -1,9 +1,17 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect,  useRef, useState } from "react";
 import { toast } from "react-toastify";
-import { ChevronDown, Search } from "lucide-react";
+
+import {
+  ChevronDown,
+  CheckCircle2,
+  Folder,
+  Boxes,
+  Workflow,
+} from "lucide-react";
+
 import WorkspaceCrudSection from "@/app/dashboard/components/modals/WorkspaceCrudSection";
 
 function CustomDropdown({
@@ -22,7 +30,7 @@ function CustomDropdown({
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const [search, setSearch] = useState("");
+
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const selectedLabel =
@@ -36,16 +44,9 @@ function CustomDropdown({
     }
 
     document.addEventListener("mousedown", handleOutside);
+
     return () => document.removeEventListener("mousedown", handleOutside);
   }, []);
-
-  const filtered = useMemo(() => {
-    if (!search.trim()) return options;
-
-    return options.filter((o) =>
-      o.label.toLowerCase().includes(search.toLowerCase())
-    );
-  }, [options, search]);
 
   return (
     <div className="w-full relative" ref={dropdownRef}>
@@ -62,6 +63,7 @@ function CustomDropdown({
         }`}
       >
         <span className="truncate">{selectedLabel}</span>
+
         <ChevronDown
           size={16}
           className={`text-muted transition ${open ? "rotate-180" : ""}`}
@@ -69,21 +71,9 @@ function CustomDropdown({
       </button>
 
       {open && !disabled && (
-        <div className="absolute mt-2 w-full z-50 rounded-xl border border-line bg-card shadow-xl overflow-hidden">
-          <div className="p-2 border-b border-line bg-card-hi">
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-line bg-card">
-              <Search size={15} className="text-muted" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder={`Search ${label.toLowerCase()}...`}
-                className="w-full bg-transparent outline-none text-sm text-fg placeholder:text-muted"
-              />
-            </div>
-          </div>
-
+        <div className="absolute mt-2 w-full z-9999 rounded-xl border border-line bg-card shadow-xl overflow-hidden">
           <div className="max-h-60 overflow-y-auto">
-            {filtered.map((opt) => (
+            {options.map((opt) => (
               <button
                 key={opt.value}
                 type="button"
@@ -99,9 +89,9 @@ function CustomDropdown({
               </button>
             ))}
 
-            {filtered.length === 0 && (
+            {options.length === 0 && (
               <p className="text-sm text-muted px-4 py-3">
-                No matching results.
+                No results found.
               </p>
             )}
           </div>
@@ -138,6 +128,7 @@ export default function ExportVariablesModal({
 
   async function safeJsonParse(res: Response) {
     const text = await res.text();
+
     try {
       return text ? JSON.parse(text) : {};
     } catch {
@@ -153,9 +144,12 @@ export default function ExportVariablesModal({
         setLoadingAccounts(true);
 
         const res = await fetch("/api/auth/gtm/accounts");
+
         const data = await safeJsonParse(res);
 
-        if (!res.ok) throw new Error(data?.error || "Failed to fetch accounts");
+        if (!res.ok) {
+          throw new Error(data?.error || "Failed to fetch accounts");
+        }
 
         setAccounts(data.account || []);
       } catch (err: any) {
@@ -181,10 +175,12 @@ export default function ExportVariablesModal({
 
         const data = await safeJsonParse(res);
 
-        if (!res.ok)
+        if (!res.ok) {
           throw new Error(data?.error || "Failed to fetch containers");
+        }
 
         setContainers(data.container || []);
+
         setSelectedContainerId("");
         setSelectedWorkspaceId("");
         setWorkspaces([]);
@@ -211,10 +207,12 @@ export default function ExportVariablesModal({
 
         const data = await safeJsonParse(res);
 
-        if (!res.ok)
+        if (!res.ok) {
           throw new Error(data?.error || "Failed to fetch workspaces");
+        }
 
         setWorkspaces(data.workspace || []);
+
         setSelectedWorkspaceId("");
       } catch (err: any) {
         toast.error(err.message);
@@ -227,12 +225,21 @@ export default function ExportVariablesModal({
   }, [selectedAccountId, selectedContainerId]);
 
   async function handleExport() {
-    if (!selectedAccountId) return toast.warning("Please select an Account");
-    if (!selectedContainerId) return toast.warning("Please select a Container");
-    if (!selectedWorkspaceId) return toast.warning("Please select a Workspace");
+    if (!selectedAccountId) {
+      return toast.warning("Please select an Account");
+    }
 
-    if (!selectedVariables.length)
+    if (!selectedContainerId) {
+      return toast.warning("Please select a Container");
+    }
+
+    if (!selectedWorkspaceId) {
+      return toast.warning("Please select a Workspace");
+    }
+
+    if (!selectedVariables.length) {
       return toast.warning("No variables selected for export.");
+    }
 
     try {
       setExportLoading(true);
@@ -240,7 +247,9 @@ export default function ExportVariablesModal({
       for (const variable of selectedVariables) {
         const res = await fetch("/api/auth/gtm/variables", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+          },
           body: JSON.stringify({
             accountId: selectedAccountId,
             containerId: selectedContainerId,
@@ -259,12 +268,12 @@ export default function ExportVariablesModal({
         );
 
         if (!res.ok) {
-          console.log("❌ Variable export failed:", variable?.name, data);
           throw new Error(data?.error || "Variable export failed");
         }
       }
 
-      toast.success("✅ Variables exported successfully!");
+      toast.success("Variables exported successfully!");
+
       onExportSuccess();
     } catch (err: any) {
       toast.error(err.message);
@@ -275,9 +284,28 @@ export default function ExportVariablesModal({
 
   if (!show) return null;
 
+  const steps = [
+    {
+      id: 1,
+      icon: Folder,
+      done: !!selectedAccountId,
+    },
+    {
+      id: 2,
+      icon: Boxes,
+      done: !!selectedContainerId,
+    },
+    {
+      id: 3,
+      icon: Workflow,
+      done: !!selectedWorkspaceId,
+    },
+  ];
+
   return (
     <div className="fixed inset-0 bg-black/55 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-card text-fg w-full max-w-3xl rounded-xl border border-edge shadow-lg overflow-hidden">
+      <div className="bg-card text-fg w-full max-w-3xl rounded-xl border border-edge shadow-lg overflow-visible">
+        {/* HEADER */}
         <div className="flex justify-between items-center px-5 py-3 border-b border-line">
           <h2 className="text-[15px] font-semibold text-fg">
             Export Variables ({selectedVariables.length})
@@ -291,19 +319,24 @@ export default function ExportVariablesModal({
           </button>
         </div>
 
-        <div className="grid grid-cols-12 min-h-90">
+        {/* BODY */}
+        <div className="grid grid-cols-12 min-h-135">
+          {/* LEFT */}
           <div className="col-span-5 border-r border-line bg-card-hi p-4">
             <p className="text-[12px] font-medium text-faint mb-3 uppercase tracking-[0.05em]">
               Selected Variables ({selectedVariables.length})
             </p>
 
-            <div className="bg-card border border-line rounded-lg overflow-y-auto max-h-80">
+            <div className="bg-card border border-line rounded-lg overflow-y-auto max-h-107.5">
               {selectedVariables.map((v: any) => (
                 <div
                   key={v.variableId}
                   className="px-4 py-3 border-b border-line last:border-none"
                 >
-                  <p className="text-[13px] font-medium text-fg">{v.name}</p>
+                  <p className="text-[13px] font-medium text-fg">
+                    {v.name}
+                  </p>
+
                   <p className="text-[11px] text-faint">
                     Type: {v.type} | ID: {v.variableId}
                   </p>
@@ -312,60 +345,104 @@ export default function ExportVariablesModal({
             </div>
           </div>
 
-          <div className="col-span-7 p-6 space-y-5">
-            <h3 className="text-[14px] font-semibold text-fg mb-2">
-              Select Destination
-            </h3>
+          {/* RIGHT */}
+          <div className="col-span-7 p-6">
+            {/* STEPPER */}
+            <div className="flex items-center justify-between w-full mb-7 px-2">
+              {steps.map((s, idx) => {
+                const Icon = s.icon;
 
-            <CustomDropdown
-              label="Account"
-              value={selectedAccountId}
-              placeholder="-- Select Account --"
-              disabled={loadingAccounts}
-              options={accounts.map((a) => ({
-                value: a.accountId,
-                label: a.name,
-              }))}
-              onChange={(val) => setSelectedAccountId(val)}
-            />
+                const done = s.done;
 
-            <CustomDropdown
-              label="Container"
-              value={selectedContainerId}
-              placeholder="-- Select Container --"
-              disabled={!selectedAccountId || loadingContainers}
-              options={containers.map((c) => ({
-                value: c.containerId,
-                label: c.name,
-              }))}
-              onChange={(val) => setSelectedContainerId(val)}
-            />
+                const isLast = idx === steps.length - 1;
 
-            <CustomDropdown
-              label="Workspace"
-              value={selectedWorkspaceId}
-              placeholder="-- Select Workspace --"
-              disabled={!selectedContainerId || loadingWorkspaces}
-              options={workspaces.map((w) => ({
-                value: w.workspaceId,
-                label: w.name,
-              }))}
-              onChange={(val) => setSelectedWorkspaceId(val)}
-            />
+                return (
+                  <div key={s.id} className="flex items-center flex-1">
+                    <div
+                      className={`w-9 h-9 rounded-full flex items-center justify-center border transition-all duration-300 ${
+                        done
+                          ? "bg-green-500/15 border-green-500 text-green-500"
+                          : "bg-card border-line text-muted"
+                      }`}
+                    >
+                      {done ? (
+                        <CheckCircle2 size={18} />
+                      ) : (
+                        <Icon size={18} />
+                      )}
+                    </div>
 
-            <WorkspaceCrudSection
-              selectedAccountId={selectedAccountId}
-              selectedContainerId={selectedContainerId}
-              selectedWorkspaceId={selectedWorkspaceId}
-              setSelectedWorkspaceId={setSelectedWorkspaceId}
-              workspaces={workspaces}
-              setWorkspaces={setWorkspaces}
-            />
+                    {!isLast && (
+                      <div
+                        className={`flex-1 h-0.5 mx-3 transition-all duration-300 ${
+                          done ? "bg-green-500/60" : "bg-line"
+                        }`}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="space-y-5">
+              <h3 className="text-[14px] font-semibold text-fg">
+                Select Destination
+              </h3>
+
+              <CustomDropdown
+                label="Account"
+                value={selectedAccountId}
+                placeholder="-- Select Account --"
+                disabled={loadingAccounts}
+                options={accounts.map((a) => ({
+                  value: a.accountId,
+                  label: a.name,
+                }))}
+                onChange={(val) => setSelectedAccountId(val)}
+              />
+
+              <CustomDropdown
+                label="Container"
+                value={selectedContainerId}
+                placeholder="-- Select Container --"
+                disabled={!selectedAccountId || loadingContainers}
+                options={containers.map((c) => ({
+                  value: c.containerId,
+                  label: c.name,
+                }))}
+                onChange={(val) => setSelectedContainerId(val)}
+              />
+
+              <CustomDropdown
+                label="Workspace"
+                value={selectedWorkspaceId}
+                placeholder="-- Select Workspace --"
+                disabled={!selectedContainerId || loadingWorkspaces}
+                options={workspaces.map((w) => ({
+                  value: w.workspaceId,
+                  label: w.name,
+                }))}
+                onChange={(val) => setSelectedWorkspaceId(val)}
+              />
+
+              <WorkspaceCrudSection
+                selectedAccountId={selectedAccountId}
+                selectedContainerId={selectedContainerId}
+                selectedWorkspaceId={selectedWorkspaceId}
+                setSelectedWorkspaceId={setSelectedWorkspaceId}
+                workspaces={workspaces}
+                setWorkspaces={setWorkspaces}
+              />
+            </div>
           </div>
         </div>
 
+        {/* FOOTER */}
         <div className="px-5 py-3 border-t border-line bg-page-soft flex justify-between items-center">
-          <button onClick={onClose} className="btn-secondary py-1.5! px-3!">
+          <button
+            onClick={onClose}
+            className="btn-secondary py-1.5! px-3!"
+          >
             Cancel
           </button>
 
