@@ -135,9 +135,8 @@ export default function TriggersPage() {
   }, [uniqueTriggerTypes, search]);
 
   const selectedLabel = selectedTriggerType
-    ? `${triggerTypeMap[selectedTriggerType] || selectedTriggerType} (${
-        triggerTypeCounts[selectedTriggerType] || 0
-      })`
+    ? `${triggerTypeMap[selectedTriggerType] || selectedTriggerType} (${triggerTypeCounts[selectedTriggerType] || 0
+    })`
     : `All Trigger Types (${store.triggers?.length || 0})`;
 
   return (
@@ -152,7 +151,9 @@ export default function TriggersPage() {
       loading={store.triggersLoading}
       error={store.triggersError}
       getId={(t) => t.triggerId}
-      workspaceSelected={!!store.selectedWorkspaceId}
+      workspaceSelected={
+        !!store.selectedWorkspaceId || store.triggers.length > 0
+      }
       onFetch={fetchTriggers}
       onCreate={() => store.setShowTriggerModal(true)}
       filterField={(t) => t.name}
@@ -184,9 +185,8 @@ export default function TriggersPage() {
 
             <ChevronDown
               size={18}
-              className={`text-muted transition ${
-                dropdownOpen ? "rotate-180" : ""
-              }`}
+              className={`text-muted transition ${dropdownOpen ? "rotate-180" : ""
+                }`}
             />
           </button>
 
@@ -215,9 +215,8 @@ export default function TriggersPage() {
                     setSelectedTriggerType("");
                     setDropdownOpen(false);
                   }}
-                  className={`w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-card-hi transition ${
-                    selectedTriggerType === "" ? "bg-card-hi" : ""
-                  }`}
+                  className={`w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-card-hi transition ${selectedTriggerType === "" ? "bg-card-hi" : ""
+                    }`}
                 >
                   <div className="flex items-center gap-2">
                     <Zap size={16} color="#6b7280" />
@@ -240,9 +239,8 @@ export default function TriggersPage() {
                       setSelectedTriggerType(type);
                       setDropdownOpen(false);
                     }}
-                    className={`w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-card-hi transition ${
-                      selectedTriggerType === type ? "bg-card-hi" : ""
-                    }`}
+                    className={`w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-card-hi transition ${selectedTriggerType === type ? "bg-card-hi" : ""
+                      }`}
                   >
                     <div className="flex items-center gap-2">
                       <span className="shrink-0">{getTriggerIcon(type)}</span>

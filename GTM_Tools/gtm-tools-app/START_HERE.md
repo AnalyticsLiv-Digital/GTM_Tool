@@ -1,4 +1,4 @@
-# 🎯 GTM Tools - Setup Complete!
+# 🎯 GTM Tool - Setup Complete!
 
 ## ✅ Your Application is Ready!
 

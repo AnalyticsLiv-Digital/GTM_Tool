@@ -14,6 +14,7 @@ export default function TriggerModal() {
     setTriggerNameInput,
     triggerCrudLoading,
     selectedWorkspaceId,
+    triggers,
   } = useDashboardStore();
 
   const { handleSaveTrigger } = useDashboardActions();
@@ -29,16 +30,16 @@ export default function TriggerModal() {
       title={triggerModalMode === "create" ? "Create trigger" : "Edit trigger"}
       initialFocusRef={inputRef}
       footer={
-        selectedWorkspaceId ? (
+        selectedWorkspaceId || triggers.length > 0 ? (
           <>
-            <button type="button" onClick={close} className="btn-secondary !py-1.5 !px-3">
+            <button type="button" onClick={close} className="btn-secondary py-1.5! px-3!">
               Cancel
             </button>
             <button
               type="button"
               disabled={triggerCrudLoading}
               onClick={handleSaveTrigger}
-              className="btn-primary !py-1.5 !px-3 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn-primary py-1.5! px-3! disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {triggerCrudLoading ? "Saving…" : "Save trigger"}
             </button>
@@ -46,8 +47,10 @@ export default function TriggerModal() {
         ) : null
       }
     >
-      {!selectedWorkspaceId ? (
-        <p className="text-sm text-muted">Please select a workspace first.</p>
+      {!selectedWorkspaceId && triggers.length === 0 ? (
+        <p className="text-sm text-muted">
+          Please select a workspace first.
+        </p>
       ) : (
         <div>
           <label htmlFor="trigger-name" className="block text-[12.5px] font-medium text-fg mb-2">

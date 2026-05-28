@@ -50,7 +50,7 @@ Still in the same OAuth 2.0 Client ID settings:
 1. Go to **OAuth consent screen** (left menu)
 2. Ensure **User Type** is set to **External**
 3. Fill in the required fields:
-   - **App name**: GTM Tools
+   - **App name**: GTM Tool
    - **User support email**: your-email@gmail.com
    - **Developer contact information**: your-email@gmail.com
 4. Click **Save and Continue**

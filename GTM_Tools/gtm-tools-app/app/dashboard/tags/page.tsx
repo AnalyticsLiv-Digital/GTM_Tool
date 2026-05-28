@@ -250,7 +250,9 @@ export default function TagsPage() {
             ? "opacity-55 grayscale-[0.15] bg-red-500/[0.03]"
             : ""
         }
-        workspaceSelected={!!store.selectedWorkspaceId}
+        workspaceSelected={
+          !!store.selectedWorkspaceId || store.tags.length > 0
+        } 
         onFetch={fetchTags}
         onCreate={openCreateTagModal}
         onExport={(selectedItems) => {

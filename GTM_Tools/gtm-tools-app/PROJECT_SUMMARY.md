@@ -1,4 +1,4 @@
-# 🎉 GTM Tools - Project Complete!
+# 🎉 GTM Tool - Project Complete!
 
 ## Project Summary
 

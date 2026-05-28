@@ -123,9 +123,8 @@ export default function VariablesPage() {
   }, [uniqueVariableTypes, search]);
 
   const selectedLabel = selectedVariableType
-    ? `${variableTypeMap[selectedVariableType] || selectedVariableType} (${
-        variableTypeCounts[selectedVariableType] || 0
-      })`
+    ? `${variableTypeMap[selectedVariableType] || selectedVariableType} (${variableTypeCounts[selectedVariableType] || 0
+    })`
     : `All Variable Types (${store.variables?.length || 0})`;
 
   return (
@@ -140,7 +139,9 @@ export default function VariablesPage() {
       loading={store.variablesLoading}
       error={store.variablesError}
       getId={(v) => v.variableId}
-      workspaceSelected={!!store.selectedWorkspaceId}
+      workspaceSelected={
+        !!store.selectedWorkspaceId || store.variables.length > 0
+      }
       onFetch={fetchVariables}
       onCreate={() => store.setShowVariableModal(true)}
       filterField={(v) => v.name}
@@ -172,9 +173,8 @@ export default function VariablesPage() {
 
             <ChevronDown
               size={18}
-              className={`text-muted transition ${
-                dropdownOpen ? "rotate-180" : ""
-              }`}
+              className={`text-muted transition ${dropdownOpen ? "rotate-180" : ""
+                }`}
             />
           </button>
 
@@ -203,9 +203,8 @@ export default function VariablesPage() {
                     setSelectedVariableType("");
                     setDropdownOpen(false);
                   }}
-                  className={`w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-card-hi transition ${
-                    selectedVariableType === "" ? "bg-card-hi" : ""
-                  }`}
+                  className={`w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-card-hi transition ${selectedVariableType === "" ? "bg-card-hi" : ""
+                    }`}
                 >
                   <div className="flex items-center gap-2">
                     <Database size={16} color="#6b7280" />
@@ -228,9 +227,8 @@ export default function VariablesPage() {
                       setSelectedVariableType(type);
                       setDropdownOpen(false);
                     }}
-                    className={`w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-card-hi transition ${
-                      selectedVariableType === type ? "bg-card-hi" : ""
-                    }`}
+                    className={`w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-card-hi transition ${selectedVariableType === type ? "bg-card-hi" : ""
+                      }`}
                   >
                     <div className="flex items-center gap-2">
                       <span className="shrink-0">{getVariableIcon(type)}</span>

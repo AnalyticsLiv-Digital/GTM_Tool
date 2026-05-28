@@ -1,4 +1,4 @@
-# GTM Tools - Next.js Application
+# GTM Tool - Next.js Application
 
 A modern, full-stack Google Tag Manager (GTM) dashboard built with Next.js, featuring authentication, user management, and container management capabilities.
 

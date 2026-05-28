@@ -21,7 +21,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "GTM Tools — Manage your tag manager, smarter",
+  title: "GTM Tool — Manage your tag manager, smarter",
   description:
     "Inspect, audit, and export every tag, trigger, variable, and template in your Google Tag Manager stack. An AnalyticsLiv product.",
 };

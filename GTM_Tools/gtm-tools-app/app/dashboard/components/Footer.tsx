@@ -5,7 +5,7 @@ export default function Footer() {
     <div className="mt-14 border-t border-line pt-6 flex flex-col sm:flex-row justify-between items-center text-[13px] text-muted gap-3">
       <p className="flex items-center gap-2">
         <Code2 size={14} strokeWidth={1.8} />
-        GTM Tools · Next.js · Google Tag Manager API
+        GTM Tool · Next.js · Google Tag Manager API
       </p>
 
       <p className="flex items-center gap-1.5 text-accent">
