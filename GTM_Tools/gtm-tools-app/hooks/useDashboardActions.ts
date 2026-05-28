@@ -369,6 +369,42 @@ export function useDashboardActions() {
     }
   };
 
+  const handleDeleteWorkspace = async () => {
+    if (!store.selectedWorkspaceId) {
+      notify.warning("Select a workspace first");
+      return;
+    }
+
+    try {
+      const confirmed = await confirmDialog({
+        title: "Delete this workspace?",
+        description: "This will permanently remove the workspace and all its tags, triggers, variables, and templates. This cannot be undone.",
+        //tone: "destructive",
+        confirmLabel: "Delete workspace",
+      });
+
+      if (!confirmed) return;
+
+      store.setWorkspaceCrudLoading(true);
+
+      const res = await fetch(
+        `/api/auth/gtm/workspaces?accountId=${store.selectedAccountId}&containerId=${store.selectedContainerId}&workspaceId=${store.selectedWorkspaceId}`,
+        { method: "DELETE" }
+      );
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Failed to delete workspace");
+
+      store.setSelectedWorkspaceId("");
+      store.setSelectedWorkspaceName("");
+      await fetchWorkspaces();
+      notify.success("Workspace deleted successfully");
+    } catch (err: any) {
+      notify.error(err.message);
+    } finally {
+      store.setWorkspaceCrudLoading(false);
+    }
+  };
 
   // ============================================================
   // TAG CRUD
@@ -936,6 +972,7 @@ export function useDashboardActions() {
     // workspace crud
     openCreateWorkspaceModal,
     handleSaveWorkspace,
+    handleDeleteWorkspace,
 
     // tags crud
     openCreateTagModal,

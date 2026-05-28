@@ -83,7 +83,7 @@ export default function DashboardPage() {
               Dashboard
             </p>
             <h1 className="text-[28px] md:text-[32px] font-semibold text-fg leading-tight tracking-[-0.02em]">
-              GTM Tools
+              GTM Tool
             </h1>
             <p className="text-[14.5px] text-muted mt-2 max-w-2xl">
               Audit, manage, export, and optimize your Google Tag Manager workspace.

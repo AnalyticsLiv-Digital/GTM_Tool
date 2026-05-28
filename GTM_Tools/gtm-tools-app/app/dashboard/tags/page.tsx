@@ -24,6 +24,7 @@ import {
   Music,
   MessageCircle,
   AtSign,
+  PauseCircle,
 } from "lucide-react";
 
 const tagTypeMap: Record<string, string> = {
@@ -182,9 +183,8 @@ export default function TagsPage() {
   };
 
   const selectedLabel = selectedTagType
-    ? `${tagTypeMap[selectedTagType] || selectedTagType} (${
-        tagTypeCounts[selectedTagType] || 0
-      })`
+    ? `${tagTypeMap[selectedTagType] || selectedTagType} (${tagTypeCounts[selectedTagType] || 0
+    })`
     : `All Tag Types (${store.tags?.length || 0})`;
 
   return (
@@ -245,6 +245,11 @@ export default function TagsPage() {
         loading={store.tagsLoading}
         error={store.tagsError}
         getId={(t) => t.tagId}
+        rowClassName={(t) =>
+          t.paused
+            ? "opacity-55 grayscale-[0.15] bg-red-500/[0.03]"
+            : ""
+        }
         workspaceSelected={!!store.selectedWorkspaceId}
         onFetch={fetchTags}
         onCreate={openCreateTagModal}
@@ -252,8 +257,8 @@ export default function TagsPage() {
           // ✅ clean export handler
           setPendingSelectedTags(selectedItems || []);
           exportCallbacksRef.current = {
-            onClose: () => {},
-            onExportSuccess: () => {},
+            onClose: () => { },
+            onExportSuccess: () => { },
           };
           setShowDependenciesModal(true);
         }}
@@ -285,9 +290,8 @@ export default function TagsPage() {
 
               <ChevronDown
                 size={16}
-                className={`text-muted transition ${
-                  dropdownOpen ? "rotate-180" : ""
-                }`}
+                className={`text-muted transition ${dropdownOpen ? "rotate-180" : ""
+                  }`}
               />
             </button>
 
@@ -312,9 +316,8 @@ export default function TagsPage() {
                       setSelectedTagType("");
                       setDropdownOpen(false);
                     }}
-                    className={`w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-card-hi transition ${
-                      selectedTagType === "" ? "bg-card-hi" : ""
-                    }`}
+                    className={`w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-card-hi transition ${selectedTagType === "" ? "bg-card-hi" : ""
+                      }`}
                   >
                     <div className="flex items-center gap-2">
                       <Tag size={16} color="#6b7280" />
@@ -336,9 +339,8 @@ export default function TagsPage() {
                         setSelectedTagType(type);
                         setDropdownOpen(false);
                       }}
-                      className={`w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-card-hi transition ${
-                        selectedTagType === type ? "bg-card-hi" : ""
-                      }`}
+                      className={`w-full flex items-center justify-between px-4 py-2.5 text-sm hover:bg-card-hi transition ${selectedTagType === type ? "bg-card-hi" : ""
+                        }`}
                     >
                       <div className="flex items-center gap-2">
                         <span className="shrink-0">{getTagIcon(type)}</span>
@@ -389,6 +391,38 @@ export default function TagsPage() {
                 {tagTypeMap[t.type] || t.type || "Unknown"}
               </span>
             ),
+          },
+          {
+            label: "Status",
+            render: (t) =>
+              t.paused ? (
+                <span
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold border"
+                  style={{
+                    background:
+                      "color-mix(in srgb, #ef4444 16%, transparent)",
+                    color: "#ef4444",
+                    borderColor:
+                      "color-mix(in srgb, #ef4444 28%, transparent)",
+                  }}
+                >
+                  <PauseCircle size={12} />
+                  Paused
+                </span>
+              ) : (
+                <span
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-semibold border"
+                  style={{
+                    background:
+                      "color-mix(in srgb, #22c55e 14%, transparent)",
+                    color: "#22c55e",
+                    borderColor:
+                      "color-mix(in srgb, #22c55e 28%, transparent)",
+                  }}
+                >
+                  Active
+                </span>
+              ),
           },
           {
             label: "Firing Triggers",

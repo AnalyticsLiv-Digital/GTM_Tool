@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronRight, Check, Plus, X } from "lucide-react";
+import { ChevronRight, Check, Plus, X, Trash2 } from "lucide-react";
 import { useDashboardStore } from "@/app/store/useDashboardStore";
 import { useDashboardActions } from "@/hooks/useDashboardActions";
 import { useGtmAccounts } from "@/hooks/useGtmAccounts";
@@ -37,7 +37,7 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
     setWorkspaceNameInput,
   } = useDashboardStore();
 
-  const { fetchContainers, fetchWorkspaces, handleSaveWorkspace } = useDashboardActions();
+  const { fetchContainers, fetchWorkspaces, handleSaveWorkspace, handleDeleteWorkspace } = useDashboardActions();
 
   useEffect(() => {
     if (selectedAccountId) {
@@ -174,13 +174,23 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
             width="flex-1"
             action={
               selectedContainerId && !isCreatingWorkspace ? (
-                <button
-                  onClick={() => setIsCreatingWorkspace(true)}
-                  className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md text-accent hover:bg-accent-soft transition-colors"
-                >
-                  <Plus size={12} strokeWidth={2.4} />
-                  New
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setIsCreatingWorkspace(true)}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md text-accent hover:bg-accent-soft transition-colors"
+                  >
+                    <Plus size={12} strokeWidth={2.4} />
+                    New
+                  </button>
+                  <button
+                    onClick={handleDeleteWorkspace}
+                    disabled={!selectedWorkspaceId || workspaceCrudLoading}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-1 rounded-md text-(--danger) hover:bg-(--danger)/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Trash2 size={12} strokeWidth={2.4} />
+                    Delete
+                  </button>
+                </div>
               ) : undefined
             }
           >

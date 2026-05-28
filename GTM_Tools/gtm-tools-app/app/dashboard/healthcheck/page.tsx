@@ -118,8 +118,8 @@ Vars: ${(r.affectedVariables || []).map((x: any) => x.name).join(", ") || "-"}`,
     report && report.score >= 80
       ? "var(--success)"
       : report && report.score >= 50
-      ? "var(--warn)"
-      : "var(--danger)";
+        ? "var(--warn)"
+        : "var(--danger)";
 
   return (
     <div>
@@ -372,8 +372,8 @@ function SeverityBadge({ severity }: { severity: string }) {
     severity === "HIGH"
       ? "var(--danger)"
       : severity === "MEDIUM"
-      ? "var(--warn)"
-      : "var(--accent)";
+        ? "var(--warn)"
+        : "var(--accent)";
   return (
     <span
       className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold uppercase tracking-[0.12em] border"

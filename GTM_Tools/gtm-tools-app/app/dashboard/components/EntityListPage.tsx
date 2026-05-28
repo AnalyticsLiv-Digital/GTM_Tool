@@ -18,6 +18,7 @@ export type EntityListPageProps<T> = {
   pluralName: string;
   newButtonLabel: string;
   searchPlaceholder: string;
+  rowClassName?: (item: T) => string;
 
   items: T[];
   loading: boolean;
@@ -65,6 +66,7 @@ export function EntityListPage<T>({
   error,
   getId,
   filterField,
+  rowClassName,
   columns,
   workspaceSelected,
   onFetch,
@@ -278,8 +280,14 @@ export function EntityListPage<T>({
                     return (
                       <tr
                         key={id}
-                        className={`border-b border-line transition-colors ${isChecked ? "bg-accent-soft" : "hover:bg-card-hi"
-                          }`}
+                        className={`
+    border-b border-line transition-colors
+    ${isChecked
+                            ? "bg-accent-soft"
+                            : "hover:bg-card-hi"
+                          }
+    ${rowClassName?.(item) || ""}
+  `}
                       >
                         <td className="px-4 py-3">
                           <input
