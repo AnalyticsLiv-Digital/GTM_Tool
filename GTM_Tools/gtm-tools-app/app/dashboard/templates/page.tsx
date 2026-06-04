@@ -10,7 +10,7 @@ import ExportTemplatesModal from "@/app/dashboard/components/modals/ExportTempla
 
 export default function TemplatesPage() {
   const store = useDashboardStore();
-  const { fetchTemplates } = useDashboardActions();
+  const { fetchTemplates, handleDeleteTemplate } = useDashboardActions();
 
   const [selectedTemplateType, setSelectedTemplateType] = useState("");
 
@@ -43,9 +43,15 @@ export default function TemplatesPage() {
       loading={store.templatesLoading}
       error={store.templatesError}
       getId={(t) => t.templateId}
-      workspaceSelected={!!store.selectedWorkspaceId}
+      //workspaceSelected={!!store.selectedWorkspaceId}
+      workspaceSelected={
+        store.isImportedJson || !!store.selectedWorkspaceId
+      }
       onFetch={fetchTemplates}
       onCreate={() => store.setShowTemplateModal(true)}
+      onDelete={(selectedTemplates) => {
+        handleDeleteTemplate(selectedTemplates);
+      }}
       filterField={(t) => t.name} // ✅ search by template name
       customFilter={(t) => {
         if (!selectedTemplateType) return true;

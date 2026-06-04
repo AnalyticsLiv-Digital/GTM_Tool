@@ -18,7 +18,9 @@ function cleanTemplatePayload(template: Record<string, unknown>) {
   return cleaned;
 }
 
-// ✅ GET (Export Templates)
+// ======================================================
+// GET - Export Templates
+// ======================================================
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -35,6 +37,7 @@ export async function GET(req: Request) {
     }
 
     const accessToken = await getValidGoogleAccessToken();
+
     if (!accessToken) {
       return NextResponse.json(
         { error: "Access token missing. Please login again." },
@@ -55,26 +58,41 @@ export async function GET(req: Request) {
     });
   } catch (err: unknown) {
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Internal server error" },
+      {
+        error:
+          err instanceof Error ? err.message : "Internal server error",
+      },
       { status: 500 }
     );
   }
 }
 
-// ✅ POST (Import Template)
+// ======================================================
+// POST - Import Template
+// ======================================================
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { accountId, containerId, workspaceId, template } = body;
+
+    const {
+      accountId,
+      containerId,
+      workspaceId,
+      template,
+    } = body;
 
     if (!accountId || !containerId || !workspaceId || !template) {
       return NextResponse.json(
-        { error: "accountId, containerId, workspaceId, template required" },
+        {
+          error:
+            "accountId, containerId, workspaceId, template required",
+        },
         { status: 400 }
       );
     }
 
     const accessToken = await getValidGoogleAccessToken();
+
     if (!accessToken) {
       return NextResponse.json(
         { error: "Access token missing. Please login again." },
@@ -82,8 +100,12 @@ export async function POST(req: Request) {
       );
     }
 
-    const selectedTemplate = Array.isArray(template) ? template[0] : template;
-    const cleanedTemplate = cleanTemplatePayload(selectedTemplate);
+    const selectedTemplate = Array.isArray(template)
+      ? template[0]
+      : template;
+
+    const cleanedTemplate =
+      cleanTemplatePayload(selectedTemplate);
 
     const apiUrl = `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/templates`;
 
@@ -103,7 +125,10 @@ export async function POST(req: Request) {
       const data = await res.json().catch(() => ({}));
 
       if (res.ok) {
-        return NextResponse.json({ success: true, template: data });
+        return NextResponse.json({
+          success: true,
+          template: data,
+        });
       }
 
       if ([429, 502, 503, 504].includes(res.status)) {
@@ -113,19 +138,104 @@ export async function POST(req: Request) {
       }
 
       return NextResponse.json(
-        { error: "Failed to create template", details: data },
+        {
+          error: "Failed to create template",
+          details: data,
+        },
         { status: res.status }
       );
     }
 
     return NextResponse.json(
-      { error: "Failed to create template after retries" },
+      {
+        error: "Failed to create template after retries",
+      },
       { status: 502 }
     );
   } catch (err: unknown) {
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Internal server error" },
+      {
+        error:
+          err instanceof Error ? err.message : "Internal server error",
+      },
       { status: 500 }
+    );
+  }
+}
+
+// ======================================================
+// DELETE - Delete Template
+// ======================================================
+export async function DELETE(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+
+    const accountId = searchParams.get("accountId");
+    const containerId = searchParams.get("containerId");
+    const workspaceId = searchParams.get("workspaceId");
+    const templateId = searchParams.get("templateId");
+
+    if (
+      !accountId ||
+      !containerId ||
+      !workspaceId ||
+      !templateId
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "accountId, containerId, workspaceId and templateId are required",
+        },
+        { status: 400 }
+      );
+    }
+
+    const accessToken = await getValidGoogleAccessToken();
+
+    if (!accessToken) {
+      return NextResponse.json(
+        { error: "Access token missing. Please login again." },
+        { status: 401 }
+      );
+    }
+
+    const res = await fetch(
+      `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/templates/${templateId}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      }
+    );
+
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({}));
+
+      return NextResponse.json(
+        {
+          error: "Failed to delete template",
+          details: error,
+        },
+        {
+          status: res.status,
+        }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: "Template deleted successfully",
+    });
+  } catch (err: unknown) {
+    return NextResponse.json(
+      {
+        error:
+          err instanceof Error ? err.message : "Internal server error",
+      },
+      {
+        status: 500,
+      }
     );
   }
 }

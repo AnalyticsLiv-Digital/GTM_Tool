@@ -72,7 +72,7 @@ function getVariableIcon(type: string) {
 
 export default function VariablesPage() {
   const store = useDashboardStore();
-  const { fetchVariables } = useDashboardActions();
+  const { fetchVariables, handleDeleteVariable } = useDashboardActions();
 
   const [selectedVariableType, setSelectedVariableType] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -144,6 +144,9 @@ export default function VariablesPage() {
       }
       onFetch={fetchVariables}
       onCreate={() => store.setShowVariableModal(true)}
+      onDelete={(selectedVariables) => {
+        handleDeleteVariable(selectedVariables);
+      }}
       filterField={(v) => v.name}
       customFilter={(v) => {
         if (!selectedVariableType) return true;

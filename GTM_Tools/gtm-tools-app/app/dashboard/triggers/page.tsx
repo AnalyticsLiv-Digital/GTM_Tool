@@ -86,7 +86,7 @@ function getTriggerIcon(type: string) {
 
 export default function TriggersPage() {
   const store = useDashboardStore();
-  const { fetchTriggers } = useDashboardActions();
+  const { fetchTriggers, handleDeleteTrigger } = useDashboardActions();
 
   const [selectedTriggerType, setSelectedTriggerType] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -156,6 +156,7 @@ export default function TriggersPage() {
       }
       onFetch={fetchTriggers}
       onCreate={() => store.setShowTriggerModal(true)}
+      onDelete={handleDeleteTrigger}
       filterField={(t) => t.name}
       customFilter={(t) => {
         if (!selectedTriggerType) return true;

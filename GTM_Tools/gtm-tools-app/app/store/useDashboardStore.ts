@@ -43,7 +43,8 @@ interface DashboardStore {
   setSelectedTriggerId: (id: string) => void;
   setSelectedVariableId: (id: string) => void;
   setSelectedTemplateId: (id: string) => void;
-
+  isImportedJson: boolean;
+  setIsImportedJson: (val: boolean) => void;
   // Data
   containers: GtmContainer[];
   workspaces: GtmWorkspace[];
@@ -168,6 +169,13 @@ export const useDashboardStore = create<DashboardStore>()(
       selectedTriggerId: "",
       selectedVariableId: "",
       selectedTemplateId: "",
+
+      isImportedJson: false,
+
+      setIsImportedJson: (val) =>
+        set({
+          isImportedJson: val,
+        }),
 
       setSelectedAccountId: (id) =>
         set({
@@ -328,9 +336,12 @@ export const useDashboardStore = create<DashboardStore>()(
         selectedAccountId: state.selectedAccountId,
         selectedContainerId: state.selectedContainerId,
         selectedWorkspaceId: state.selectedWorkspaceId,
+
         selectedAccountName: state.selectedAccountName,
         selectedContainerName: state.selectedContainerName,
         selectedWorkspaceName: state.selectedWorkspaceName,
+
+        isImportedJson: state.isImportedJson,
       }),
     }
   )

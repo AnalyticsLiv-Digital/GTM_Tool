@@ -108,7 +108,7 @@ function getTagIcon(type: string) {
 
 export default function TagsPage() {
   const store = useDashboardStore();
-  const { fetchTags, openCreateTagModal } = useDashboardActions();
+  const { fetchTags, openCreateTagModal, handleDeleteTag } = useDashboardActions();
 
   const [selectedTagType, setSelectedTagType] = useState("");
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -187,6 +187,11 @@ export default function TagsPage() {
     })`
     : `All Tag Types (${store.tags?.length || 0})`;
 
+  const isImportedJson =
+    useDashboardStore(
+      (s) => s.isImportedJson
+    );
+
   return (
     <>
       {/* DEPENDENCY MODAL */}
@@ -252,8 +257,12 @@ export default function TagsPage() {
         }
         workspaceSelected={
           !!store.selectedWorkspaceId || store.tags.length > 0
-        } 
-        onFetch={fetchTags}
+        }
+        onFetch={
+          isImportedJson
+            ? () => { }
+            : fetchTags
+        }
         onCreate={openCreateTagModal}
         onExport={(selectedItems) => {
           // ✅ clean export handler
@@ -264,6 +273,7 @@ export default function TagsPage() {
           };
           setShowDependenciesModal(true);
         }}
+        onDelete={handleDeleteTag}
         filterField={(t) => t.name}
         customFilter={(t) => {
           if (!selectedTagType) return true;

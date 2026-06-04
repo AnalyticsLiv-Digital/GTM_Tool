@@ -59,6 +59,12 @@ export function useDashboardActions() {
   };
 
   const fetchTags = async () => {
+    const state =
+      useDashboardStore.getState();
+
+    if (state.isImportedJson) {
+      return;
+    }
     const { selectedAccountId, selectedContainerId, selectedWorkspaceId } =
       useDashboardStore.getState();
 
@@ -162,6 +168,7 @@ export function useDashboardActions() {
     await fetchTags();
     await fetchTriggers();
     await fetchVariables();
+    await fetchTemplates();
   };
 
   // ============================================================
@@ -469,7 +476,7 @@ export function useDashboardActions() {
     }
   };
 
-  const handleDeleteTag = async () => {
+  const handleDeleteTag = async (selectedTags?: any[]) => {
     if (
       !store.selectedAccountId ||
       !store.selectedContainerId ||
@@ -479,31 +486,39 @@ export function useDashboardActions() {
       return;
     }
 
-    if (!store.selectedTagId) {
+    if (!selectedTags?.length) {
       notify.warning("Select a tag first");
       return;
     }
 
+    const tag = selectedTags[0]; // first selected tag
+
     const ok = await confirmDialog({
       title: "Delete this tag?",
-      description: "The tag will be removed from this workspace. This cannot be undone.",
+      description:
+        "The tag will be removed from this workspace. This cannot be undone.",
       danger: true,
       confirmLabel: "Delete tag",
     });
+
     if (!ok) return;
 
     try {
       store.setTagCrudLoading(true);
 
       const res = await fetch(
-        `/api/auth/gtm/tags?accountId=${store.selectedAccountId}&containerId=${store.selectedContainerId}&workspaceId=${store.selectedWorkspaceId}&tagId=${store.selectedTagId}`,
-        { method: "DELETE" }
+        `/api/auth/gtm/tags?accountId=${store.selectedAccountId}&containerId=${store.selectedContainerId}&workspaceId=${store.selectedWorkspaceId}&tagId=${tag.tagId}`,
+        {
+          method: "DELETE",
+        }
       );
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Delete tag failed");
 
-      store.setSelectedTagId("");
+      if (!res.ok) {
+        throw new Error(data?.error || "Delete tag failed");
+      }
+
       await fetchTags();
     } catch (err: any) {
       notify.error(err.message);
@@ -603,7 +618,7 @@ export function useDashboardActions() {
     }
   };
 
-  const handleDeleteTrigger = async () => {
+  const handleDeleteTrigger = async (selectedTriggers?: any[]) => {
     if (
       !store.selectedAccountId ||
       !store.selectedContainerId ||
@@ -613,31 +628,34 @@ export function useDashboardActions() {
       return;
     }
 
-    if (!store.selectedTriggerId) {
+    if (!selectedTriggers?.length) {
       notify.warning("Select a trigger first");
       return;
     }
 
     const ok = await confirmDialog({
-      title: "Delete this trigger?",
-      description: "Tags that depend on this trigger may stop firing. This cannot be undone.",
+      title: `Delete ${selectedTriggers.length} trigger(s)?`,
+      description: "This action cannot be undone.",
       danger: true,
-      confirmLabel: "Delete trigger",
+      confirmLabel: "Delete",
     });
+
     if (!ok) return;
 
     try {
       store.setTriggerCrudLoading(true);
 
-      const res = await fetch(
-        `/api/auth/gtm/triggers?accountId=${store.selectedAccountId}&containerId=${store.selectedContainerId}&workspaceId=${store.selectedWorkspaceId}&triggerId=${store.selectedTriggerId}`,
-        { method: "DELETE" }
+      await Promise.all(
+        selectedTriggers.map((trigger) =>
+          fetch(
+            `/api/auth/gtm/triggers?accountId=${store.selectedAccountId}&containerId=${store.selectedContainerId}&workspaceId=${store.selectedWorkspaceId}&triggerId=${trigger.triggerId}`,
+            {
+              method: "DELETE",
+            }
+          )
+        )
       );
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Delete trigger failed");
-
-      store.setSelectedTriggerId("");
       await fetchTriggers();
     } catch (err: any) {
       notify.error(err.message);
@@ -737,7 +755,7 @@ export function useDashboardActions() {
     }
   };
 
-  const handleDeleteVariable = async () => {
+  const handleDeleteVariable = async (selectedVariables?: any[]) => {
     if (
       !store.selectedAccountId ||
       !store.selectedContainerId ||
@@ -747,31 +765,34 @@ export function useDashboardActions() {
       return;
     }
 
-    if (!store.selectedVariableId) {
+    if (!selectedVariables?.length) {
       notify.warning("Select a variable first");
       return;
     }
 
     const ok = await confirmDialog({
-      title: "Delete this variable?",
-      description: "Tags or triggers that reference this variable may break. This cannot be undone.",
+      title: `Delete ${selectedVariables.length} variable(s)?`,
+      description: "This action cannot be undone.",
       danger: true,
-      confirmLabel: "Delete variable",
+      confirmLabel: "Delete",
     });
+
     if (!ok) return;
 
     try {
       store.setVariableCrudLoading(true);
 
-      const res = await fetch(
-        `/api/auth/gtm/variables?accountId=${store.selectedAccountId}&containerId=${store.selectedContainerId}&workspaceId=${store.selectedWorkspaceId}&variableId=${store.selectedVariableId}`,
-        { method: "DELETE" }
+      await Promise.all(
+        selectedVariables.map((variable) =>
+          fetch(
+            `/api/auth/gtm/variables?accountId=${store.selectedAccountId}&containerId=${store.selectedContainerId}&workspaceId=${store.selectedWorkspaceId}&variableId=${variable.variableId}`,
+            {
+              method: "DELETE",
+            }
+          )
+        )
       );
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Delete variable failed");
-
-      store.setSelectedVariableId("");
       await fetchVariables();
     } catch (err: any) {
       notify.error(err.message);
@@ -783,12 +804,20 @@ export function useDashboardActions() {
   // FETCH TEMPLATES
   // -----------------------------
   const fetchTemplates = async () => {
-    if (
-      !store.selectedAccountId ||
-      !store.selectedContainerId ||
-      !store.selectedWorkspaceId
-    )
+    const state = useDashboardStore.getState();
+
+    // JSON Import Mode
+    if (state.isImportedJson) {
       return;
+    }
+
+    if (
+      !state.selectedAccountId ||
+      !state.selectedContainerId ||
+      !state.selectedWorkspaceId
+    ) {
+      return;
+    }
 
     try {
       store.setTemplatesLoading(true);
@@ -879,7 +908,7 @@ export function useDashboardActions() {
     }
   };
 
-  const handleDeleteTemplate = async () => {
+  const handleDeleteTemplate = async (selectedTemplates?: any[]) => {
     if (
       !store.selectedAccountId ||
       !store.selectedContainerId ||
@@ -889,31 +918,34 @@ export function useDashboardActions() {
       return;
     }
 
-    if (!store.selectedTemplateId) {
+    if (!selectedTemplates?.length) {
       notify.warning("Select a template first");
       return;
     }
 
     const ok = await confirmDialog({
-      title: "Delete this template?",
-      description: "Tags using this custom template will lose their backing definition. This cannot be undone.",
+      title: `Delete ${selectedTemplates.length} template(s)?`,
+      description: "This action cannot be undone.",
       danger: true,
-      confirmLabel: "Delete template",
+      confirmLabel: "Delete",
     });
+
     if (!ok) return;
 
     try {
       store.setTemplateCrudLoading(true);
 
-      const res = await fetch(
-        `/api/auth/gtm/templates?accountId=${store.selectedAccountId}&containerId=${store.selectedContainerId}&workspaceId=${store.selectedWorkspaceId}&templateId=${store.selectedTemplateId}`,
-        { method: "DELETE" }
+      await Promise.all(
+        selectedTemplates.map((template) =>
+          fetch(
+            `/api/auth/gtm/templates?accountId=${store.selectedAccountId}&containerId=${store.selectedContainerId}&workspaceId=${store.selectedWorkspaceId}&templateId=${template.templateId}`,
+            {
+              method: "DELETE",
+            }
+          )
+        )
       );
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Delete template failed");
-
-      store.setSelectedTemplateId("");
       await fetchTemplates();
     } catch (err: any) {
       notify.error(err.message);
