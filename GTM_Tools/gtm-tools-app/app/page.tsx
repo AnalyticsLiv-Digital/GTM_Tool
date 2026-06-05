@@ -132,11 +132,11 @@ export default function Home() {
               className="reveal mt-9 flex flex-wrap items-center gap-3"
               style={{ animationDelay: "360ms" }}
             >
-              <Link href="/signup" className="btn-primary !px-5 !py-2.5">
+              <Link href="/signup" className="btn-primary px-5! py-2.5!">
                 Get started — free
                 <ArrowRight size={15} strokeWidth={2.4} />
               </Link>
-              <Link href="/login" className="btn-secondary !px-5 !py-2.5">
+              <Link href="/login" className="btn-secondary px-5! py-2.5!">
                 Sign in
               </Link>
               <span className="font-mono text-[11px] text-faint pl-1">
@@ -217,11 +217,11 @@ export default function Home() {
             before your next stand-up.
           </p>
           <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
-            <Link href="/signup" className="btn-primary !px-5 !py-2.5">
+            <Link href="/signup" className="btn-primary px-5! py-2.5!">
               Create free account
               <ArrowRight size={15} strokeWidth={2.4} />
             </Link>
-            <Link href="/login" className="btn-secondary !px-5 !py-2.5">
+            <Link href="/login" className="btn-secondary px-5! py-2.5!">
               Sign in
             </Link>
           </div>
@@ -261,8 +261,8 @@ export default function Home() {
             <FooterCol
               title="Legal"
               items={[
-                ["Privacy", "/privacy"],
-                ["Terms", "/terms"],
+                ["Privacy", "legal/privacy-policy"],
+                ["Terms", "legal/terms"],
                 ["Security", "/security"],
               ]}
             />
@@ -301,7 +301,7 @@ function Benefit({ title, body }: { title: string; body: string }) {
         </span>
         <h3 className="text-[16px] font-semibold tracking-[-0.01em]">{title}</h3>
       </div>
-      <p className="text-[14.5px] leading-[1.6] text-muted ml-[30px]">{body}</p>
+      <p className="text-[14.5px] leading-[1.6] text-muted ml-7.5">{body}</p>
     </div>
   );
 }

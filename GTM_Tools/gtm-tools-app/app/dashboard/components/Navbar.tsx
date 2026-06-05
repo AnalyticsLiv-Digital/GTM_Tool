@@ -131,10 +131,10 @@ export default function Navbar({
         containerVersion?.trigger || [];
       const variables =
         containerVersion?.variable || [];
-      // const gtmTemplates =
-      //   containerVersion?.template || [];
       const gtmTemplates =
-        containerVersion?.customTemplate || [];
+        containerVersion?.customTemplate ||
+        containerVersion?.template ||
+        [];
 
       const extractedTemplates: any[] = [];
 
@@ -149,14 +149,9 @@ export default function Navbar({
         "Extracted Templates:",
         extractedTemplates
       );
-      // const templates = [
-      //   ...gtmTemplates,
-      //   ...extractedTemplates,
-      // ];
-      const templates =
-        (containerVersion?.customTemplate || []).filter(
-          (t: any) => t.templateId && t.name
-        );
+      const templates = [...gtmTemplates, ...extractedTemplates].filter(
+        (t: any) => t.templateId && t.name
+      );
       console.log("===== IMPORT DEBUG =====");
 
       console.log("Container Version:", containerVersion);
