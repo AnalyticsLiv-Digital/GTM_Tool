@@ -156,6 +156,16 @@ export default function ExportTagsModal({
     tagsDone: 0,
   });
 
+  // Track failed items for retry at end
+  const failedItemsRef = useRef<
+    Array<{
+      type: "template" | "variable" | "trigger" | "tag";
+      item: any;
+      error: string;
+      retryFn: () => Promise<any>;
+    }>
+  >([]);
+
   // ============================================================
   // HELPERS
   // ============================================================
@@ -195,23 +205,31 @@ export default function ExportTagsModal({
   }
 
   async function fetchWithRetry(url: string, options: any, retries = 10) {
-    let delay = 1500;
+    let delay = 2000; // Start with 2 seconds
 
     for (let i = 0; i < retries; i++) {
-      const res = await fetch(url, options);
-      const data = await safeJsonParse(res);
+      try {
+        const res = await fetch(url, options);
+        const data = await safeJsonParse(res);
 
-      if (res.ok) return { res, data };
+        if (res.ok) return { res, data };
 
-      const msg = getErrorMessage(data);
+        const msg = getErrorMessage(data);
 
-      if (shouldRetry(res, msg)) {
+        if (shouldRetry(res, msg)) {
+          console.warn(`⚠️ Retry ${i + 1}/${retries} - ${msg}. Waiting ${delay}ms...`);
+          await sleep(delay);
+          delay = Math.min(delay * 2, 20000); // Exponential backoff, max 20s
+          continue;
+        }
+
+        throw new Error(msg || `Request failed (${res.status})`);
+      } catch (err: any) {
+        if (i === retries - 1) throw err;
+        console.warn(`⚠️ Retry ${i + 1}/${retries} - Network error. Waiting ${delay}ms...`);
         await sleep(delay);
-        delay = Math.min(delay * 2, 15000);
-        continue;
+        delay = Math.min(delay * 2, 20000);
       }
-
-      throw new Error(msg || `Request failed (${res.status})`);
     }
 
     throw new Error("Rate limit / backend error. Try again after 1 minute.");
@@ -380,7 +398,7 @@ export default function ExportTagsModal({
   }
 
   // ============================================================
-  // EXPORT VARIABLE
+  // EXPORT VARIABLE (with defer on failure)
   // ============================================================
   async function exportVariable(variable: any) {
     let attempt = 0;
@@ -423,7 +441,7 @@ export default function ExportTagsModal({
           }),
         });
 
-        await sleep(600);
+        await sleep(1200); // Increased from 600ms
         return data;
       } catch (err: any) {
         const msg = (err.message || "").toLowerCase();
@@ -434,11 +452,20 @@ export default function ExportTagsModal({
           continue;
         }
 
-        throw err;
+        // Add to failed items for retry at end
+        failedItemsRef.current.push({
+          type: "variable",
+          item: variable,
+          error: err.message,
+          retryFn: () =>
+            exportVariable(variable),
+        });
+        console.warn(
+          `⚠️ Variable deferred to retry queue: ${variable.name}`
+        );
+        return null;
       }
     }
-
-    throw new Error("Variable export failed after retries");
   }
 
   // ============================================================
@@ -482,7 +509,7 @@ export default function ExportTagsModal({
           }),
         });
 
-        await sleep(650);
+        await sleep(1200); // Increased from 650ms
         return data;
       } catch (err: any) {
         const msg = (err.message || "").toLowerCase();
@@ -493,11 +520,19 @@ export default function ExportTagsModal({
           continue;
         }
 
-        throw err;
+        // Add to failed items for retry at end
+        failedItemsRef.current.push({
+          type: "trigger",
+          item: trigger,
+          error: err.message,
+          retryFn: () => exportTrigger(trigger),
+        });
+        console.warn(
+          `⚠️ Trigger deferred to retry queue: ${trigger.name}`
+        );
+        return null;
       }
     }
-
-    throw new Error("Trigger export failed after retries");
   }
 
   // ============================================================
@@ -609,7 +644,8 @@ export default function ExportTagsModal({
           }),
         });
 
-        await sleep(800);
+        await sleep(1500); // Increased from 800ms to avoid rate limiting
+        console.log(`✅ Tag exported: ${cleanedTag.name}`);
 
         destinationTags.push({ name: updatedName });
         return data;
@@ -622,11 +658,21 @@ export default function ExportTagsModal({
           continue;
         }
 
-        throw err;
+        // Add to failed items for retry at end
+        failedItemsRef.current.push({
+          type: "tag",
+          item: tag,
+          error: err.message,
+          retryFn: async () => {
+            // Refresh destination tags before retry
+            const freshDestTags = await fetchDestinationTags();
+            return exportTag(tag, finalTagType, triggerMap, freshDestTags);
+          },
+        });
+        console.warn(`⚠️ Tag deferred to retry queue: ${tag.name}`);
+        return null;
       }
     }
-
-    throw new Error("Tag export failed after retries");
   }
 
   // ============================================================
@@ -661,6 +707,9 @@ export default function ExportTagsModal({
 
     try {
       setExportLoading(true);
+
+      // Clear any previous failed items
+      failedItemsRef.current = [];
 
       const sourceTriggersRes = await fetch(
         `/api/auth/gtm/triggers?accountId=${sourceAccountId}&containerId=${sourceContainerId}&workspaceId=${sourceWorkspaceId}`
@@ -703,8 +752,15 @@ export default function ExportTagsModal({
         try {
           const newTemplateId = await exportTemplate(templateId);
           templateMap[templateId] = newTemplateId;
+          console.log(`✅ Template exported: ${templateId} -> ${newTemplateId}`);
         } catch (err: any) {
           console.log("❌ Template export failed:", templateId, err);
+          failedItemsRef.current.push({
+            type: "template",
+            item: { templateId },
+            error: err.message,
+            retryFn: () => exportTemplate(templateId),
+          });
         }
 
         templatesDone++;
@@ -725,7 +781,10 @@ export default function ExportTagsModal({
 
       for (const v of missingVariables) {
         try {
-          await exportVariable(v);
+          const result = await exportVariable(v);
+          if (result) {
+            console.log(`✅ Variable exported: ${v.name}`);
+          }
         } catch (err) {
           console.log("❌ Variable export failed:", v.name, err);
         }
@@ -756,6 +815,7 @@ export default function ExportTagsModal({
 
             if (created?.trigger?.triggerId) {
               triggerMap[t.triggerId] = created.trigger.triggerId;
+              console.log(`✅ Trigger exported: ${t.name}`);
             }
           } catch (err) {
             console.log("❌ Trigger export failed:", t.name, err);
@@ -782,9 +842,13 @@ export default function ExportTagsModal({
 
       for (const tag of ga4ConfigTags) {
         try {
-          await exportTag(tag, tag.type, triggerMap, destinationTags);
-        } catch {
-          failedTags.push(tag.name);
+          const result = await exportTag(tag, tag.type, triggerMap, destinationTags);
+          if (result) {
+            console.log(`✅ GA4 Config Tag exported: ${tag.name}`);
+          }
+        } catch (err: any) {
+          console.error(`❌ GA4 Config Tag export failed: ${tag.name}`, err.message);
+          // Note: error already added to failedItemsRef by exportTag
         }
 
         tagsDone++;
@@ -817,9 +881,13 @@ export default function ExportTagsModal({
             });
           }
 
-          await exportTag(cloned, cloned.type, triggerMap, destinationTags);
-        } catch {
-          failedTags.push(tag.name);
+          const result = await exportTag(cloned, cloned.type, triggerMap, destinationTags);
+          if (result) {
+            console.log(`✅ GA4 Event Tag exported: ${tag.name}`);
+          }
+        } catch (err: any) {
+          console.error(`❌ GA4 Event Tag export failed: ${tag.name}`, err.message);
+          // Note: error already added to failedItemsRef by exportTag
         }
 
         tagsDone++;
@@ -841,16 +909,74 @@ export default function ExportTagsModal({
             }
           }
 
-          await exportTag(tag, finalTagType, triggerMap, destinationTags);
-        } catch {
-          failedTags.push(tag.name);
+          const result = await exportTag(tag, finalTagType, triggerMap, destinationTags);
+          if (result) {
+            console.log(`✅ Other Tag exported: ${tag.name}`);
+          }
+        } catch (err: any) {
+          console.error(`❌ Other Tag export failed: ${tag.name}`, err.message);
+          // Note: error already added to failedItemsRef by exportTag
         }
 
         tagsDone++;
         setProgress((p) => ({ ...p, tagsDone }));
       }
 
+      // ============================================================
+      // RETRY FAILED ITEMS ONCE AT THE END
+      // ============================================================
+      if (failedItemsRef.current.length > 0) {
+        console.log(
+          `\n🔄 Retrying ${failedItemsRef.current.length} failed item(s) one final time...\n`
+        );
+
+        toast.update(toastId, {
+          render: `Retrying ${failedItemsRef.current.length} failed item(s)...`,
+        });
+
+        const retryResults: Array<{ item: string; type: string; success: boolean }> = [];
+
+        for (const failedItem of failedItemsRef.current) {
+          try {
+            console.log(`🔄 Retrying ${failedItem.type}: ${failedItem.item.name || failedItem.item.templateId}`);
+            await failedItem.retryFn();
+            retryResults.push({
+              item: failedItem.item.name || failedItem.item.templateId,
+              type: failedItem.type,
+              success: true,
+            });
+            console.log(
+              `✅ Retry successful: ${failedItem.type} - ${failedItem.item.name || failedItem.item.templateId}`
+            );
+          } catch (err: any) {
+            retryResults.push({
+              item: failedItem.item.name || failedItem.item.templateId,
+              type: failedItem.type,
+              success: false,
+            });
+            console.error(
+              `❌ Retry failed: ${failedItem.type} - ${failedItem.item.name || failedItem.item.templateId}:`,
+              err.message
+            );
+          }
+
+          await sleep(1000); // Space out retry attempts
+        }
+
+        const successfulRetries = retryResults.filter((r) => r.success).length;
+        const stillFailed = retryResults.filter((r) => !r.success);
+
+        if (stillFailed.length > 0) {
+          failedTags.push(...stillFailed.map((r) => `${r.type}:${r.item}`));
+        }
+
+        console.log(
+          `\n📊 Retry Summary: ${successfulRetries} recovered, ${stillFailed.length} still failed\n`
+        );
+      }
+
       if (failedTags.length > 0) {
+        console.warn(`⚠️ Export completed with ${failedTags.length} failure(s):`, failedTags);
         toast.update(toastId, {
           render: `Export finished with ${failedTags.length} failure(s): ${failedTags.join(
             ", "
@@ -862,6 +988,7 @@ export default function ExportTagsModal({
         return;
       }
 
+      console.log(`✅ All ${selectedTags.length} tags exported successfully!`);
       toast.update(toastId, {
         render: "✅ All tags exported successfully!",
         type: "success",
@@ -871,6 +998,7 @@ export default function ExportTagsModal({
 
       onExportSuccess();
     } catch (err: any) {
+      console.error("❌ Export failed:", err);
       toast.update(toastId, {
         render: `❌ Export failed: ${err.message}`,
         type: "error",
