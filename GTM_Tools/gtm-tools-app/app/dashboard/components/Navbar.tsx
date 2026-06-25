@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import Image from "next/image";
@@ -127,31 +128,47 @@ export default function Navbar({
         json?.containerVersion || json;
 
       const tags = containerVersion?.tag || [];
-      const triggers =
-        containerVersion?.trigger || [];
-      const variables =
-        containerVersion?.variable || [];
-      const gtmTemplates =
-        containerVersion?.customTemplate ||
-        containerVersion?.template ||
-        [];
+      const triggers = containerVersion?.trigger || [];
+      const variables = containerVersion?.variable || [];
 
+      /**
+       * GTM Custom Templates
+       * Works for:
+       * - GTM API (template)
+       * - Imported JSON (customTemplate)
+       */
+      const gtmTemplates = (
+        containerVersion?.customTemplate ??
+        containerVersion?.template ??
+        []
+      ).map((template: any) => ({
+        ...template,
+        templateType: "Custom Template",
+      }));
+
+      /**
+       * Extract TEMPLATE parameters used inside tags
+       */
       const extractedTemplates: any[] = [];
 
       tags.forEach((tag: any) => {
-        extractTemplates(
-          tag.parameter,
-          tag,
-          extractedTemplates
-        );
+        extractTemplates(tag.parameter, tag, extractedTemplates);
       });
-      console.log(
-        "Extracted Templates:",
-        extractedTemplates
-      );
-      const templates = [...gtmTemplates, ...extractedTemplates].filter(
+
+      /**
+       * Merge both template sources
+       */
+      const templates = [
+        ...gtmTemplates,
+        ...extractedTemplates,
+      ].filter(
         (t: any) => t.templateId && t.name
       );
+
+      console.log("===== IMPORT DEBUG =====");
+      console.log("Custom Templates:", gtmTemplates.length);
+      console.log("Extracted Templates:", extractedTemplates.length);
+      console.log("Final Templates:", templates.length);
       console.log("===== IMPORT DEBUG =====");
 
       console.log("Container Version:", containerVersion);

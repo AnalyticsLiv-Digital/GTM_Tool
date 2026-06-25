@@ -406,9 +406,47 @@ function FailedCheckCard({ r }: { r: HealthCheckResult }) {
             </div>
           )}
 
-          <AffectedList label="Affected tags" items={r.affectedTags} />
-          <AffectedList label="Affected triggers" items={r.affectedTriggers} />
-          <AffectedList label="Affected variables" items={r.affectedVariables} />
+          {/* Unused Tags */}
+          <AffectedList
+            label="Unused Tags"
+            items={(r as any).unusedTags || []}
+          />
+
+          {/* Paused Tags */}
+          <AffectedList
+            label="Paused Tags"
+            items={(r as any).pausedTags || []}
+          />
+
+          {/* Affected Tags */}
+          <AffectedList
+            label="Affected Tags"
+            items={r.affectedTags}
+          />
+
+          {/* Affected Triggers */}
+          <AffectedList
+            label="Affected Triggers"
+            items={r.affectedTriggers}
+          />
+
+          {/* Unused Triggers */}
+          <AffectedList
+            label="Unused Triggers"
+            items={(r as any).unusedTriggers || []}
+          />
+
+          {/* Affected Variables */}
+          <AffectedList
+            label="Affected Variables"
+            items={r.affectedVariables}
+          />
+
+          {/* Unused Variables */}
+          <AffectedList
+            label="Unused Variables"
+            items={(r as any).unusedVariables || []}
+          />
         </div>
 
         <div className="shrink-0">
@@ -419,21 +457,32 @@ function FailedCheckCard({ r }: { r: HealthCheckResult }) {
   );
 }
 
-function AffectedList({ label, items }: { label: string; items?: any[] }) {
+function AffectedList({
+  label,
+  items,
+}: {
+  label: string;
+  items?: any[];
+}) {
   if (!items || items.length === 0) return null;
+
   return (
-    <div className="mt-3">
-      <p className="font-mono text-[10.5px] uppercase tracking-[0.15em] text-faint mb-1.5">
+    <div className="mt-4">
+      <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
         {label}
-      </p>
-      <div className="flex flex-wrap gap-1.5">
-        {items.map((t: any, i: number) => (
-          <span
-            key={i}
-            className="inline-flex px-2 py-0.5 rounded-md text-[12px] bg-card-hi border border-line text-muted"
+      </h4>
+
+      <div className="flex flex-wrap gap-2">
+        {items.map((item: any, index: number) => (
+          <a
+            key={index}
+            href={item.editUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-md border px-2 py-1 bg-gray-100 hover:bg-blue-50 text-xs"
           >
-            {t.name}
-          </span>
+            {item.name}
+          </a>
         ))}
       </div>
     </div>

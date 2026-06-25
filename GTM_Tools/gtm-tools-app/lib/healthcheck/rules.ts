@@ -42,10 +42,10 @@ const mapToAffectedItem = (
     typeof item?.tagId === "string"
       ? item.tagId
       : typeof item?.triggerId === "string"
-      ? item.triggerId
-      : typeof item?.variableId === "string"
-      ? item.variableId
-      : "";
+        ? item.triggerId
+        : typeof item?.variableId === "string"
+          ? item.variableId
+          : "";
 
   return {
     name,
@@ -90,14 +90,14 @@ export const healthCheckRules = [
         affectedTags: passed
           ? []
           : ga4Tags.map((tag) =>
-              mapToAffectedItem(
-                tag,
-                "tags",
-                data.accountId,
-                data.containerId,
-                data.workspaceId
-              )
-            ),
+            mapToAffectedItem(
+              tag,
+              "tags",
+              data.accountId,
+              data.containerId,
+              data.workspaceId
+            )
+          ),
 
         recommendation: passed
           ? ""
@@ -155,14 +155,14 @@ export const healthCheckRules = [
         affectedTags: passed
           ? []
           : adsTags.map((tag) =>
-              mapToAffectedItem(
-                tag,
-                "tags",
-                data.accountId,
-                data.containerId,
-                data.workspaceId
-              )
-            ),
+            mapToAffectedItem(
+              tag,
+              "tags",
+              data.accountId,
+              data.containerId,
+              data.workspaceId
+            )
+          ),
 
         recommendation: passed
           ? ""
@@ -227,16 +227,16 @@ export const healthCheckRules = [
         affectedTags: passed
           ? []
           : duplicates.flatMap(([, tags]) =>
-              tags.map((tag) =>
-                mapToAffectedItem(
-                  tag,
-                  "tags",
-                  data.accountId,
-                  data.containerId,
-                  data.workspaceId
-                )
+            tags.map((tag) =>
+              mapToAffectedItem(
+                tag,
+                "tags",
+                data.accountId,
+                data.containerId,
+                data.workspaceId
               )
-            ),
+            )
+          ),
 
         recommendation: passed
           ? ""
@@ -291,14 +291,14 @@ export const healthCheckRules = [
         affectedTags: passed
           ? []
           : invalidTags.map((tag) =>
-              mapToAffectedItem(
-                tag,
-                "tags",
-                data.accountId,
-                data.containerId,
-                data.workspaceId
-              )
-            ),
+            mapToAffectedItem(
+              tag,
+              "tags",
+              data.accountId,
+              data.containerId,
+              data.workspaceId
+            )
+          ),
 
         recommendation: passed
           ? ""
@@ -347,14 +347,14 @@ export const healthCheckRules = [
         affectedTags: passed
           ? []
           : invalidTags.map((tag) =>
-              mapToAffectedItem(
-                tag,
-                "tags",
-                data.accountId,
-                data.containerId,
-                data.workspaceId
-              )
-            ),
+            mapToAffectedItem(
+              tag,
+              "tags",
+              data.accountId,
+              data.containerId,
+              data.workspaceId
+            )
+          ),
 
         recommendation: passed
           ? ""
@@ -416,14 +416,14 @@ export const healthCheckRules = [
         affectedTags: passed
           ? []
           : invalidTags.map((tag) =>
-              mapToAffectedItem(
-                tag,
-                "tags",
-                data.accountId,
-                data.containerId,
-                data.workspaceId
-              )
-            ),
+            mapToAffectedItem(
+              tag,
+              "tags",
+              data.accountId,
+              data.containerId,
+              data.workspaceId
+            )
+          ),
 
         recommendation: passed
           ? ""
@@ -483,14 +483,14 @@ export const healthCheckRules = [
         affectedTags: passed
           ? []
           : invalidTags.map((tag) =>
-              mapToAffectedItem(
-                tag,
-                "tags",
-                data.accountId,
-                data.containerId,
-                data.workspaceId
-              )
-            ),
+            mapToAffectedItem(
+              tag,
+              "tags",
+              data.accountId,
+              data.containerId,
+              data.workspaceId
+            )
+          ),
 
         recommendation: passed
           ? ""
@@ -538,14 +538,14 @@ export const healthCheckRules = [
         affectedTags: passed
           ? []
           : cjsTags.map((tag) =>
-              mapToAffectedItem(
-                tag,
-                "tags",
-                data.accountId,
-                data.containerId,
-                data.workspaceId
-              )
-            ),
+            mapToAffectedItem(
+              tag,
+              "tags",
+              data.accountId,
+              data.containerId,
+              data.workspaceId
+            )
+          ),
 
         recommendation: passed
           ? ""
@@ -604,17 +604,24 @@ export const healthCheckRules = [
 
         affectedTriggers: passed
           ? []
-          : invalidTriggers.map(([triggerId]) => ({
-              name: `Trigger ${triggerId}`,
-              id: triggerId,
-              editUrl: buildGTMEditUrl(
+          : invalidTriggers.map(([triggerId]) => {
+            const trigger = data.triggers.find(
+              (t) => getString(t, "triggerId") === triggerId
+            );
+
+            return trigger
+              ? mapToAffectedItem(
+                trigger,
                 "triggers",
                 data.accountId,
                 data.containerId,
-                data.workspaceId,
-                triggerId
-              ),
-            })),
+                data.workspaceId
+              )
+              : {
+                name: `Trigger ${triggerId}`,
+                id: triggerId,
+              };
+          }),
 
         recommendation: passed
           ? ""
@@ -639,16 +646,18 @@ export const healthCheckRules = [
   {
     id: "HC_LR_001",
     title: "Unused Tags Found",
-    description:
-      "Tags without triggers or paused tags should be reviewed.",
+    description: "Tags without firing triggers should be reviewed.",
     severity: "LOW",
 
     check: (data: GTMHealthData): HealthCheckResult => {
-      const unusedTags = data.tags.filter((tag) => {
-        const triggers = getArray(tag, "firingTriggerId");
-        const paused = Boolean(tag.paused);
 
-        return triggers.length === 0 || paused;
+      const unusedTags = data.tags.filter((tag) => {
+        const triggerIds = getArray(tag, "firingTriggerId");
+
+        return (
+          triggerIds.length === 0 &&
+          !Boolean(tag.paused)
+        );
       });
 
       const passed = unusedTags.length === 0;
@@ -656,26 +665,25 @@ export const healthCheckRules = [
       return {
         id: "HC_LR_001",
         title: "Unused Tags Found",
-        description:
-          "Tags without triggers or paused tags should be reviewed.",
+        description: "Tags without firing triggers should be reviewed.",
         severity: "LOW",
         passed,
 
         affectedTags: passed
           ? []
           : unusedTags.map((tag) =>
-              mapToAffectedItem(
-                tag,
-                "tags",
-                data.accountId,
-                data.containerId,
-                data.workspaceId
-              )
-            ),
+            mapToAffectedItem(
+              tag,
+              "tags",
+              data.accountId,
+              data.containerId,
+              data.workspaceId
+            )
+          ),
 
         recommendation: passed
           ? ""
-          : `Found ${unusedTags.length} unused or paused tags. Review and cleanup recommended.`,
+          : `Found ${unusedTags.length} unused tags.`,
 
         gtmLinks: {
           tags: buildGTMListUrl(
@@ -691,58 +699,100 @@ export const healthCheckRules = [
 
   {
     id: "HC_LR_002",
-    title: "Unused Triggers Found",
-    description:
-      "Triggers not attached to any tags should be reviewed.",
+    title: "Paused Tags Found",
+    description: "Paused tags should be reviewed before publishing.",
     severity: "LOW",
 
     check: (data: GTMHealthData): HealthCheckResult => {
-      const usedTriggerIds = new Set<string>();
+
+      const triggerTagMap: Record<string, Record<string, unknown>[]> = {};
 
       data.tags.forEach((tag) => {
         const triggerIds = getArray(tag, "firingTriggerId");
 
         triggerIds.forEach((id) => {
           if (typeof id === "string") {
-            usedTriggerIds.add(id);
+            if (!triggerTagMap[id]) {
+              triggerTagMap[id] = [];
+            }
+
+            triggerTagMap[id].push(tag);
           }
         });
       });
 
-      const unusedTriggers = data.triggers.filter((trigger) => {
-        const id = getString(trigger, "triggerId");
-        return !usedTriggerIds.has(id);
+      const pausedTags: Record<string, unknown>[] = [];
+
+      data.tags.forEach((tag) => {
+
+        if (!Boolean(tag.paused)) return;
+
+        const triggerIds = getArray(tag, "firingTriggerId");
+
+        if (triggerIds.length === 0) {
+          pausedTags.push(tag);
+          return;
+        }
+
+        let shouldShow = false;
+
+        triggerIds.forEach((id) => {
+
+          if (typeof id !== "string") return;
+
+          const attachedTags = triggerTagMap[id] || [];
+
+          if (attachedTags.length > 1) {
+            shouldShow = true;
+          }
+        });
+
+        if (shouldShow) {
+          pausedTags.push(tag);
+        }
       });
 
-      const passed = unusedTriggers.length === 0;
+      const passed = pausedTags.length === 0;
 
       return {
         id: "HC_LR_002",
-        title: "Unused Triggers Found",
-        description:
-          "Triggers not attached to any tags should be reviewed.",
+        title: "Paused Tags Found",
+        description: "Paused tags should be reviewed before publishing.",
         severity: "LOW",
         passed,
 
-        affectedTriggers: passed
+        affectedTags: passed
           ? []
-          : unusedTriggers.map((trigger) =>
-              mapToAffectedItem(
-                trigger,
-                "triggers",
+          : pausedTags.map((tag) => {
+            const triggerIds = getArray(tag, "firingTriggerId");
+
+            const triggerNames = data.triggers
+              .filter((trigger) =>
+                triggerIds.includes(getString(trigger, "triggerId"))
+              )
+              .map((trigger) => getString(trigger, "name"))
+              .filter(Boolean);
+
+            return {
+              ...mapToAffectedItem(
+                tag,
+                "tags",
                 data.accountId,
                 data.containerId,
                 data.workspaceId
-              )
-            ),
+              ),
+
+              triggerNames,
+            };
+          }),
 
         recommendation: passed
           ? ""
-          : `Found ${unusedTriggers.length} unused triggers. Cleanup recommended.`,
+          : `Found ${pausedTags.length} paused tags.`,
 
         gtmLinks: {
-          triggers: buildGTMListUrl(
-            "triggers",
+          tags: buildGTMListUrl(
+            "tags",
             data.accountId,
             data.containerId,
             data.workspaceId
@@ -783,20 +833,114 @@ export const healthCheckRules = [
         affectedVariables: passed
           ? []
           : unusedVariables.map((variable) =>
-              mapToAffectedItem(
-                variable,
-                "variables",
-                data.accountId,
-                data.containerId,
-                data.workspaceId
-              )
-            ),
+            mapToAffectedItem(
+              variable,
+              "variables",
+              data.accountId,
+              data.containerId,
+              data.workspaceId
+            )
+          ),
 
         recommendation: passed
           ? ""
           : `Found ${unusedVariables.length} unused variables. Cleanup recommended.`,
 
         gtmLinks: {
+          variables: buildGTMListUrl(
+            "variables",
+            data.accountId,
+            data.containerId,
+            data.workspaceId
+          ),
+        },
+      };
+    },
+  },
+
+  {
+    id: "HC_LR_003A",
+    title: "Unattached Tags and Variables",
+    description:
+      "Tags without triggers and variables not used in any tag should be reviewed.",
+    severity: "LOW",
+
+    check: (data: GTMHealthData): HealthCheckResult => {
+
+      // -----------------------------
+      // Unattached Tags
+      // -----------------------------
+      const unattachedTags = data.tags.filter((tag) => {
+        const triggerIds = getArray(tag, "firingTriggerId");
+
+        return triggerIds.length === 0;
+      });
+
+      // -----------------------------
+      // Unused Variables
+      // -----------------------------
+      const unusedVariables = data.variables.filter((variable) => {
+
+        const variableName = getString(variable, "name");
+
+        if (!variableName) return false;
+
+        const usedInTags = JSON.stringify(data.tags).includes(
+          `{{${variableName}}}`
+        );
+
+        return !usedInTags;
+      });
+
+      const passed =
+        unattachedTags.length === 0 &&
+        unusedVariables.length === 0;
+
+      return {
+        id: "HC_LR_003A",
+        title: "Unattached Tags and Variables",
+        description:
+          "Tags without triggers and variables not used in any tag should be reviewed.",
+
+        severity: "LOW",
+
+        passed,
+
+        affectedTags: passed
+          ? []
+          : unattachedTags.map((tag) =>
+            mapToAffectedItem(
+              tag,
+              "tags",
+              data.accountId,
+              data.containerId,
+              data.workspaceId
+            )
+          ),
+
+        affectedVariables: passed
+          ? []
+          : unusedVariables.map((variable) =>
+            mapToAffectedItem(
+              variable,
+              "variables",
+              data.accountId,
+              data.containerId,
+              data.workspaceId
+            )
+          ),
+
+        recommendation: passed
+          ? ""
+          : `Found ${unattachedTags.length} unattached tags and ${unusedVariables.length} unused variables.`,
+
+        gtmLinks: {
+          tags: buildGTMListUrl(
+            "tags",
+            data.accountId,
+            data.containerId,
+            data.workspaceId
+          ),
           variables: buildGTMListUrl(
             "variables",
             data.accountId,
@@ -879,7 +1023,140 @@ export const healthCheckRules = [
       };
     },
   },
+
+
+  {
+    id: "HC_LR_006",
+    title: "GTM Container Summary",
+    description: "Shows complete summary of Tags, Triggers and Variables.",
+    severity: "LOW",
+
+    check: (data: GTMHealthData): HealthCheckResult => {
+
+      const unusedTags = data.tags.filter(tag =>
+        getArray(tag, "firingTriggerId").length === 0
+      );
+
+      const pausedTags = data.tags.filter(tag => Boolean(tag.paused));
+
+      const usedTags = data.tags.filter(tag =>
+        getArray(tag, "firingTriggerId").length > 0
+      );
+
+      const usedTriggerIds = new Set<string>();
+
+      data.tags.forEach(tag => {
+        getArray(tag, "firingTriggerId").forEach(id => {
+          if (typeof id === "string") {
+            usedTriggerIds.add(id);
+          }
+        });
+      });
+
+      const usedTriggers = data.triggers.filter(trigger =>
+        usedTriggerIds.has(getString(trigger, "triggerId"))
+      );
+
+      const unusedTriggers = data.triggers.filter(trigger =>
+        !usedTriggerIds.has(getString(trigger, "triggerId"))
+      );
+
+      const usedVariables = data.variables.filter(variable => {
+        const name = getString(variable, "name");
+        return JSON.stringify(data.tags).includes(`{{${name}}}`);
+      });
+
+      const unusedVariables = data.variables.filter(variable => {
+        const name = getString(variable, "name");
+        return !JSON.stringify(data.tags).includes(`{{${name}}}`);
+      });
+
+      return {
+        id: "HC_LR_006",
+        title: "GTM Container Summary",
+        description: "Shows complete summary of GTM assets.",
+        severity: "LOW",
+        passed: true,
+
+        summaryTable: [
+          {
+            category: "Tags",
+            total: data.tags.length,
+            items: data.tags.map(t => getString(t, "name")),
+          },
+          {
+            category: "Used Tags",
+            total: usedTags.length,
+            items: usedTags.map(t => getString(t, "name")),
+          },
+          {
+            category: "Unused Tags",
+            total: unusedTags.length,
+            items: unusedTags.map(t => getString(t, "name")),
+          },
+          {
+            category: "Paused Tags",
+            total: pausedTags.length,
+            items: pausedTags.map(t => getString(t, "name")),
+          },
+          {
+            category: "Triggers",
+            total: data.triggers.length,
+            items: data.triggers.map(t => getString(t, "name")),
+          },
+          {
+            category: "Used Triggers",
+            total: usedTriggers.length,
+            items: usedTriggers.map(t => getString(t, "name")),
+          },
+          {
+            category: "Unused Triggers",
+            total: unusedTriggers.length,
+            items: unusedTriggers.map(t => getString(t, "name")),
+          },
+          {
+            category: "Variables",
+            total: data.variables.length,
+            items: data.variables.map(v => getString(v, "name")),
+          },
+          {
+            category: "Used Variables",
+            total: usedVariables.length,
+            items: usedVariables.map(v => getString(v, "name")),
+          },
+          {
+            category: "Unused Variables",
+            total: unusedVariables.length,
+            items: unusedVariables.map(v => getString(v, "name")),
+          },
+        ],
+
+        gtmLinks: {
+          tags: buildGTMListUrl(
+            "tags",
+            data.accountId,
+            data.containerId,
+            data.workspaceId
+          ),
+          triggers: buildGTMListUrl(
+            "triggers",
+            data.accountId,
+            data.containerId,
+            data.workspaceId
+          ),
+          variables: buildGTMListUrl(
+            "variables",
+            data.accountId,
+            data.containerId,
+            data.workspaceId
+          ),
+        },
+      };
+    },
+  },
 ];
+
+
 
 
 // import { GTMHealthData, HealthCheckResult, AffectedItem } from "./types";
