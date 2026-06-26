@@ -215,15 +215,15 @@ export default function ExportTagDependenciesModal({
         );
 
         const selectedTriggerIds = Object.entries(selection.checkedTriggers)
-            .filter(([val]) => val)
+            .filter(([, val]) => val)
             .map(([key]) => key);
 
         const selectedVariableNames = Object.entries(selection.checkedVariables)
-            .filter(([val]) => val)
+            .filter(([, val]) => val)
             .map(([key]) => key);
 
         const selectedTemplateIds = Object.entries(selection.checkedTemplates)
-            .filter(([val]) => val)
+            .filter(([, val]) => val)
             .map(([key]) => key);
 
         onContinue({

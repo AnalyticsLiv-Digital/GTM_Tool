@@ -1,8 +1,8 @@
-# GTM Tools - Complete Setup & Usage Guide
+# GTM Tool - Complete Setup & Usage Guide
 
 ## 📋 Project Overview
 
-GTM Tools is a full-stack Next.js application that provides a modern dashboard for managing Google Tag Manager containers. It includes:
+GTM Tool is a full-stack Next.js application that provides a modern dashboard for managing Google Tag Manager containers. It includes:
 
 - ✅ Email/Password Authentication
 - ✅ Google OAuth Social Login  

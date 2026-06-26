@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * GTM Tools brand mark.
+ * GTM Tool brand mark.
  *   - rounded-square = the container
  *   - inner ring     = the lens / aperture
  *   - vertical hair  = the scan line
@@ -76,7 +76,7 @@ export function Brand({
   return (
     <span className={`brand-lockup inline-flex items-center gap-2.5 ${className}`}>
       <LogoMark size={size} />
-      <span className="text-[15px] font-semibold tracking-[-0.012em]">GTM Tools</span>
+      <span className="text-[15px] font-semibold tracking-[-0.012em]">GTM Tool</span>
     </span>
   );
 }

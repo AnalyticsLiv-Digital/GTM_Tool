@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useEffect,useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 
 import {
@@ -10,6 +10,7 @@ import {
   Folder,
   Boxes,
   Workflow,
+  Loader2,
 } from "lucide-react";
 
 import WorkspaceCrudSection from "@/app/dashboard/components/modals/WorkspaceCrudSection";
@@ -33,8 +34,9 @@ function CustomDropdown({
 
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const selectedLabel =
-    options.find((o) => o.value === value)?.label || placeholder;
+  const selectedLabel = disabled
+    ? "Loading..."
+    : options.find((o) => o.value === value)?.label || placeholder;
 
   useEffect(() => {
     function handleOutside(e: MouseEvent) {
@@ -58,38 +60,47 @@ function CustomDropdown({
         type="button"
         disabled={disabled}
         onClick={() => setOpen((p) => !p)}
-        className={`w-full flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl border border-line bg-card text-fg shadow-sm hover:bg-card-hi transition text-sm ${
-          disabled ? "opacity-50 cursor-not-allowed" : ""
-        }`}
+        className={`w-full flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl border border-line bg-card text-fg shadow-sm hover:bg-card-hi transition text-sm ${disabled ? "opacity-50 cursor-not-allowed" : ""
+          }`}
       >
         <span className="truncate">{selectedLabel}</span>
 
-        <ChevronDown
-          size={16}
-          className={`text-muted transition ${open ? "rotate-180" : ""}`}
-        />
+        {disabled ? (
+          <Loader2
+            size={16}
+            className="animate-spin text-muted"
+          />
+        ) : (
+          <ChevronDown
+            size={16}
+            className={`text-muted transition ${open ? "rotate-180" : ""}`}
+          />
+        )}
       </button>
 
       {open && !disabled && (
         <div className="absolute mt-2 w-full z-9999 rounded-xl border border-line bg-card shadow-xl overflow-hidden">
           <div className="max-h-60 overflow-y-auto">
-            {options.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                onClick={() => {
-                  onChange(opt.value);
-                  setOpen(false);
-                }}
-                className={`w-full text-left px-4 py-2.5 text-sm hover:bg-card-hi transition ${
-                  value === opt.value ? "bg-card-hi" : ""
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-
-            {options.length === 0 && (
+            {disabled ? (
+              <p className="text-sm text-muted px-4 py-3">
+                Loading...
+              </p>
+            ) : options.length > 0 ? (
+              options.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => {
+                    onChange(opt.value);
+                    setOpen(false);
+                  }}
+                  className={`w-full text-left px-4 py-2.5 text-sm hover:bg-card-hi transition ${value === opt.value ? "bg-card-hi" : ""
+                    }`}
+                >
+                  {opt.label}
+                </button>
+              ))
+            ) : (
               <p className="text-sm text-muted px-4 py-3">
                 No results found.
               </p>
@@ -360,11 +371,10 @@ export default function ExportTemplatesModal({
                 return (
                   <div key={s.id} className="flex items-center flex-1">
                     <div
-                      className={`w-9 h-9 rounded-full flex items-center justify-center border transition-all duration-300 ${
-                        done
-                          ? "bg-green-500/15 border-green-500 text-green-500"
-                          : "bg-card border-line text-muted"
-                      }`}
+                      className={`w-9 h-9 rounded-full flex items-center justify-center border transition-all duration-300 ${done
+                        ? "bg-green-500/15 border-green-500 text-green-500"
+                        : "bg-card border-line text-muted"
+                        }`}
                     >
                       {done ? (
                         <CheckCircle2 size={18} />
@@ -375,9 +385,8 @@ export default function ExportTemplatesModal({
 
                     {!isLast && (
                       <div
-                        className={`flex-1 h-0.5 mx-3 transition-all duration-300 ${
-                          done ? "bg-green-500/60" : "bg-line"
-                        }`}
+                        className={`flex-1 h-0.5 mx-3 transition-all duration-300 ${done ? "bg-green-500/60" : "bg-line"
+                          }`}
                       />
                     )}
                   </div>

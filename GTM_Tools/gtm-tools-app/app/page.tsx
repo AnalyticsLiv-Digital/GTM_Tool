@@ -71,7 +71,7 @@ export default function Home() {
 
             <div className="hidden md:flex items-center gap-7 text-[13.5px] text-muted">
               <a href="#features" className="hover:text-fg transition-colors">Features</a>
-              <a href="#benefits" className="hover:text-fg transition-colors">Why GTM Tools</a>
+              <a href="#benefits" className="hover:text-fg transition-colors">Why GTM Tool</a>
               <a href="#pricing" className="hover:text-fg transition-colors">Pricing</a>
             </div>
 
@@ -132,11 +132,11 @@ export default function Home() {
               className="reveal mt-9 flex flex-wrap items-center gap-3"
               style={{ animationDelay: "360ms" }}
             >
-              <Link href="/signup" className="btn-primary !px-5 !py-2.5">
+              <Link href="/signup" className="btn-primary px-5! py-2.5!">
                 Get started — free
                 <ArrowRight size={15} strokeWidth={2.4} />
               </Link>
-              <Link href="/login" className="btn-secondary !px-5 !py-2.5">
+              <Link href="/login" className="btn-secondary px-5! py-2.5!">
                 Sign in
               </Link>
               <span className="font-mono text-[11px] text-faint pl-1">
@@ -182,7 +182,7 @@ export default function Home() {
         <div className="max-w-6xl mx-auto px-6 lg:px-8 py-20 lg:py-24">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-x-12 gap-y-12">
             <div className="lg:col-span-5 sr">
-              <p className="font-mono text-[11px] uppercase tracking-[0.15em] text-accent mb-4">Why GTM Tools</p>
+              <p className="font-mono text-[11px] uppercase tracking-[0.15em] text-accent mb-4">Why GTM Tool</p>
               <h2 className="text-[clamp(32px,4.2vw,48px)] font-semibold leading-[1.05] tracking-[-0.025em]">
                 Built for teams who care about measurement.
               </h2>
@@ -217,11 +217,11 @@ export default function Home() {
             before your next stand-up.
           </p>
           <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
-            <Link href="/signup" className="btn-primary !px-5 !py-2.5">
+            <Link href="/signup" className="btn-primary px-5! py-2.5!">
               Create free account
               <ArrowRight size={15} strokeWidth={2.4} />
             </Link>
-            <Link href="/login" className="btn-secondary !px-5 !py-2.5">
+            <Link href="/login" className="btn-secondary px-5! py-2.5!">
               Sign in
             </Link>
           </div>
@@ -246,7 +246,7 @@ export default function Home() {
               title="Product"
               items={[
                 ["Features", "#features"],
-                ["Why GTM Tools", "#benefits"],
+                ["Why GTM Tool", "#benefits"],
                 ["Pricing", "#pricing"],
               ]}
             />
@@ -261,15 +261,15 @@ export default function Home() {
             <FooterCol
               title="Legal"
               items={[
-                ["Privacy", "/privacy"],
-                ["Terms", "/terms"],
+                ["Privacy", "legal/privacy-policy"],
+                ["Terms", "legal/terms"],
                 ["Security", "/security"],
               ]}
             />
           </div>
 
           <div className="mt-12 pt-6 border-t border-line flex flex-col sm:flex-row items-center justify-between gap-3 text-[12px] text-faint">
-            <span>© {new Date().getFullYear()} GTM Tools · An AnalyticsLiv product.</span>
+            <span>© {new Date().getFullYear()} GTM Tool · An AnalyticsLiv product.</span>
             <span className="font-mono">v0.1</span>
           </div>
         </div>
@@ -301,7 +301,7 @@ function Benefit({ title, body }: { title: string; body: string }) {
         </span>
         <h3 className="text-[16px] font-semibold tracking-[-0.01em]">{title}</h3>
       </div>
-      <p className="text-[14.5px] leading-[1.6] text-muted ml-[30px]">{body}</p>
+      <p className="text-[14.5px] leading-[1.6] text-muted ml-7.5">{body}</p>
     </div>
   );
 }

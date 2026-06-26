@@ -42,7 +42,7 @@ export default function TemplateModal() {
                 await fetchTemplates();
               }}
               disabled={store.templateCrudLoading}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium rounded-md border border-[color:var(--danger)]/30 bg-[color:var(--danger)]/10 text-[color:var(--danger)] hover:bg-[color:var(--danger)]/15 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-[13px] font-medium rounded-md border border-(--danger)/30 bg-(--danger)/10 text-(--danger) hover:bg-(--danger)/15 disabled:opacity-50"
             >
               {store.templateCrudLoading ? "Deleting…" : "Delete"}
             </button>
@@ -50,7 +50,7 @@ export default function TemplateModal() {
             <span />
           )}
           <div className="flex gap-2">
-            <button type="button" onClick={close} className="btn-secondary !py-1.5 !px-3">
+            <button type="button" onClick={close} className="btn-secondary py-1.5! px-3!">
               Cancel
             </button>
             <button
@@ -60,7 +60,7 @@ export default function TemplateModal() {
                 await fetchTemplates();
               }}
               disabled={store.templateCrudLoading}
-              className="btn-primary !py-1.5 !px-3 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="btn-primary py-1.5! px-3! disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {saveLabel}
             </button>

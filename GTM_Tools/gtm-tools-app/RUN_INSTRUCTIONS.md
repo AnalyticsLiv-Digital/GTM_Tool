@@ -1,6 +1,6 @@
-# 🚀 GTM Tools - Step-by-Step Guide to Run
+# 🚀 GTM Tool - Step-by-Step Guide to Run
 
-Follow these steps to run your GTM Tools Next.js application:
+Follow these steps to run your GTM Tool Next.js application:
 
 ---
 
