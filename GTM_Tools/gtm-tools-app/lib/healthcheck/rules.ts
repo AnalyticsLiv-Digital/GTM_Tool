@@ -962,7 +962,7 @@ export const healthCheckRules = [
     check: (data: GTMHealthData): HealthCheckResult => {
       const tagCount = data.tags.length;
 
-      const passed = tagCount < 200;
+      const passed = tagCount < 300;
 
       return {
         id: "HC_LR_004",
@@ -1155,7 +1155,6 @@ export const healthCheckRules = [
     },
   },
 ];
-
 
 
 
