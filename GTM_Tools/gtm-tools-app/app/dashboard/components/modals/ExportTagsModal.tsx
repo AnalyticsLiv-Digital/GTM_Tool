@@ -539,6 +539,13 @@ export default function ExportTagsModal({
   // EXPORT TEMPLATE
   // ============================================================
   async function exportTemplate(templateId: string) {
+    console.log("Logs in Function ---------------------------------------------------------",{
+      sourceAccountId,
+      sourceContainerId,
+      sourceWorkspaceId,
+      templateId,
+    });
+
     const fetchRes = await fetchWithRetry(
       `/api/auth/gtm/templates/export?accountId=${sourceAccountId}&containerId=${sourceContainerId}&workspaceId=${sourceWorkspaceId}&templateId=${templateId}`,
       { method: "GET" }
@@ -558,6 +565,8 @@ export default function ExportTagsModal({
     if (existing?.templateId) {
       return existing.templateId;
     }
+
+
 
     const createRes = await fetchWithRetry("/api/auth/gtm/templates", {
       method: "POST",
@@ -1109,8 +1118,8 @@ export default function ExportTagsModal({
                       {/* CIRCLE */}
                       <div
                         className={`w-9 h-9 rounded-full flex items-center justify-center border transition-all duration-300 ${done
-                            ? "bg-green-500/15 border-green-500 text-green-500"
-                            : "bg-card border-line text-muted"
+                          ? "bg-green-500/15 border-green-500 text-green-500"
+                          : "bg-card border-line text-muted"
                           }`}
                       >
                         {done ? <CheckCircle2 size={18} /> : <Icon size={18} />}

@@ -63,6 +63,13 @@ export async function GET(req: Request) {
     const workspaceId = url.searchParams.get("workspaceId");
     const templateId = url.searchParams.get("templateId");
 
+    console.log("Logs in API---------------------------------------------------------",{
+      accountId,
+      containerId,
+      workspaceId,
+      templateId,
+    });
+
     if (!accountId || !containerId || !workspaceId) {
       return NextResponse.json(
         { error: "accountId, containerId, workspaceId required" },
