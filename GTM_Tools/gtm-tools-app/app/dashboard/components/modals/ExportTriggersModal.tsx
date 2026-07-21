@@ -4,10 +4,10 @@
 import { useEffect, useRef, useState } from "react";
 import { toast } from "react-toastify";
 import {
-  ChevronDown,
+  Building2,
   CheckCircle2,
-  Folder,
-  Boxes,
+  ChevronDown,
+  Layers,
   Workflow,
 } from "lucide-react";
 
@@ -57,9 +57,8 @@ function CustomDropdown({
         type="button"
         disabled={disabled}
         onClick={() => setOpen((p) => !p)}
-        className={`w-full flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl border border-line bg-card text-fg shadow-sm hover:bg-card-hi transition text-sm ${
-          disabled ? "opacity-50 cursor-not-allowed" : ""
-        }`}
+        className={`w-full flex items-center justify-between gap-2 px-4 py-2.5 rounded-xl border border-line bg-card text-fg shadow-sm hover:bg-card-hi transition text-sm ${disabled ? "opacity-50 cursor-not-allowed" : ""
+          }`}
       >
         <span className="truncate">{selectedLabel}</span>
 
@@ -80,9 +79,8 @@ function CustomDropdown({
                   onChange(opt.value);
                   setOpen(false);
                 }}
-                className={`w-full text-left px-4 py-2.5 text-sm hover:bg-card-hi transition ${
-                  value === opt.value ? "bg-card-hi" : ""
-                }`}
+                className={`w-full text-left px-4 py-2.5 text-sm hover:bg-card-hi transition ${value === opt.value ? "bg-card-hi" : ""
+                  }`}
               >
                 {opt.label}
               </button>
@@ -287,17 +285,17 @@ export default function ExportTriggersModal({
 
   const steps = [
     {
-      id: 1,
-      icon: Folder,
+      id: "account",
+      icon: Building2,
       done: !!selectedAccountId,
     },
     {
-      id: 2,
-      icon: Boxes,
+      id: "container",
+      icon: Layers,
       done: !!selectedContainerId,
     },
     {
-      id: 3,
+      id: "workspace",
       icon: Workflow,
       done: !!selectedWorkspaceId,
     },
@@ -305,143 +303,157 @@ export default function ExportTriggersModal({
 
   return (
     <div className="fixed inset-0 bg-black/55 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-card text-fg w-full max-w-3xl rounded-xl border border-edge shadow-lg overflow-visible">
+      <div className="bg-card text-fg w-full max-w-6xl rounded-xl border border-edge shadow-lg overflow-visible">
         {/* HEADER */}
-        <div className="flex justify-between items-center px-5 py-3 border-b border-line">
-          <h2 className="text-[15px] font-semibold text-fg">
-            Export Triggers ({selectedTriggers.length})
-          </h2>
+        <div className="flex justify-between items-center px-6 py-4 border-b border-line bg-card-hi">
+          <div>
+            <h2 className="text-[15px] font-semibold text-fg">
+              Export Triggers
+            </h2>
+
+            <p className="text-[12.5px] text-muted mt-0.5">
+              Export selected triggers into a destination workspace.
+            </p>
+          </div>
 
           <button
             onClick={onClose}
-            className="w-8 h-8 inline-flex items-center justify-center rounded-md text-muted hover:text-fg hover:bg-card-hi text-base"
+            className="w-9 h-9 inline-flex items-center justify-center rounded-lg text-muted hover:text-fg hover:bg-card transition"
           >
             ✕
           </button>
         </div>
 
         {/* BODY */}
-        <div className="grid grid-cols-12 min-h-135">
+        <div className="grid grid-cols-12 h-140">
           {/* LEFT */}
-          <div className="col-span-5 border-r border-line bg-card-hi p-4">
+          <div className="col-span-5 border-r border-line bg-card-hi p-5 flex flex-col min-h-0">
             <p className="text-[12px] font-medium text-faint mb-3 uppercase tracking-[0.05em]">
               Selected Triggers ({selectedTriggers.length})
             </p>
 
-            <div className="bg-card border border-line rounded-lg overflow-y-auto max-h-107.5">
-              {selectedTriggers.map((t: any) => (
-                <div
-                  key={t.triggerId}
-                  className="px-4 py-3 border-b border-line last:border-none"
-                >
-                  <p className="text-[13px] font-medium text-fg">
-                    {t.name}
-                  </p>
+            <div className="bg-card border border-line rounded-xl overflow-hidden flex-1 min-h-0">
+              <div className="overflow-y-auto h-full">
+                {selectedTriggers.map((t: any) => (
+                  <div
+                    key={t.triggerId}
+                    className="px-4 py-3 border-b border-line last:border-none"
+                  >
+                    <p className="text-[13px] font-medium text-fg">
+                      {t.name}
+                    </p>
 
-                  <p className="text-[11px] text-faint">
-                    Type: {t.type} | ID: {t.triggerId}
-                  </p>
-                </div>
-              ))}
+                    <p className="text-[11px] text-faint">
+                      Type: {t.type} | ID: {t.triggerId}
+                    </p>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
           {/* RIGHT */}
-          <div className="col-span-7 p-6">
-            {/* STEPPER */}
-            <div className="flex items-center justify-between w-full mb-7 px-2">
-              {steps.map((s, idx) => {
-                const Icon = s.icon;
+          <div className="col-span-7 p-6 min-h-0">
+            <div className="flex flex-col h-full">
+              {/* STEPPER */}
+              <div className="flex items-center justify-between w-full mb-7 px-2">
+                {steps.map((s, idx) => {
+                  const Icon = s.icon;
 
-                const done = s.done;
+                  const done = s.done;
 
-                const isLast = idx === steps.length - 1;
+                  const isLast = idx === steps.length - 1;
 
-                return (
-                  <div key={s.id} className="flex items-center flex-1">
-                    {/* CIRCLE */}
-                    <div
-                      className={`w-9 h-9 rounded-full flex items-center justify-center border transition-all duration-300 ${
-                        done
+                  return (
+                    <div key={s.id} className="flex items-center flex-1">
+                      {/* CIRCLE */}
+                      <div
+                        className={`w-9 h-9 rounded-full flex items-center justify-center border transition-all duration-300 ${done
                           ? "bg-green-500/15 border-green-500 text-green-500"
                           : "bg-card border-line text-muted"
-                      }`}
-                    >
-                      {done ? (
-                        <CheckCircle2 size={18} />
-                      ) : (
-                        <Icon size={18} />
+                          }`}
+                      >
+                        {done ? (
+                          <CheckCircle2 size={18} />
+                        ) : (
+                          <Icon size={18} />
+                        )}
+                      </div>
+
+                      {/* LINE */}
+                      {!isLast && (
+                        <div
+                          className={`flex-1 h-0.5 mx-3 transition-all duration-300 ${done ? "bg-green-500/60" : "bg-line"
+                            }`}
+                        />
                       )}
                     </div>
+                  );
+                })}
+              </div>
 
-                    {/* LINE */}
-                    {!isLast && (
-                      <div
-                        className={`flex-1 h-0.5 mx-3 transition-all duration-300 ${
-                          done ? "bg-green-500/60" : "bg-line"
-                        }`}
-                      />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+              <div className="space-y-4 overflow-y-auto pr-1">
+                <div className="mb-5">
+                  <h3 className="text-[15px] font-semibold text-fg">
+                    Destination Setup
+                  </h3>
 
-            <div className="space-y-5">
-              <h3 className="text-[14px] font-semibold text-fg">
-                Select Destination
-              </h3>
+                  <p className="text-[12.5px] text-muted mt-1">
+                    Select the account, container, and workspace where triggers will be exported.
+                  </p>
+                </div>
 
-              <CustomDropdown
-                label="Account"
-                value={selectedAccountId}
-                placeholder="-- Select Account --"
-                disabled={loadingAccounts}
-                options={accounts.map((a) => ({
-                  value: a.accountId,
-                  label: a.name,
-                }))}
-                onChange={(val) => setSelectedAccountId(val)}
-              />
+                <CustomDropdown
+                  label="Account"
+                  value={selectedAccountId}
+                  placeholder="-- Select Account --"
+                  disabled={loadingAccounts}
+                  options={accounts.map((a) => ({
+                    value: a.accountId,
+                    label: a.name,
+                  }))}
+                  onChange={(val) => setSelectedAccountId(val)}
+                />
 
-              <CustomDropdown
-                label="Container"
-                value={selectedContainerId}
-                placeholder="-- Select Container --"
-                disabled={!selectedAccountId || loadingContainers}
-                options={containers.map((c) => ({
-                  value: c.containerId,
-                  label: c.name,
-                }))}
-                onChange={(val) => setSelectedContainerId(val)}
-              />
+                <CustomDropdown
+                  label="Container"
+                  value={selectedContainerId}
+                  placeholder="-- Select Container --"
+                  disabled={!selectedAccountId || loadingContainers}
+                  options={containers.map((c) => ({
+                    value: c.containerId,
+                    label: c.name,
+                  }))}
+                  onChange={(val) => setSelectedContainerId(val)}
+                />
 
-              <CustomDropdown
-                label="Workspace"
-                value={selectedWorkspaceId}
-                placeholder="-- Select Workspace --"
-                disabled={!selectedContainerId || loadingWorkspaces}
-                options={workspaces.map((w) => ({
-                  value: w.workspaceId,
-                  label: w.name,
-                }))}
-                onChange={(val) => setSelectedWorkspaceId(val)}
-              />
+                <CustomDropdown
+                  label="Workspace"
+                  value={selectedWorkspaceId}
+                  placeholder="-- Select Workspace --"
+                  disabled={!selectedContainerId || loadingWorkspaces}
+                  options={workspaces.map((w) => ({
+                    value: w.workspaceId,
+                    label: w.name,
+                  }))}
+                  onChange={(val) => setSelectedWorkspaceId(val)}
+                />
 
-              <WorkspaceCrudSection
-                selectedAccountId={selectedAccountId}
-                selectedContainerId={selectedContainerId}
-                selectedWorkspaceId={selectedWorkspaceId}
-                setSelectedWorkspaceId={setSelectedWorkspaceId}
-                workspaces={workspaces}
-                setWorkspaces={setWorkspaces}
-              />
+                <WorkspaceCrudSection
+                  selectedAccountId={selectedAccountId}
+                  selectedContainerId={selectedContainerId}
+                  selectedWorkspaceId={selectedWorkspaceId}
+                  setSelectedWorkspaceId={setSelectedWorkspaceId}
+                  workspaces={workspaces}
+                  setWorkspaces={setWorkspaces}
+                />
+              </div>
             </div>
           </div>
         </div>
 
         {/* FOOTER */}
-        <div className="px-5 py-3 border-t border-line bg-page-soft flex justify-between items-center">
+        <div className="px-6 py-4 border-t border-line bg-page-soft flex justify-between items-center">
           <button
             onClick={onClose}
             className="btn-secondary py-1.5! px-3!"

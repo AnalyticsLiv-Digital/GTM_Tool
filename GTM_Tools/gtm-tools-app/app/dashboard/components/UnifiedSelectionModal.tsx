@@ -48,12 +48,12 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
   }, [selectedAccountId]);
 
   useEffect(() => {
-    if (selectedContainerId && selectedAccountId) {
-      setStep("workspace");
-      fetchWorkspaces();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedContainerId, selectedAccountId]);
+    if (!selectedAccountId || !selectedContainerId) return;
+
+    setStep("workspace");
+
+    fetchWorkspaces();
+  }, [selectedAccountId, selectedContainerId]);
 
   if (!show) return null;
 
@@ -66,13 +66,16 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
     setSelectedWorkspaceName("");
   };
 
-  const handleContainerSelect = (container: any) => {
-    setSelectedContainerId(container.containerId);
-    setSelectedContainerName(container.name);
+  const handleContainerSelect = async (container: any) => {
     setSelectedWorkspaceId("");
     setSelectedWorkspaceName("");
+    if (selectedContainerId === container.containerId) {
+      await fetchWorkspaces();
+      return;
+    }
+    setSelectedContainerId(container.containerId);
+    setSelectedContainerName(container.name);
   };
-
   const handleWorkspaceSelect = (workspace: any) => {
     setSelectedWorkspaceId(workspace.workspaceId);
     setSelectedWorkspaceName(workspace.name);
@@ -304,11 +307,10 @@ function PaneButton({
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-md text-left transition-colors ${
-        active
-          ? "bg-accent-soft border border-accent/25"
-          : "hover:bg-card-hi border border-transparent"
-      }`}
+      className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-md text-left transition-colors ${active
+        ? "bg-accent-soft border border-accent/25"
+        : "hover:bg-card-hi border border-transparent"
+        }`}
     >
       <div className="min-w-0 flex-1">
         <p className={`text-[13px] truncate ${active ? "text-accent font-medium" : "text-fg"}`}>
