@@ -73,6 +73,7 @@ export default function ExportTagDependenciesModal({
     // ============================================================
     // BUILD DEPENDENCIES PER TAG
     // ============================================================
+
     const tagDependencies = useMemo(() => {
         return (selectedTags || []).map((tag: any) => {
             const triggerIds = new Set<string>();
@@ -137,6 +138,7 @@ export default function ExportTagDependenciesModal({
     // ============================================================
     // INITIAL DEFAULT STATE (NO useEffect)
     // ============================================================
+
     const initialSelection = useMemo((): SelectionState => {
         const checkedTags: Record<string, boolean> = {};
         const checkedTriggers: Record<string, boolean> = {};
@@ -175,6 +177,7 @@ export default function ExportTagDependenciesModal({
     // ============================================================
     // RESET STATE WHEN TAGS CHANGE (NO useEffect needed)
     // ============================================================
+
     const resetKey = useMemo(() => {
         return (selectedTags || []).map((t: any) => t.tagId).join(",");
     }, [selectedTags]);
@@ -188,6 +191,7 @@ export default function ExportTagDependenciesModal({
     // ============================================================
     // GLOBAL COUNTS
     // ============================================================
+
     const globalCounts = useMemo(() => {
         const allTriggers = new Set<string>();
         const allVariables = new Set<string>();
@@ -209,6 +213,7 @@ export default function ExportTagDependenciesModal({
     // ============================================================
     // CONTINUE HANDLER
     // ============================================================
+    
     function handleContinue() {
         const finalTags = (selectedTags || []).filter(
             (t: any) => selection.checkedTags[t.tagId]

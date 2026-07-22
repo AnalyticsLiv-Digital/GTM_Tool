@@ -951,6 +951,116 @@ export const healthCheckRules = [
       };
     },
   },
+  {
+    id: "HC_LR_003B",
+    title: "Duplicate Asset Names",
+    description:
+      "Detects duplicate Tag, Trigger and Variable names regardless of case or separators.",
+    severity: "LOW",
+
+    check: (data: GTMHealthData): HealthCheckResult => {
+
+      const normalize = (name: string) =>
+        name
+          .toLowerCase()
+          .replace(/[_\-\s]/g, "");
+
+      function findDuplicates(items: Record<string, unknown>[]) {
+        const map: Record<string, Record<string, unknown>[]> = {};
+
+        items.forEach(item => {
+          const name = getString(item, "name");
+
+          if (!name) return;
+
+          const key = normalize(name);
+
+          if (!map[key]) {
+            map[key] = [];
+          }
+
+          map[key].push(item);
+        });
+
+        return Object.values(map)
+          .filter(group => group.length > 1)
+          .flat();
+      }
+
+      const duplicateTags = findDuplicates(data.tags);
+      const duplicateTriggers = findDuplicates(data.triggers);
+      const duplicateVariables = findDuplicates(data.variables);
+
+      const passed =
+        duplicateTags.length === 0 &&
+        duplicateTriggers.length === 0 &&
+        duplicateVariables.length === 0;
+
+      return {
+        id: "HC_LR_003B",
+        title: "Duplicate Tag, Trigger and Variable Names",
+        description:
+          "Duplicate Tag, Trigger or Variable names detected.",
+        severity: "LOW",
+        passed,
+
+        affectedTags: duplicateTags.map(tag =>
+          mapToAffectedItem(
+            tag,
+            "tags",
+            data.accountId,
+            data.containerId,
+            data.workspaceId
+          )
+        ),
+
+        affectedTriggers: duplicateTriggers.map(trigger =>
+          mapToAffectedItem(
+            trigger,
+            "triggers",
+            data.accountId,
+            data.containerId,
+            data.workspaceId
+          )
+        ),
+
+        affectedVariables: duplicateVariables.map(variable =>
+          mapToAffectedItem(
+            variable,
+            "variables",
+            data.accountId,
+            data.containerId,
+            data.workspaceId
+          )
+        ),
+
+        recommendation: passed
+          ? ""
+          : `Found duplicate asset names. Use a consistent naming convention.`,
+
+        gtmLinks: {
+          tags: buildGTMListUrl(
+            "tags",
+            data.accountId,
+            data.containerId,
+            data.workspaceId
+          ),
+          triggers: buildGTMListUrl(
+            "triggers",
+            data.accountId,
+            data.containerId,
+            data.workspaceId
+          ),
+          variables: buildGTMListUrl(
+            "variables",
+            data.accountId,
+            data.containerId,
+            data.workspaceId
+          ),
+        },
+      };
+    },
+  },
 
   {
     id: "HC_LR_004",
@@ -962,7 +1072,7 @@ export const healthCheckRules = [
     check: (data: GTMHealthData): HealthCheckResult => {
       const tagCount = data.tags.length;
 
-      const passed = tagCount < 200;
+      const passed = tagCount < 300;
 
       return {
         id: "HC_LR_004",
@@ -1155,7 +1265,6 @@ export const healthCheckRules = [
     },
   },
 ];
-
 
 
 

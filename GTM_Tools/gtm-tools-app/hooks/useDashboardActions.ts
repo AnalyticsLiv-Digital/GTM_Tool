@@ -23,19 +23,32 @@ export function useDashboardActions() {
       );
       const data = await res.json();
 
-      if (!res.ok) throw new Error(data?.error || "Failed to fetch containers");
+      if (!res.ok) {
+        throw new Error(data?.error || "Failed to fetch containers");
+      }
 
+      // Load containers for selected account
       store.setContainers(data.container || []);
+
+      // Clear previous container selection
+      store.setSelectedContainerId("");
+      store.setSelectedContainerName("");
+
+      // Clear previous workspace selection
+      store.setWorkspaces([]);
+      store.setSelectedWorkspaceId("");
+      store.setSelectedWorkspaceName("");
+
     } catch (err: any) {
       store.setContainersError(err.message);
     } finally {
       store.setContainersLoading(false);
     }
   };
-
   // -----------------------------
   // FETCH WORKSPACES
   // -----------------------------
+
   const fetchWorkspaces = async () => {
     if (!store.selectedAccountId || !store.selectedContainerId) return;
 
@@ -997,4 +1010,4 @@ export function useDashboardActions() {
     handleSaveTemplate,
     handleDeleteTemplate,
   };
-}
+} 

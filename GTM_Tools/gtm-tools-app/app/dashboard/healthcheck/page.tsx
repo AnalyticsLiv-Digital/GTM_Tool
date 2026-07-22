@@ -479,7 +479,23 @@ function AffectedList({
             href={item.editUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="rounded-md border px-2 py-1 bg-gray-100 hover:bg-blue-50 text-xs"
+            className="
+            rounded-md
+            border
+            border-gray-300
+            bg-white
+            px-3
+            py-1.5
+            text-xs
+            font-medium
+            text-gray-900
+            hover:bg-blue-50
+            transition-colors
+            dark:bg-gray-800
+            dark:border-gray-600
+            dark:text-white
+            dark:hover:bg-gray-700
+          "
           >
             {item.name}
           </a>

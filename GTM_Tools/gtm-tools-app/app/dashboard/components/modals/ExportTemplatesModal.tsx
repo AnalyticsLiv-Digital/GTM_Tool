@@ -6,8 +6,7 @@ import { toast } from "react-toastify";
 
 import {
   ChevronDown,
-  CheckCircle2,
-  Folder,
+  Building2,
   Boxes,
   Workflow,
   Loader2,
@@ -298,7 +297,7 @@ export default function ExportTemplatesModal({
   const steps = [
     {
       id: 1,
-      icon: Folder,
+      icon: Building2,
       done: !!selectedAccountId,
     },
     {
@@ -315,89 +314,101 @@ export default function ExportTemplatesModal({
 
   return (
     <div className="fixed inset-0 bg-black/55 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-card text-fg w-full max-w-3xl rounded-xl border border-edge shadow-lg overflow-visible">
+      <div className="bg-card text-fg w-full max-w-6xl h-[85vh] rounded-2xl border border-edge shadow-xl overflow-hidden flex flex-col">
         {/* HEADER */}
-        <div className="flex justify-between items-center px-5 py-3 border-b border-line">
-          <h2 className="text-[15px] font-semibold text-fg">
-            Export Templates ({selectedTemplates.length})
-          </h2>
+        <div className="flex justify-between items-center px-6 py-4 border-b border-line bg-card-hi">
+          <div>
+            <h2 className="text-[15px] font-semibold text-fg">
+              Export Templates
+            </h2>
+
+            <p className="text-[12.5px] text-muted mt-0.5">
+              Export selected templates into a destination workspace.
+            </p>
+          </div>
 
           <button
             onClick={onClose}
-            className="w-8 h-8 inline-flex items-center justify-center rounded-md text-muted hover:text-fg hover:bg-card-hi text-base"
+            className="w-9 h-9 inline-flex items-center justify-center rounded-lg text-muted hover:text-fg hover:bg-card transition"
           >
             ✕
           </button>
         </div>
 
         {/* BODY */}
-        <div className="grid grid-cols-12 min-h-135">
+        <div className="grid grid-cols-12 flex-1 overflow-hidden">
           {/* LEFT */}
-          <div className="col-span-5 border-r border-line bg-card-hi p-4">
+          <div className="col-span-5 border-r border-line bg-card-hi p-5 flex flex-col min-h-0">
             <p className="text-[12px] font-medium text-faint mb-3 uppercase tracking-[0.05em]">
               Selected Templates ({selectedTemplates.length})
             </p>
 
-            <div className="bg-card border border-line rounded-lg overflow-y-auto max-h-107.5">
-              {selectedTemplates.map((t: any) => (
-                <div
-                  key={t.templateId || t.name}
-                  className="px-4 py-3 border-b border-line last:border-none"
-                >
-                  <p className="text-[13px] font-medium text-fg">
-                    {t.name}
-                  </p>
+            <div className="bg-card border border-line rounded-xl overflow-hidden flex-1 min-h-0">
+              <div className="overflow-y-auto h-full">
+                {selectedTemplates.map((t: any) => (
+                  <div
+                    key={t.templateId || t.name}
+                    className="px-4 py-3 border-b border-line last:border-none hover:bg-card-hi transition"
+                  >
+                    <p className="text-[13px] font-medium text-fg">
+                      {t.name}
+                    </p>
 
-                  <p className="text-[11px] text-faint">
-                    Type: {t.type || "Template"} | ID:{" "}
-                    {t.templateId || "N/A"}
-                  </p>
-                </div>
-              ))}
+                    <p className="text-[11px] text-faint mt-0.5">
+                      Type: {t.type || "Template"} · ID: {t.templateId || "N/A"}
+                    </p>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
           {/* RIGHT */}
-          <div className="col-span-7 p-6">
-            {/* STEPPER */}
-            <div className="flex items-center justify-between w-full mb-7 px-2">
-              {steps.map((s, idx) => {
-                const Icon = s.icon;
+          <div className="col-span-7 p-6 min-h-0 overflow-y-auto">
+            <div className="flex flex-col h-full">
 
-                const done = s.done;
+              {/* STEPPER */}
+              <div className="flex items-center justify-between w-full mb-7 px-2">
+                {steps.map((s, idx) => {
+                  const Icon = s.icon;
+                  const done = s.done;
+                  const isLast = idx === steps.length - 1;
 
-                const isLast = idx === steps.length - 1;
+                  return (
+                    <div key={s.id} className="flex items-center flex-1">
+                      <div
+                        className={`w-9 h-9 rounded-full flex items-center justify-center border transition-all duration-300 ${done
+                            ? "bg-green-500/15 border-green-500 text-green-500"
+                            : "bg-card border-line text-muted"
+                          }`}
+                      >
+                        {done ? (
+                          <Building2 size={18} />
+                        ) : (
+                          <Icon size={18} />
+                        )}
+                      </div>
 
-                return (
-                  <div key={s.id} className="flex items-center flex-1">
-                    <div
-                      className={`w-9 h-9 rounded-full flex items-center justify-center border transition-all duration-300 ${done
-                        ? "bg-green-500/15 border-green-500 text-green-500"
-                        : "bg-card border-line text-muted"
-                        }`}
-                    >
-                      {done ? (
-                        <CheckCircle2 size={18} />
-                      ) : (
-                        <Icon size={18} />
+                      {!isLast && (
+                        <div
+                          className={`flex-1 h-0.5 mx-3 ${done ? "bg-green-500/60" : "bg-line"
+                            }`}
+                        />
                       )}
                     </div>
+                  );
+                })}
+              </div>
 
-                    {!isLast && (
-                      <div
-                        className={`flex-1 h-0.5 mx-3 transition-all duration-300 ${done ? "bg-green-500/60" : "bg-line"
-                          }`}
-                      />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+              <div className="mb-5">
+                <h3 className="text-[15px] font-semibold text-fg">
+                  Destination Setup
+                </h3>
 
-            <div className="space-y-5">
-              <h3 className="text-[14px] font-semibold text-fg">
-                Select Destination
-              </h3>
+                <p className="text-[12.5px] text-muted mt-1">
+                  Select the account, container, and workspace where templates will be exported.
+                </p>
+              </div>
 
               <CustomDropdown
                 label="Account"
@@ -448,10 +459,10 @@ export default function ExportTemplatesModal({
         </div>
 
         {/* FOOTER */}
-        <div className="px-5 py-3 border-t border-line bg-page-soft flex justify-between items-center">
+        <div className="px-6 py-4 border-t border-line bg-page-soft flex justify-between items-center">
           <button
             onClick={onClose}
-            className="btn-secondary py-1.5! px-3!"
+            className="btn-secondary py-2! px-4!"
           >
             Cancel
           </button>
@@ -465,7 +476,7 @@ export default function ExportTemplatesModal({
               !selectedWorkspaceId ||
               selectedTemplates.length === 0
             }
-            className="btn-primary py-1.5! px-3! disabled:opacity-50 disabled:cursor-not-allowed"
+            className="btn-primary py-2! px-4! disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {exportLoading ? "Exporting..." : "Export Templates"}
           </button>

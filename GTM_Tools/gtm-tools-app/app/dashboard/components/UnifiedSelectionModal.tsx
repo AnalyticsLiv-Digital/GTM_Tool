@@ -40,39 +40,64 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
   const { fetchContainers, fetchWorkspaces, handleSaveWorkspace, handleDeleteWorkspace } = useDashboardActions();
 
   useEffect(() => {
-    if (selectedAccountId) {
-      setStep("container");
-      fetchContainers();
-    }
+    if (!show || !selectedAccountId) return;
+
+    setStep("container");
+    fetchContainers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedAccountId]);
+  }, [show, selectedAccountId]);
 
   useEffect(() => {
-    if (selectedContainerId && selectedAccountId) {
-      setStep("workspace");
-      fetchWorkspaces();
-    }
+    if (!show || !selectedContainerId) return;
+
+    setStep("workspace");
+    fetchWorkspaces();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedContainerId, selectedAccountId]);
+  }, [show, selectedContainerId]);
+
+  useEffect(() => {
+    if (!show) return;
+
+    setStep("account");
+
+    setSelectedAccountId("");
+    setSelectedAccountName("");
+
+    setSelectedContainerId("");
+    setSelectedContainerName("");
+
+    setSelectedWorkspaceId("");
+    setSelectedWorkspaceName("");
+
+    useDashboardStore.getState().setContainers([]);
+    useDashboardStore.getState().setWorkspaces([]);
+  }, [setSelectedAccountId, setSelectedAccountName, setSelectedContainerId, setSelectedContainerName, setSelectedWorkspaceId, setSelectedWorkspaceName, show]);
 
   if (!show) return null;
 
-  const handleAccountSelect = (account: any) => {
+  const handleAccountSelect = async (account: any) => {
+    if (selectedAccountId === account.accountId) return;
+
     setSelectedAccountId(account.accountId);
     setSelectedAccountName(account.name);
-    setSelectedContainerId("");
-    setSelectedContainerName("");
-    setSelectedWorkspaceId("");
-    setSelectedWorkspaceName("");
+
+    // Hide workspace immediately
+    useDashboardStore.getState().setWorkspaces([]);
+
+    // Load containers for the new account
+    await fetchContainers();
   };
 
-  const handleContainerSelect = (container: any) => {
+  const handleContainerSelect = async (container: any) => {
+    setSelectedWorkspaceId("");
+    setSelectedWorkspaceName("");
+    if (selectedContainerId === container.containerId) {
+      await fetchWorkspaces();
+      return;
+    }
     setSelectedContainerId(container.containerId);
     setSelectedContainerName(container.name);
-    setSelectedWorkspaceId("");
-    setSelectedWorkspaceName("");
   };
-
   const handleWorkspaceSelect = (workspace: any) => {
     setSelectedWorkspaceId(workspace.workspaceId);
     setSelectedWorkspaceName(workspace.name);
@@ -304,11 +329,10 @@ function PaneButton({
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-md text-left transition-colors ${
-        active
-          ? "bg-accent-soft border border-accent/25"
-          : "hover:bg-card-hi border border-transparent"
-      }`}
+      className={`w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-md text-left transition-colors ${active
+        ? "bg-accent-soft border border-accent/25"
+        : "hover:bg-card-hi border border-transparent"
+        }`}
     >
       <div className="min-w-0 flex-1">
         <p className={`text-[13px] truncate ${active ? "text-accent font-medium" : "text-fg"}`}>
