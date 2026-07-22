@@ -754,6 +754,18 @@ export default function ExportTagsModal({
       const templateIds = new Set<string>();
       (selectedTemplateIds || []).forEach((id) => templateIds.add(id));
 
+      // Automatically include templates used by selected tags
+      selectedTags.forEach((tag: any) => {
+        if (tag.type?.startsWith("cvt_")) {
+          const templateId = getTemplateIdFromTagType(tag.type);
+
+          if (templateId) {
+            templateIds.add(templateId);
+            console.log(`Template dependency detected: ${templateId} (${tag.name})`);
+          }
+        }
+      });
+
       setProgress({
         templatesTotal: templateIds.size,
         templatesDone: 0,
@@ -956,7 +968,7 @@ export default function ExportTagsModal({
 
             // Workspace template format:
             // cvt_<containerId>_<templateId>
-            if (parts.length === 3 && /^\d+$/.test(parts[2])) {
+            if (parts.length >= 3 && /^\d+$/.test(parts[2])) {
               const oldTemplateId = parts[2];
               const newTemplateId = templateMap[oldTemplateId];
 
@@ -996,6 +1008,47 @@ export default function ExportTagsModal({
             `Other Tag export failed: ${tag.name}`,
             err.message
           );
+
+          // Add failed tag to retry queue
+          failedItemsRef.current.push({
+            type: "tag",
+            item: tag,
+            error: err.message,
+            retryFn: async () => {
+              let finalTagType = tag.type;
+
+              if (tag.type?.startsWith("cvt_")) {
+                const parts = tag.type.split("_");
+
+                // Workspace Template
+                if (parts.length >= 3 && /^\d+$/.test(parts[2])) {
+                  const oldTemplateId = parts[2];
+                  const newTemplateId = templateMap[oldTemplateId];
+
+                  if (!newTemplateId) {
+                    throw new Error(
+                      `Missing template mapping for workspace template ${oldTemplateId}`
+                    );
+                  }
+
+                  finalTagType = `cvt_${selectedContainerId}_${newTemplateId}`;
+                }
+                // Gallery Template
+                else {
+                  finalTagType = tag.type;
+                }
+              }
+
+              const freshDestinationTags = await fetchDestinationTags();
+
+              return exportTag(
+                tag,
+                finalTagType,
+                triggerMap,
+                freshDestinationTags
+              );
+            },
+          });
         }
 
         tagsDone++;
@@ -1338,4 +1391,21 @@ export default function ExportTagsModal({
       </div>
     </div>
   );
+}
+
+function getTemplateIdFromTagType(type: any) {
+  if (!type || typeof type !== "string") return null;
+
+  const parts = type.split("_");
+
+  if (parts.length >= 3) {
+    // cvt_<container>_<templateId>
+    return parts[2] || null;
+  }
+
+  if (parts.length === 2) {
+
+    return parts[1] || null;
+  }
+  return null;
 }
