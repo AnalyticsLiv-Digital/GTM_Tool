@@ -9,7 +9,7 @@ import {
   Building2,
   Boxes,
   Workflow,
-  Loader2 ,
+  Loader2,
 } from "lucide-react";
 
 import WorkspaceCrudSection from "@/app/dashboard/components/modals/WorkspaceCrudSection";
@@ -314,7 +314,7 @@ export default function ExportTemplatesModal({
 
   return (
     <div className="fixed inset-0 bg-black/55 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-card text-fg w-full max-w-6xl rounded-2xl border border-edge shadow-xl overflow-hidden">
+      <div className="bg-card text-fg w-full max-w-6xl h-[85vh] rounded-2xl border border-edge shadow-xl overflow-hidden flex flex-col">
         {/* HEADER */}
         <div className="flex justify-between items-center px-6 py-4 border-b border-line bg-card-hi">
           <div>
@@ -336,7 +336,7 @@ export default function ExportTemplatesModal({
         </div>
 
         {/* BODY */}
-        <div className="grid grid-cols-12 h-140">
+        <div className="grid grid-cols-12 flex-1 overflow-hidden">
           {/* LEFT */}
           <div className="col-span-5 border-r border-line bg-card-hi p-5 flex flex-col min-h-0">
             <p className="text-[12px] font-medium text-faint mb-3 uppercase tracking-[0.05em]">
@@ -364,23 +364,22 @@ export default function ExportTemplatesModal({
           </div>
 
           {/* RIGHT */}
-          <div className="col-span-7 p-6 min-h-0">
+          <div className="col-span-7 p-6 min-h-0 overflow-y-auto">
             <div className="flex flex-col h-full">
+
               {/* STEPPER */}
               <div className="flex items-center justify-between w-full mb-7 px-2">
                 {steps.map((s, idx) => {
                   const Icon = s.icon;
-
                   const done = s.done;
-
                   const isLast = idx === steps.length - 1;
 
                   return (
                     <div key={s.id} className="flex items-center flex-1">
                       <div
                         className={`w-9 h-9 rounded-full flex items-center justify-center border transition-all duration-300 ${done
-                          ? "bg-green-500/15 border-green-500 text-green-500"
-                          : "bg-card border-line text-muted"
+                            ? "bg-green-500/15 border-green-500 text-green-500"
+                            : "bg-card border-line text-muted"
                           }`}
                       >
                         {done ? (
@@ -392,7 +391,7 @@ export default function ExportTemplatesModal({
 
                       {!isLast && (
                         <div
-                          className={`flex-1 h-0.5 mx-3 transition-all duration-300 ${done ? "bg-green-500/60" : "bg-line"
+                          className={`flex-1 h-0.5 mx-3 ${done ? "bg-green-500/60" : "bg-line"
                             }`}
                         />
                       )}
@@ -458,30 +457,30 @@ export default function ExportTemplatesModal({
             </div>
           </div>
         </div>
-      </div>
 
-      {/* FOOTER */}
-      <div className="px-6 py-4 border-t border-line bg-page-soft flex justify-between items-center">
-        <button
-          onClick={onClose}
-          className="btn-secondary py-2! px-4!"
-        >
-          Cancel
-        </button>
+        {/* FOOTER */}
+        <div className="px-6 py-4 border-t border-line bg-page-soft flex justify-between items-center">
+          <button
+            onClick={onClose}
+            className="btn-secondary py-2! px-4!"
+          >
+            Cancel
+          </button>
 
-        <button
-          onClick={handleExport}
-          disabled={
-            exportLoading ||
-            !selectedAccountId ||
-            !selectedContainerId ||
-            !selectedWorkspaceId ||
-            selectedTemplates.length === 0
-          }
-          className="btn-primary py-2! px-4! disabled:opacity-50 disabled:cursor-not-allowed" 
-        >
-          {exportLoading ? "Exporting..." : "Export Templates"}
-        </button>
+          <button
+            onClick={handleExport}
+            disabled={
+              exportLoading ||
+              !selectedAccountId ||
+              !selectedContainerId ||
+              !selectedWorkspaceId ||
+              selectedTemplates.length === 0
+            }
+            className="btn-primary py-2! px-4! disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {exportLoading ? "Exporting..." : "Export Templates"}
+          </button>
+        </div>
       </div>
     </div>
   );
