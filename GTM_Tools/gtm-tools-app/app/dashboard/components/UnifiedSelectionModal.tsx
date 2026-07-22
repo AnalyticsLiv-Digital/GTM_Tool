@@ -40,30 +40,52 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
   const { fetchContainers, fetchWorkspaces, handleSaveWorkspace, handleDeleteWorkspace } = useDashboardActions();
 
   useEffect(() => {
-    if (selectedAccountId) {
-      setStep("container");
-      fetchContainers();
-    }
+    if (!show || !selectedAccountId) return;
+
+    setStep("container");
+    fetchContainers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedAccountId]);
+  }, [show, selectedAccountId]);
 
   useEffect(() => {
-    if (!selectedAccountId || !selectedContainerId) return;
+    if (!show || !selectedContainerId) return;
 
     setStep("workspace");
-
     fetchWorkspaces();
-  }, [selectedAccountId, selectedContainerId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [show, selectedContainerId]);
+
+  useEffect(() => {
+    if (!show) return;
+
+    setStep("account");
+
+    setSelectedAccountId("");
+    setSelectedAccountName("");
+
+    setSelectedContainerId("");
+    setSelectedContainerName("");
+
+    setSelectedWorkspaceId("");
+    setSelectedWorkspaceName("");
+
+    useDashboardStore.getState().setContainers([]);
+    useDashboardStore.getState().setWorkspaces([]);
+  }, [setSelectedAccountId, setSelectedAccountName, setSelectedContainerId, setSelectedContainerName, setSelectedWorkspaceId, setSelectedWorkspaceName, show]);
 
   if (!show) return null;
 
-  const handleAccountSelect = (account: any) => {
+  const handleAccountSelect = async (account: any) => {
+    if (selectedAccountId === account.accountId) return;
+
     setSelectedAccountId(account.accountId);
     setSelectedAccountName(account.name);
-    setSelectedContainerId("");
-    setSelectedContainerName("");
-    setSelectedWorkspaceId("");
-    setSelectedWorkspaceName("");
+
+    // Hide workspace immediately
+    useDashboardStore.getState().setWorkspaces([]);
+
+    // Load containers for the new account
+    await fetchContainers();
   };
 
   const handleContainerSelect = async (container: any) => {
