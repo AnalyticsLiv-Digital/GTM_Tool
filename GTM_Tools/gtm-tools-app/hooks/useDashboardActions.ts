@@ -11,63 +11,59 @@ export function useDashboardActions() {
   // -----------------------------
   // FETCH CONTAINERS
   // -----------------------------
+
   const fetchContainers = async () => {
     if (!store.selectedAccountId) return;
 
     try {
-      store.setContainersLoading(true);
-      store.setContainersError("");
-
-      const res = await fetch(
+      const response = await fetch(
         `/api/auth/gtm/containers?accountId=${store.selectedAccountId}`
       );
-      const data = await res.json();
 
-      if (!res.ok) {
-        throw new Error(data?.error || "Failed to fetch containers");
+      if (!response.ok) {
+        throw new Error("Failed to fetch containers");
       }
 
-      // Load containers for selected account
+      const data = await response.json();
+
       store.setContainers(data.container || []);
-
-      // Clear previous container selection
-      store.setSelectedContainerId("");
-      store.setSelectedContainerName("");
-
-      // Clear previous workspace selection
-      store.setWorkspaces([]);
-      store.setSelectedWorkspaceId("");
-      store.setSelectedWorkspaceName("");
-
-    } catch (err: any) {
-      store.setContainersError(err.message);
-    } finally {
-      store.setContainersLoading(false);
+    } catch (error) {
+      console.error("Error fetching containers:", error);
+      store.setContainers([]);
     }
   };
+
   // -----------------------------
   // FETCH WORKSPACES
   // -----------------------------
 
   const fetchWorkspaces = async () => {
-    if (!store.selectedAccountId || !store.selectedContainerId) return;
+    const state = useDashboardStore.getState();
+
+    if (
+      !state.selectedAccountId ||
+      !state.selectedContainerId
+    ) {
+      return;
+    }
 
     try {
-      store.setWorkspacesLoading(true);
-      store.setWorkspacesError("");
-
-      const res = await fetch(
-        `/api/auth/gtm/workspaces?accountId=${store.selectedAccountId}&containerId=${store.selectedContainerId}`
+      const response = await fetch(
+        `/api/auth/gtm/workspaces?accountId=${state.selectedAccountId}&containerId=${state.selectedContainerId}`
       );
-      const data = await res.json();
 
-      if (!res.ok) throw new Error(data?.error || "Failed to fetch workspaces");
+      if (!response.ok) {
+        throw new Error("Failed to fetch workspaces");
+      }
 
-      store.setWorkspaces(data.workspace || []);
-    } catch (err: any) {
-      store.setWorkspacesError(err.message);
-    } finally {
-      store.setWorkspacesLoading(false);
+      const data = await response.json();
+
+      console.log("Workspace API response:", data);
+
+      state.setWorkspaces(data.workspace || []);
+    } catch (error) {
+      console.error("Error fetching workspaces:", error);
+      state.setWorkspaces([]);
     }
   };
 

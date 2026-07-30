@@ -11,6 +11,11 @@ import {
   AlertTriangle,
   Download,
   RefreshCw,
+  Bot,
+  Wrench,
+  ArrowUp,
+  Plus,
+  Loader2,
 } from "lucide-react";
 
 import jsPDF from "jspdf";
@@ -19,6 +24,8 @@ import { useState } from "react";
 import { HealthCheckResult } from "@/lib/healthcheck/types";
 import { useDashboardStore } from "@/app/store/useDashboardStore";
 
+type ChatMessage = { role: "user" | "assistant"; content: string };
+
 type HealthCheckReport = {
   score: number;
   passedCount: number;
@@ -26,10 +33,43 @@ type HealthCheckReport = {
   results: HealthCheckResult[];
 };
 
+// Matches the actual shape returned by /api/auth/healthcheck/ai
+type ClaudeRuleInsight = {
+  id: string;
+  status: "pass" | "fail";
+  insight: string;
+};
+
+type ClaudeAuditReport = {
+  healthScore: number;
+  summary: string;
+  ruleBreakdown: ClaudeRuleInsight[];
+  criticalIssues: string[];
+  recommendations: string[];
+  priority: string[];
+};
+
+type ClaudeAuditResponse =
+  | { success: true; healthReport: unknown; report: ClaudeAuditReport }
+  | { success: true; healthReport: unknown; report: null; rawText: string; parseError: string }
+  | { success: false; error: string };
+
 export default function HealthCheckPage() {
   const store = useDashboardStore();
   const [loading, setLoading] = useState(false);
+  const [claudeLoading, setClaudeLoading] = useState(false);
+
   const [report, setReport] = useState<HealthCheckReport | null>(null);
+
+  // --- NEW: state to actually hold + surface the Claude AI result ---
+  const [claudeReport, setClaudeReport] = useState<ClaudeAuditReport | null>(null);
+  const [claudeRawText, setClaudeRawText] = useState<string | null>(null);
+  const [claudeError, setClaudeError] = useState<string | null>(null);
+
+  // --- NEW: follow-up chat thread underneath the Claude AI Audit result ---
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatSending, setChatSending] = useState(false);
 
   const handleRunHealthCheck = async () => {
     try {
@@ -49,6 +89,96 @@ export default function HealthCheckPage() {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleClaudeHealthCheck = async () => {
+    setClaudeError(null);
+    setClaudeRawText(null);
+
+    try {
+      setClaudeLoading(true);
+      setChatMessages([]);
+
+      // Fully independent of "Run HealthCheck" — this route fetches and
+      // computes its own GTM report server-side, so this call never
+      // touches /api/auth/healthcheck at all.
+      const res = await fetch("/api/auth/healthcheck/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accountId: store.selectedAccountId,
+          containerId: store.selectedContainerId,
+          workspaceId: store.selectedWorkspaceId,
+        }),
+      });
+
+      const data: ClaudeAuditResponse = await res.json();
+
+      if (!res.ok || !data.success) {
+        const message = "error" in data ? data.error : `Request failed (${res.status}).`;
+        console.error(message);
+        setClaudeError(message);
+        return;
+      }
+
+      // The AI route returns its own independently-computed healthReport —
+      // use it to populate the rest of the page (score, pass/fail lists, PDF).
+      setReport(data.healthReport as HealthCheckReport);
+
+      if (data.report) {
+        setClaudeReport(data.report);
+      } else {
+        setClaudeRawText(data.rawText);
+        setClaudeError(`Couldn't parse Claude's response as JSON: ${data.parseError}`);
+      }
+    } catch (err) {
+      console.error(err);
+      setClaudeError("Something went wrong while running the Claude AI Audit.");
+    } finally {
+      setClaudeLoading(false);
+    }
+  };
+
+  const handleSendChatMessage = async () => {
+    const text = chatInput.trim();
+    if (!text || chatSending || !report) return;
+
+    const nextMessages: ChatMessage[] = [...chatMessages, { role: "user", content: text }];
+    setChatMessages(nextMessages);
+    setChatInput("");
+    setChatSending(true);
+
+    try {
+      const res = await fetch("/api/auth/healthcheck/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          healthReport: report,
+          claudeReport,
+          messages: nextMessages,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        setChatMessages([
+          ...nextMessages,
+          { role: "assistant", content: `Sorry, something went wrong: ${data.error || res.status}` },
+        ]);
+        return;
+      }
+
+      setChatMessages([...nextMessages, { role: "assistant", content: data.reply }]);
+    } catch (err) {
+      console.error(err);
+      setChatMessages([
+        ...nextMessages,
+        { role: "assistant", content: "Sorry, something went wrong sending that message." },
+      ]);
+    } finally {
+      setChatSending(false);
     }
   };
 
@@ -115,11 +245,7 @@ Vars: ${(r.affectedVariables || []).map((x: any) => x.name).join(", ") || "-"}`,
   // Grade & verdict
   const grade = report ? (report.score >= 80 ? "A" : report.score >= 50 ? "B" : "C") : "";
   const verdictColor =
-    report && report.score >= 80
-      ? "var(--success)"
-      : report && report.score >= 50
-        ? "var(--warn)"
-        : "var(--danger)";
+    report && report.score >= 80 ? "var(--success)" : report && report.score >= 50 ? "var(--warn)" : "var(--danger)";
 
   return (
     <div>
@@ -133,11 +259,13 @@ Vars: ${(r.affectedVariables || []).map((x: any) => x.name).join(", ") || "-"}`,
             <p className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-accent mb-4">
               GTM HealthCheck
             </p>
+
             <h2 className="text-[clamp(34px,5vw,52px)] font-semibold leading-[1.05] tracking-[-0.025em] text-fg">
               Audit your tag manager,
               <br />
               <span className="text-accent accent-glow-text">in seconds</span>.
             </h2>
+
             <p className="mt-5 text-[15.5px] text-muted max-w-xl mx-auto leading-relaxed">
               Find tracking issues, unused tags, duplicate triggers, broken variables,
               and performance bottlenecks with a complete container audit.
@@ -147,19 +275,24 @@ Vars: ${(r.affectedVariables || []).map((x: any) => x.name).join(", ") || "-"}`,
               <button
                 onClick={handleRunHealthCheck}
                 disabled={loading || !store.selectedWorkspaceId}
-                className="btn-primary px-5! py-2.5! disabled:opacity-50 disabled:cursor-not-allowed"
+                className="btn-primary px-5! py-2.5!"
               >
-                {loading ? (
-                  <>
-                    <span className="inline-block w-3.5 h-3.5 border border-current border-t-transparent rounded-full animate-spin" />
-                    Running…
-                  </>
-                ) : (
-                  <>
-                    <Zap size={14} strokeWidth={2.4} />
-                    Run HealthCheck
-                  </>
-                )}
+                <Zap size={14} />
+                {loading ? "Running…" : "Run HealthCheck"}
+              </button>
+
+              {/*
+                Both buttons are now independently clickable — Claude AI
+                Audit runs its own base health check first if one doesn't
+                exist yet, instead of requiring "Run HealthCheck" first.
+              */}
+              <button
+                onClick={handleClaudeHealthCheck}
+                disabled={claudeLoading || !store.selectedWorkspaceId}
+                className="btn-secondary px-5! py-2.5!"
+              >
+                <Bot size={14} />
+                {claudeLoading ? "Analyzing…" : "Claude AI Audit"}
               </button>
             </div>
 
@@ -167,6 +300,10 @@ Vars: ${(r.affectedVariables || []).map((x: any) => x.name).join(", ") || "-"}`,
               <p className="mt-4 text-[12.5px] text-(--warn)">
                 Select a workspace before running the audit.
               </p>
+            )}
+
+            {claudeError && (
+              <p className="mt-4 text-[12.5px] text-(--danger)">{claudeError}</p>
             )}
 
             <div className="mt-12 flex justify-center gap-3 flex-wrap">
@@ -236,15 +373,42 @@ Vars: ${(r.affectedVariables || []).map((x: any) => x.name).join(", ") || "-"}`,
                 {loading ? "Refreshing…" : "Refresh"}
               </button>
 
+              <button
+                onClick={handleClaudeHealthCheck}
+                disabled={claudeLoading}
+                className="btn-secondary py-2! disabled:opacity-50"
+              >
+                <Bot size={13} strokeWidth={2.2} />
+                {claudeLoading ? "Analyzing…" : "Claude AI Audit"}
+              </button>
+
               <button onClick={handleDownloadPDF} className="btn-primary py-2!">
                 <Download size={13} strokeWidth={2.2} />
                 Download PDF
               </button>
             </div>
+
+            {claudeError && (
+              <p className="mt-3 text-[12.5px] text-(--danger)">{claudeError}</p>
+            )}
           </div>
 
           {/* Body */}
           <div className="p-6 md:p-7">
+            {/* Claude AI Audit — chat/tool-call style result */}
+            {(claudeReport || claudeRawText) && (
+              <ClaudeAuditChatBlock
+                report={report}
+                claudeReport={claudeReport}
+                claudeRawText={claudeRawText}
+                chatMessages={chatMessages}
+                chatInput={chatInput}
+                setChatInput={setChatInput}
+                chatSending={chatSending}
+                onSend={handleSendChatMessage}
+              />
+            )}
+
             {/* Failed checks */}
             <div>
               <div className="flex items-center gap-2 mb-5">
@@ -325,6 +489,7 @@ Vars: ${(r.affectedVariables || []).map((x: any) => x.name).join(", ") || "-"}`,
             <h3 className="text-[26px] font-semibold text-fg tracking-[-0.02em]">
               Why HealthCheck?
             </h3>
+
             <p className="text-muted mt-2 max-w-xl mx-auto text-[14.5px]">
               Improve tracking accuracy, reduce container clutter, and optimize tag performance.
             </p>
@@ -358,6 +523,239 @@ Vars: ${(r.affectedVariables || []).map((x: any) => x.name).join(", ") || "-"}`,
 
 /* ──────────────────────────────────────── helpers */
 
+function ClaudeAuditChatBlock({
+  report,
+  claudeReport,
+  claudeRawText,
+  chatMessages,
+  chatInput,
+  setChatInput,
+  chatSending,
+  onSend,
+}: {
+  report: HealthCheckReport | null;
+  claudeReport: ClaudeAuditReport | null;
+  claudeRawText: string | null;
+  chatMessages: ChatMessage[];
+  chatInput: string;
+  setChatInput: (v: string) => void;
+  chatSending: boolean;
+  onSend: () => void;
+}) {
+  // The live backend already returns a top-level `counts` object
+  // ({ tags, triggers, variables }) on the report — use that directly
+  // instead of hunting for a summary rule that isn't in the deployed
+  // rule set (there is no HC_LR_006 in the actual results array).
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const counts = (report as any)?.counts as
+    | { tags?: number; triggers?: number; variables?: number }
+    | undefined;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const findResult = (id: string) => report?.results.find((r) => r.id === id) as any;
+
+  const pausedTagsResult = findResult("HC_LR_002"); // "Paused Tags Found"
+  const unusedVariablesResult = findResult("HC_LR_003"); // "Unused Variables Found"
+  const largeTriggersResult = findResult("HC_LR_005"); // "Large Number of Triggers"
+
+  const pausedCount: number = pausedTagsResult?.affectedTags?.length ?? 0;
+  const unusedVariablesCount: number = unusedVariablesResult?.affectedVariables?.length ?? 0;
+
+  const entityRows = [
+    {
+      entity: "Tags",
+      count: counts?.tags ?? 0,
+      status: pausedCount > 0 ? `${pausedCount} paused` : "Healthy",
+    },
+    {
+      entity: "Triggers",
+      count: counts?.triggers ?? 0,
+      status:
+        largeTriggersResult && largeTriggersResult.passed === false
+          ? "Review size"
+          : "Healthy",
+    },
+    {
+      entity: "Variables",
+      count: counts?.variables ?? 0,
+      status: unusedVariablesCount > 0 ? `${unusedVariablesCount} unused` : "Healthy",
+    },
+  ];
+
+  return (
+    <div className="mb-10 rounded-xl border border-line bg-card overflow-hidden">
+      <div className="p-5 space-y-4">
+        {/* Tool-call pill */}
+        <div className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-line bg-card-hi">
+          <Wrench size={13} strokeWidth={2} className="text-muted" />
+          <span className="font-mono text-[12.5px] text-fg">gtm_ai_audit</span>
+          <span className="w-1.5 h-1.5 rounded-full bg-accent" />
+        </div>
+
+        {/* Entity / Count / Status table */}
+        <div className="rounded-lg border border-line overflow-hidden">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-card-hi border-b border-line">
+                <th className="px-4 py-2.5 text-[12px] font-semibold text-muted">Entity</th>
+                <th className="px-4 py-2.5 text-[12px] font-semibold text-muted">Count</th>
+                <th className="px-4 py-2.5 text-[12px] font-semibold text-muted">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {entityRows.map((row, i) => (
+                <tr key={row.entity} className={i > 0 ? "border-t border-line" : ""}>
+                  <td className="px-4 py-2.5 text-[13px] text-fg">{row.entity}</td>
+                  <td className="px-4 py-2.5 text-[13px] text-fg">{row.count}</td>
+                  <td className="px-4 py-2.5 text-[13px] text-muted">{row.status}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Claude's natural-language takeaway */}
+        {claudeReport && (
+          <p className="text-[13.5px] text-fg leading-relaxed">
+            {claudeReport.summary}
+            {claudeReport.criticalIssues?.length > 0 && (
+              <>
+                {" "}
+                I found {claudeReport.criticalIssues.length} issue
+                {claudeReport.criticalIssues.length === 1 ? "" : "s"} worth reviewing before the
+                next release.
+              </>
+            )}
+          </p>
+        )}
+
+        {/* Per-rule breakdown — one entry per rule, guaranteed by the prompt,
+            so nothing gets silently dropped from a capped top-N summary */}
+        {claudeReport?.ruleBreakdown && claudeReport.ruleBreakdown.length > 0 && (
+          <div className="rounded-lg border border-line overflow-hidden">
+            <div className="px-4 py-2.5 bg-card-hi border-b border-line">
+              <span className="text-[12px] font-semibold text-muted">
+                Rule-by-rule breakdown ({claudeReport.ruleBreakdown.length})
+              </span>
+            </div>
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-card-hi border-b border-line">
+                  <th className="px-4 py-2.5 text-[12px] font-semibold text-muted">Rule</th>
+                  <th className="px-4 py-2.5 text-[12px] font-semibold text-muted w-20">Status</th>
+                  <th className="px-4 py-2.5 text-[12px] font-semibold text-muted">Insight</th>
+                </tr>
+              </thead>
+              <tbody>
+                {claudeReport.ruleBreakdown.map((rule, i) => {
+                  const localTitle =
+                    report?.results.find((r) => r.id === rule.id)?.title ?? rule.id;
+
+                  return (
+                    <tr key={rule.id} className={i > 0 ? "border-t border-line" : ""}>
+                      <td className="px-4 py-2.5 text-[13px] text-fg align-top">
+                        <span className="font-mono text-[11px] text-faint block mb-0.5">
+                          {rule.id}
+                        </span>
+                        {localTitle}
+                      </td>
+                      <td className="px-4 py-2.5 align-top">
+                        <span
+                          className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono uppercase tracking-widest border ${
+                            rule.status === "pass"
+                              ? "bg-accent-soft text-accent border-accent/25"
+                              : "bg-(--danger)/10 text-(--danger) border-(--danger)/25"
+                          }`}
+                        >
+                          {rule.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-[12.5px] text-muted align-top">
+                        {rule.insight}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {!claudeReport && claudeRawText && (
+          <pre className="text-[12.5px] text-fg leading-relaxed whitespace-pre-wrap font-sans">
+            {claudeRawText}
+          </pre>
+        )}
+
+        {/* Follow-up chat thread */}
+        {chatMessages.length > 0 && (
+          <div className="space-y-3 pt-2">
+            {chatMessages.map((m, i) => (
+              <div
+                key={i}
+                className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
+              >
+                <div
+                  className={`max-w-[85%] rounded-lg px-3.5 py-2 text-[13px] leading-relaxed whitespace-pre-wrap ${
+                    m.role === "user"
+                      ? "bg-accent text-white"
+                      : "bg-card-hi border border-line text-fg"
+                  }`}
+                >
+                  {m.content}
+                </div>
+              </div>
+            ))}
+            {chatSending && (
+              <div className="flex justify-start">
+                <div className="rounded-lg px-3.5 py-2 bg-card-hi border border-line">
+                  <Loader2 size={14} className="animate-spin text-muted" />
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Chat input */}
+      <div className="border-t border-line p-3">
+        <div className="flex items-center gap-2 rounded-lg border border-line bg-card-hi px-2 py-2">
+          <button
+            type="button"
+            className="w-7 h-7 rounded-md flex items-center justify-center text-muted hover:bg-card border border-line shrink-0"
+          >
+            <Plus size={14} />
+          </button>
+
+          <input
+            type="text"
+            value={chatInput}
+            onChange={(e) => setChatInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                onSend();
+              }
+            }}
+            placeholder="Message Claude…"
+            disabled={chatSending}
+            className="flex-1 bg-transparent text-[13.5px] text-fg placeholder:text-faint outline-none px-1"
+          />
+
+          <button
+            type="button"
+            onClick={onSend}
+            disabled={chatSending || !chatInput.trim()}
+            className="w-8 h-8 rounded-full bg-accent text-white flex items-center justify-center disabled:opacity-40 shrink-0"
+          >
+            <ArrowUp size={15} strokeWidth={2.4} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Badge({ icon, label }: { icon: React.ReactNode; label: string }) {
   return (
     <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-card border border-line text-[12.5px] text-muted">
@@ -369,11 +767,7 @@ function Badge({ icon, label }: { icon: React.ReactNode; label: string }) {
 
 function SeverityBadge({ severity }: { severity: string }) {
   const tone =
-    severity === "HIGH"
-      ? "var(--danger)"
-      : severity === "MEDIUM"
-        ? "var(--warn)"
-        : "var(--accent)";
+    severity === "HIGH" ? "var(--danger)" : severity === "MEDIUM" ? "var(--warn)" : "var(--accent)";
   return (
     <span
       className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold uppercase tracking-[0.12em] border"
@@ -399,7 +793,6 @@ function FailedCheckCard({ r }: { r: HealthCheckResult }) {
           </p>
 
           <p className="text-[13px] text-muted mt-2 leading-relaxed">{r.description}</p>
-
           {r.recommendation && (
             <div className="mt-3 px-3 py-2 rounded-md text-[12.5px] bg-(--danger)/8 border border-(--danger)/20 text-(--danger)">
               <span className="font-semibold">Fix:</span> {r.recommendation}

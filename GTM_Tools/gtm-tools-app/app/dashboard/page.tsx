@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
 import { useEffect, useState } from "react";
@@ -20,7 +21,14 @@ export default function DashboardPage() {
   const [animateCards, setAnimateCards] = useState(false);
 
   const store = useDashboardStore();
-  console.log("DashboardPage render", store);
+
+  console.log("DashboardPage render", {
+    account: store.selectedAccountId,
+    container: store.selectedContainerId,
+    workspace: store.selectedWorkspaceId,
+    containers: store.containers,
+    workspaces: store.workspaces,
+  });
 
   const {
     handleSaveContainer,
@@ -29,43 +37,85 @@ export default function DashboardPage() {
     fetchWorkspaceData,
   } = useDashboardActions();
 
+  // ============================================================
+  // AUTH
+  // ============================================================
+
   useEffect(() => {
     if (!authLoading && !user) {
       router.push("/login");
     } else if (!authLoading) {
-
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAnimateCards(true);
     }
   }, [user, authLoading, router]);
 
-  useEffect(() => {
-    if (store.selectedAccountId) {
-      fetchContainers();
-    }
+  // ============================================================
+  // FETCH CONTAINERS
+  //
+  // Runs whenever the account changes.
+  // It DOES NOT clear the selected container.
+  // ============================================================
 
+  useEffect(() => {
+    if (!store.selectedAccountId) return;
+
+    fetchContainers();
   }, [store.selectedAccountId]);
 
+  // ============================================================
+  // FETCH WORKSPACES
+  //
+  // IMPORTANT:
+  // Requires BOTH account and container.
+  // ============================================================
+
   useEffect(() => {
-    if (store.selectedContainerId) {
-      fetchWorkspaces();
+    if (
+      !store.selectedAccountId ||
+      !store.selectedContainerId
+    ) {
+      return;
     }
 
-  }, [store.selectedContainerId]);
+    fetchWorkspaces();
+  }, [
+    store.selectedAccountId,
+    store.selectedContainerId,
+  ]);
+
+  // ============================================================
+  // FETCH WORKSPACE DATA
+  // ============================================================
 
   useEffect(() => {
-    if (store.selectedWorkspaceId) {
-      fetchWorkspaceData();
+    if (
+      !store.selectedAccountId ||
+      !store.selectedContainerId ||
+      !store.selectedWorkspaceId
+    ) {
+      return;
     }
 
-  }, [store.selectedWorkspaceId]);
+    fetchWorkspaceData();
+  }, [
+    store.selectedAccountId,
+    store.selectedContainerId,
+    store.selectedWorkspaceId,
+  ]);
+
+  // ============================================================
+  // AUTH LOADING
+  // ============================================================
 
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-page">
         <div className="flex flex-col items-center gap-3">
           <div className="w-9 h-9 border-2 border-edge border-t-accent rounded-full animate-spin" />
-          <p className="text-muted text-sm">Loading your dashboard…</p>
+
+          <p className="text-muted text-sm">
+            Loading your dashboard…
+          </p>
         </div>
       </div>
     );
@@ -76,15 +126,14 @@ export default function DashboardPage() {
   return (
     <div className="bg-page">
       <div className="max-w-7xl mx-auto">
+
         {/* TOP HEADER BANNER */}
         <div className="mb-10 flex flex-col md:flex-row md:items-end md:justify-between gap-5">
           <div>
-            <p className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-faint mb-2">
-              Dashboard
-            </p>
             <h1 className="text-[28px] md:text-[32px] font-semibold text-fg leading-tight tracking-[-0.02em]">
               GTM Tool
             </h1>
+
             <p className="text-[14.5px] text-muted mt-2 max-w-2xl">
               Audit, manage, export, and optimize your Google Tag Manager workspace.
             </p>
@@ -92,7 +141,7 @@ export default function DashboardPage() {
 
           <div className="flex gap-2 flex-wrap">
             <Pill label="Workspace Management" />
-            <Pill label="Export / Import" tone="accent" />
+            <Pill label="Import/Export" tone="accent" />
             <Pill label="HealthCheck" tone="warn" />
           </div>
         </div>
@@ -123,12 +172,6 @@ export default function DashboardPage() {
           <Footer />
         </div>
 
-        {/* CUSTOM FOOTER TEXT */}
-        {/* <div className="mt-8 text-center text-xs text-slate-500">
-          GTM HealthCheck Suite • Export/Import Tools • Container Audit • Workspace
-          Safe Operations
-        </div> */}
-
         {/* MODAL */}
         <ContainerModal
           show={store.showContainerModal}
@@ -144,17 +187,25 @@ export default function DashboardPage() {
   );
 }
 
-function Pill({ label, tone = "neutral" }: { label: string; tone?: "neutral" | "accent" | "warn" }) {
+function Pill({
+  label,
+  tone = "neutral",
+}: {
+  label: string;
+  tone?: "neutral" | "accent" | "warn";
+}) {
   const styles =
     tone === "accent"
       ? "bg-accent-soft text-accent border-accent/20"
       : tone === "warn"
-      ? "bg-[color:var(--warn)]/10 text-[color:var(--warn)] border-[color:var(--warn)]/20"
-      : "bg-card-hi text-muted border-line";
+        ? "bg-[color:var(--warn)]/10 text-[color:var(--warn)] border-[color:var(--warn)]/20"
+        : "bg-card-hi text-muted border-line";
+
   return (
-    <span className={`inline-flex items-center px-2.5 py-1 rounded-full border text-[11px] font-medium ${styles}`}>
+    <span
+      className={`inline-flex items-center px-2.5 py-1 rounded-full border text-[11px] font-medium ${styles}`}
+    >
       {label}
     </span>
   );
 }
-
