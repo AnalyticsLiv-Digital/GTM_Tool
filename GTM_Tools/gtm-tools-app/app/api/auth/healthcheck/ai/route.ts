@@ -38,7 +38,6 @@ export async function POST(req: NextRequest) {
     }
 
     const base = `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}`;
-    // 8s budget across all three so we stay under Hobby's 10s function limit.
     const opts = { deadlineMs: 8_000 };
 
     const [tagsRes, triggersRes, variablesRes] = await Promise.all([
@@ -101,151 +100,68 @@ export async function POST(req: NextRequest) {
 
     // ── End of duplicated logic. From here it's Claude-specific. ──
 
-    // Build a compact version for the prompt — replace affected item arrays
-    // with just their counts. This removes hundreds of tag/trigger/variable
-    // names from what Claude has to read and (crucially) echo back, which
-    // was the actual driver of truncation, not the ruleBreakdown schema.
-    const compactResults = ((healthReport as { results?: unknown[] }).results ?? []).map(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (r: any) => ({
-        id: r.id,
-        title: r.title,
-        passed: r.passed,
-        severity: r.severity,
-        description: r.description,
-        recommendation: r.recommendation,
-        affectedTagsCount: r.affectedTags?.length ?? 0,
-        affectedTriggersCount: r.affectedTriggers?.length ?? 0,
-        affectedVariablesCount: r.affectedVariables?.length ?? 0,
-      })
-    );
-
-    const compactHealthReport = {
-      score: (healthReport as { score?: number }).score,
-      passedCount: (healthReport as { passedCount?: number }).passedCount,
-      failedCount: (healthReport as { failedCount?: number }).failedCount,
-      counts: (healthReport as { counts?: unknown }).counts,
-      results: compactResults,
+    // Give Claude the RAW container shape — not our precomputed rule
+    // results — so it forms its own independent judgment, the same way it
+    // would in a normal conversation if you pasted this data directly.
+    // Kept compact (names/types/counts, not full parameter blobs) so the
+    // input stays a reasonable size, but nothing here is filtered through
+    // our own rule engine's conclusions.
+    // Send Claude the FULL raw tag/trigger/variable objects, shaped like an
+    // actual GTM export file — the same experience as pasting a real
+    // exported JSON and asking for a health check, not a stripped-down
+    // summary. No file-upload feature is added; this uses the data already
+    // fetched live from the GTM API above.
+    const containerExport = {
+      tag: tags,
+      trigger: triggers,
+      variable: variables,
     };
 
     const response = await client.messages.create({
-      // Update this if your account/SDK version prefers a different current
-      // alias — this route was previously pinned to the old
-      // "claude-3-5-sonnet-latest" model.
       model: "claude-sonnet-5",
       max_tokens: 16000,
       messages: [
         {
           role: "user",
-          content: `You are an expert Google Tag Manager consultant. Analyze this GTM Health Check Report and respond with ONLY valid JSON — no markdown code fences, no backticks, no commentary before or after.
+          content: `You're an expert Google Tag Manager consultant. Here is the raw exported JSON of my GTM container — the same shape as a real GTM container export file (tag, trigger, variable arrays with full config). Give me a full health check audit of it, exactly like you would if I'd shared this file with you directly in a normal conversation. Don't restate categories from some external checklist — look at the actual data and tell me what you genuinely find. Use your own judgment and expertise.
 
-The report's "results" array is the ONLY source of truth — it already contains one entry per rule (id, title, passed, description, recommendation, affected item COUNTS — names have been omitted on purpose) from these exact rules: HC_HR_001, HC_HR_002, HC_HR_003, HC_HR_004, HC_HR_005, HC_MR_001, HC_MR_002, HC_MR_003, HC_MR_004, HC_LR_001, HC_LR_002, HC_LR_003, HC_LR_003A, HC_LR_003B, HC_LR_004, HC_LR_005. Do not introduce any other checks, categories, or opinions beyond what these 16 rules already found. Your job is to faithfully interpret and prioritize THESE results — not to run your own independent audit.
+Structure your response in this order:
 
-Return exactly this shape, and nothing else:
-{
-  "healthScore": number,
-  "summary": string,
-  "ruleBreakdown": [
-    {
-      "id": string,
-      "status": "pass" | "fail",
-      "insight": string
-    }
-  ],
-  "criticalIssues": string[],
-  "recommendations": string[],
-  "priority": string[]
-}
+## Critical Issues
+The most serious problems — things that break tracking, cause duplicate/conflicting data, or are outright dead (e.g. legacy Universal Analytics tags, tags with contradictory trigger config, missing consent setup on ad/analytics tags, duplicate GA4 config, tags firing on every page that shouldn't be). Explain *why* each one matters, not just that it exists.
 
-Rules for "healthScore": use the report's own top-level "score" field verbatim — do not recalculate or re-estimate it.
+## Warnings / Cleanup Opportunities
+Lower-severity but real issues — paused tags left in the workspace, unused tags/triggers/variables, naming inconsistencies, tags that look like duplicates of each other, overly broad triggers, risky Custom HTML.
 
-Rules for "ruleBreakdown" (keep this compact — do NOT repeat the rule's title, the client already has it):
-- Include EXACTLY ONE entry per rule id found in the Health Report's "results" array — every single one of the 16, in the same order, none skipped and none added.
-- "status" mirrors that rule's "passed" field ("pass" if passed is true, "fail" if false).
-- "insight" is ONE short sentence, 12 words or fewer, using the given counts. For passed rules, a brief confirmation is fine (e.g. "No paused tags found.").
+## What's Working Well
+Call out genuinely good patterns you notice — a real audit isn't just a list of problems.
 
-Other fields (all derived only from the same 16 results and their counts, nothing invented beyond them):
-- "summary": 2-3 sentences, high-level synthesis across all 16 rules.
-- "criticalIssues": at most the 8 most important FAILED rules' findings, most severe first, short sentences.
-- "recommendations": at most 8 concrete next steps, each tied to a specific failed rule, short sentences.
-- "priority": at most 6 short phrases naming which failed rule ids to fix first, in order.
+## What To Do Next
+A prioritized, concrete action list. Name specific tags/triggers/variables for the highest-priority items; group the rest by pattern/count. Order it by what matters most to fix first.
 
-Health Report:
-${JSON.stringify(compactHealthReport, null, 2)}`,
+Keep it focused and readable — this container may have 100+ items. Don't enumerate every single tag/trigger/variable by name in the first three sections; summarize patterns and counts, and only name specific items when they're a standout example worth calling out individually. Use markdown headers/bold/bullets as shown above.
+
+Container export:
+${JSON.stringify(containerExport)}`,
         },
       ],
     });
 
-    const rawText =
-      response.content[0]?.type === "text" ? response.content[0].text : "";
-
-    // If Claude ran out of tokens before finishing, the JSON will always be
-    // truncated — surface that clearly instead of a generic parse error.
-    if (response.stop_reason === "max_tokens") {
-      return NextResponse.json({
-        success: true,
-        healthReport,
-        report: null,
-        rawText,
-        parseError:
-          "Claude's response was cut off before it finished (hit the token limit). Try again — if this keeps happening, the max_tokens value in the API route may need to be raised further.",
-      });
-    }
-
-    // Claude sometimes wraps JSON in ```json fences despite instructions —
-    // strip them before parsing so the frontend always gets a real object.
-    const cleaned = rawText
-      .trim()
-      .replace(/^```(?:json)?\s*/i, "")
-      .replace(/\s*```$/i, "")
-      .trim();
-
-    let parsed: unknown = null;
-    let parseError: string | null = null;
-
-    try {
-      parsed = JSON.parse(cleaned);
-    } catch (e) {
-      parseError = e instanceof Error ? e.message : "Failed to parse Claude's response as JSON.";
-    }
-
-    if (parseError) {
-      return NextResponse.json({
-        success: true,
-        healthReport,
-        report: null,
-        rawText,
-        parseError,
-      });
-    }
-
-    // Guarantee healthScore always matches the deterministic report.score,
-    // regardless of what Claude output — this is not something Claude
-    // should be re-deriving.
-    const finalReport =
-      parsed && typeof parsed === "object"
-        ? {
-          ...(parsed as Record<string, unknown>),
-          healthScore: (healthReport as { score?: number })?.score,
-        }
-        : parsed;
+    // Don't assume content[0] is the text block — some responses include a
+    // non-text block first (e.g. thinking), which previously caused an
+    // empty resultText even though Claude actually returned real text.
+    const textBlock = response.content.find((c) => c.type === "text");
+    const resultText = textBlock && "text" in textBlock ? textBlock.text : "";
 
     return NextResponse.json({
       success: true,
       healthReport,
-      report: finalReport,
+      resultText,
+      truncated: response.stop_reason === "max_tokens",
     });
   } catch (error) {
     console.error("Claude Error:", error);
-
     const message = error instanceof Error ? error.message : "Unknown error";
-
-    return NextResponse.json(
-      {
-        success: false,
-        error: message,
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: false, error: message }, { status: 500 });
   }
 }
