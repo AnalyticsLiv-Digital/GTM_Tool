@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronRight, Check, Plus, X, Trash2 } from "lucide-react";
+import { ChevronRight, Check, Plus, X, Trash2, Search } from "lucide-react";
 import { useDashboardStore } from "@/app/store/useDashboardStore";
 import { useDashboardActions } from "@/hooks/useDashboardActions";
 import { useGtmAccounts } from "@/hooks/useGtmAccounts";
@@ -16,6 +16,11 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
   const [, setStep] = useState<"account" | "container" | "workspace">("account");
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
   const [isCreatingWorkspace, setIsCreatingWorkspace] = useState(false);
+
+  // 🔍 SEARCH STATE — one per pane
+  const [accountSearch, setAccountSearch] = useState("");
+  const [containerSearch, setContainerSearch] = useState("");
+  const [workspaceSearch, setWorkspaceSearch] = useState("");
 
   const { accounts, loading: accountsLoading } = useGtmAccounts();
 
@@ -69,6 +74,11 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
     setSelectedWorkspaceId("");
     setSelectedWorkspaceName("");
 
+    // reset search boxes whenever modal opens
+    setAccountSearch("");
+    setContainerSearch("");
+    setWorkspaceSearch("");
+
     useDashboardStore.getState().setContainers([]);
     useDashboardStore.getState().setWorkspaces([]);
   }, [setSelectedAccountId, setSelectedAccountName, setSelectedContainerId, setSelectedContainerName, setSelectedWorkspaceId, setSelectedWorkspaceName, show]);
@@ -81,6 +91,10 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
     setSelectedAccountId(account.accountId);
     setSelectedAccountName(account.name);
 
+    // reset downstream search when account changes
+    setContainerSearch("");
+    setWorkspaceSearch("");
+
     // Hide workspace immediately
     useDashboardStore.getState().setWorkspaces([]);
 
@@ -91,6 +105,7 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
   const handleContainerSelect = async (container: any) => {
     setSelectedWorkspaceId("");
     setSelectedWorkspaceName("");
+    setWorkspaceSearch("");
     if (selectedContainerId === container.containerId) {
       await fetchWorkspaces();
       return;
@@ -116,6 +131,34 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
       console.error("Error creating workspace:", error);
     }
   };
+
+  // 🔍 FILTERED LISTS — case-insensitive match on name + id fields
+  const q = (s: string) => s.trim().toLowerCase();
+
+  const filteredAccounts = accounts.filter((account: any) => {
+    if (!accountSearch.trim()) return true;
+    const term = q(accountSearch);
+    return (
+      account.name?.toLowerCase().includes(term) ||
+      String(account.accountId ?? "").toLowerCase().includes(term)
+    );
+  });
+
+  const filteredContainers = containers.filter((container: any) => {
+    if (!containerSearch.trim()) return true;
+    const term = q(containerSearch);
+    return (
+      container.name?.toLowerCase().includes(term) ||
+      String(container.publicId ?? "").toLowerCase().includes(term) ||
+      String(container.containerId ?? "").toLowerCase().includes(term)
+    );
+  });
+
+  const filteredWorkspaces = workspaces.filter((workspace: any) => {
+    if (!workspaceSearch.trim()) return true;
+    const term = q(workspaceSearch);
+    return workspace.name?.toLowerCase().includes(term);
+  });
 
   return (
     <div
@@ -146,13 +189,21 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
         {/* THREE-PANE BODY */}
         <div className="flex flex-1 overflow-hidden">
           {/* LEFT — ACCOUNTS */}
-          <Pane label="Accounts" width="w-[24%]">
+          <Pane
+            label="Accounts"
+            width="w-[24%]"
+            searchValue={accountSearch}
+            onSearchChange={setAccountSearch}
+            searchPlaceholder="Search accounts…"
+          >
             {accountsLoading ? (
               <Hint>Loading accounts…</Hint>
             ) : accounts.length === 0 ? (
               <Hint>No accounts found.</Hint>
+            ) : filteredAccounts.length === 0 ? (
+              <Hint>No accounts match “{accountSearch}”.</Hint>
             ) : (
-              accounts.map((account: any) => (
+              filteredAccounts.map((account: any) => (
                 <PaneButton
                   key={account.accountId}
                   active={selectedAccountId === account.accountId}
@@ -166,15 +217,24 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
           </Pane>
 
           {/* MIDDLE — CONTAINERS */}
-          <Pane label="Containers" width="w-[36%]">
+          <Pane
+            label="Containers"
+            width="w-[36%]"
+            searchValue={containerSearch}
+            onSearchChange={setContainerSearch}
+            searchPlaceholder="Search containers…"
+            searchDisabled={!selectedAccountId}
+          >
             {!selectedAccountId ? (
               <Hint>Select an account first.</Hint>
             ) : containersLoading ? (
               <Hint>Loading containers…</Hint>
             ) : containers.length === 0 ? (
               <Hint>No containers found.</Hint>
+            ) : filteredContainers.length === 0 ? (
+              <Hint>No containers match “{containerSearch}”.</Hint>
             ) : (
-              containers.map((container: any) => (
+              filteredContainers.map((container: any) => (
                 <PaneButton
                   key={container.containerId}
                   active={selectedContainerId === container.containerId}
@@ -197,6 +257,10 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
           <Pane
             label="Workspaces"
             width="flex-1"
+            searchValue={workspaceSearch}
+            onSearchChange={setWorkspaceSearch}
+            searchPlaceholder="Search workspaces…"
+            searchDisabled={!selectedContainerId}
             action={
               selectedContainerId && !isCreatingWorkspace ? (
                 <div className="flex gap-2">
@@ -225,8 +289,10 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
               <Hint>Loading workspaces…</Hint>
             ) : workspaces.length === 0 ? (
               <Hint>No workspaces found.</Hint>
+            ) : filteredWorkspaces.length === 0 ? (
+              <Hint>No workspaces match “{workspaceSearch}”.</Hint>
             ) : (
-              workspaces.map((workspace: any) => (
+              filteredWorkspaces.map((workspace: any) => (
                 <PaneButton
                   key={workspace.workspaceId}
                   active={selectedWorkspaceId === workspace.workspaceId}
@@ -286,7 +352,6 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
     </div>
   );
 }
-
 /* ──────────────────────────────────────── helpers */
 
 function Pane({
@@ -294,12 +359,22 @@ function Pane({
   width,
   action,
   children,
+  searchValue,
+  onSearchChange,
+  searchPlaceholder,
+  searchDisabled,
 }: {
   label: string;
   width: string;
   action?: React.ReactNode;
   children: React.ReactNode;
+  searchValue?: string;
+  onSearchChange?: (value: string) => void;
+  searchPlaceholder?: string;
+  searchDisabled?: boolean;
 }) {
+  const hasSearch = typeof onSearchChange === "function";
+
   return (
     <div className={`${width} flex flex-col border-r border-line last:border-r-0 overflow-hidden`}>
       <div className="px-4 py-2.5 border-b border-line bg-card-hi flex items-center justify-between">
@@ -308,6 +383,37 @@ function Pane({
         </span>
         {action}
       </div>
+
+      {/* 🔍 SEARCH BAR */}
+      {hasSearch && (
+        <div className="px-2 pt-2">
+          <div className="relative">
+            <Search
+              size={14}
+              strokeWidth={2}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-faint pointer-events-none z-10"
+            />
+            <input
+              type="text"
+              value={searchValue ?? ""}
+              onChange={(e) => onSearchChange?.(e.target.value)}
+              placeholder={searchPlaceholder ?? "Search…"}
+              disabled={searchDisabled}
+              className="w-full bg-card border border-line rounded-md text-[12.5px] py-1.5! pl-9! pr-8! outline-none focus:border-accent/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            />
+            {searchValue ? (
+              <button
+                onClick={() => onSearchChange?.("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-faint hover:text-fg transition-colors"
+                aria-label="Clear search"
+              >
+                <X size={12} strokeWidth={2.2} />
+              </button>
+            ) : null}
+          </div>
+        </div>
+      )}
+
       <div className="flex-1 overflow-y-auto p-2 space-y-0.5">{children}</div>
     </div>
   );

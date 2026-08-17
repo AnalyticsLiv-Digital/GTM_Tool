@@ -26,8 +26,8 @@ export default function WelcomeSection({ user }: any) {
         </h1>
 
         <p className="mt-4 text-[15.5px] text-muted max-w-xl leading-relaxed">
-          Manage your GTM accounts, containers, workspaces, tags, triggers, and
-          variables — all from one calm interface.
+          Manage your GTM accounts, containers, workspaces, tags, triggers, variables and 
+          templates — all from one calm interface.
         </p>
       </div>
 

@@ -334,13 +334,13 @@ export const useDashboardStore = create<DashboardStore>()(
     {
       name: "gtm-dashboard-store",
       partialize: (state) => ({
-        // selectedAccountId: state.selectedAccountId,
-        // selectedContainerId: state.selectedContainerId,
-        // selectedWorkspaceId: state.selectedWorkspaceId,
+        selectedAccountId: state.selectedAccountId,
+        selectedContainerId: state.selectedContainerId,
+        selectedWorkspaceId: state.selectedWorkspaceId,
 
-        // selectedAccountName: state.selectedAccountName,
-        // selectedContainerName: state.selectedContainerName,
-        // selectedWorkspaceName: state.selectedWorkspaceName,
+        selectedAccountName: state.selectedAccountName,
+        selectedContainerName: state.selectedContainerName,
+        selectedWorkspaceName: state.selectedWorkspaceName,
 
         isImportedJson: state.isImportedJson,
       }),

@@ -715,6 +715,13 @@ export default function ExportTagsModal({
     });
 
     if (!ok) return;
+    toast.info(
+      "Important: Template-based tags require their corresponding template in the destination workspace. If the template cannot be exported, the tag must be exported manually.",
+      {
+        position: "bottom-right",
+        autoClose: 10000,
+      }
+    );
 
     const toastId = toast.info("Export in progress...", {
       position: "bottom-right",
@@ -740,6 +747,7 @@ export default function ExportTagsModal({
       const sourceVariablesRes = await fetch(
         `/api/auth/gtm/variables?accountId=${sourceAccountId}&containerId=${sourceContainerId}&workspaceId=${sourceWorkspaceId}`
       );
+
       const sourceVariablesData = await safeJsonParse(sourceVariablesRes);
       const sourceVariables = sourceVariablesData.variable || [];
 
@@ -1076,15 +1084,18 @@ export default function ExportTagsModal({
               type: failedItem.type,
               success: true,
             });
+
             console.log(
               ` Retry successful: ${failedItem.type} - ${failedItem.item.name || failedItem.item.templateId}`
             );
+            
           } catch (err: any) {
             retryResults.push({
               item: failedItem.item.name || failedItem.item.templateId,
               type: failedItem.type,
               success: false,
             });
+            
             console.error(
               ` Retry failed: ${failedItem.type} - ${failedItem.item.name || failedItem.item.templateId}:`,
               err.message
