@@ -1,24 +1,29 @@
-import {
-  GTMHealthData,
-  HealthCheckResult,
-  AffectedItem,
-} from "./types";
+import { GTMHealthData, HealthCheckResult, AffectedItem, } from "./types";
+
+// =====================================================
+// TYPES
+// =====================================================
+
+type GTMItem = Record<string, unknown>;
+
+type AssetType = | "tags" | "triggers" | "variables";
+
+type Severity = | "HIGH" | "MEDIUM" | "LOW";
 
 // =====================================================
 // BASIC HELPERS
 // =====================================================
 
 const getString = (
-  obj: Record<string, unknown>,
+  obj: GTMItem,
   key: string
 ): string => {
   const value = obj[key];
-
   return typeof value === "string" ? value : "";
 };
 
 const getArray = (
-  obj: Record<string, unknown>,
+  obj: GTMItem,
   key: string
 ): unknown[] => {
   const value = obj[key];
@@ -26,214 +31,168 @@ const getArray = (
   return Array.isArray(value) ? value : [];
 };
 
-const getParamValue = (
-  obj: Record<string, unknown>,
+const getObject = (
+  obj: GTMItem,
   key: string
-): string => {
-  const params = getArray(obj, "parameter");
+): GTMItem | null => {
+  const value = obj[key];
 
-  const found = params.find(
-    (item) =>
-      typeof item === "object" &&
-      item !== null &&
-      getString(
-        item as Record<string, unknown>,
-        "key"
-      ) === key
-  );
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return value as GTMItem;
+  }
 
-  return found
-    ? getString(
-        found as Record<string, unknown>,
-        "value"
-      )
-    : "";
+  return null;
 };
 
-const getType = (
-  obj: Record<string, unknown>
-): string => {
-  return getString(obj, "type").toLowerCase();
+const getType = (obj: GTMItem): string => {
+  return getString(obj, "type").trim().toLowerCase();
 };
 
-export const getTagId = (
-  tag: Record<string, unknown>
-): string => {
+const getName = (obj: GTMItem): string => {
+  return getString(obj, "name").trim();
+};
+
+const getTagId = (tag: GTMItem): string => {
   return getString(tag, "tagId");
 };
 
-const getTriggerId = (
-  trigger: Record<string, unknown>
-): string => {
+const getTriggerId = (trigger: GTMItem): string => {
   return getString(trigger, "triggerId");
 };
 
-export const getVariableId = (
-  variable: Record<string, unknown>
-): string => {
+const getVariableId = (variable: GTMItem): string => {
   return getString(variable, "variableId");
 };
 
-const getFiringTriggerIds = (
-  tag: Record<string, unknown>
-): string[] => {
-  return getArray(tag, "firingTriggerId").filter(
-    (id): id is string => typeof id === "string"
-  );
+// =====================================================
+// PARAMETER HELPERS
+// =====================================================
+
+const getParameters = (obj: GTMItem): GTMItem[] => {
+  return getArray(obj, "parameter").filter(
+    (item): item is GTMItem => typeof item === "object" && item !== null && !Array.isArray(item));
 };
 
-const getBlockingTriggerIds = (
-  tag: Record<string, unknown>
-): string[] => {
-  return getArray(tag, "blockingTriggerId").filter(
-    (id): id is string => typeof id === "string"
-  );
+const getParameter = (obj: GTMItem, key: string): GTMItem | undefined => {
+  return getParameters(obj).find((parameter) => getString(parameter, "key") === key);
+};
+
+const getParamValue = (obj: GTMItem, key: string): string => {
+  const parameter = getParameter(obj, key);
+
+  return parameter ? getString(parameter, "value") : "";
+};
+
+const hasParameter = (obj: GTMItem, key: string): boolean => {
+  return Boolean(getParameter(obj, key));
+};
+
+// =====================================================
+// ID HELPERS
+// =====================================================
+
+const getFiringTriggerIds = (tag: GTMItem): string[] => {
+  return getArray(tag, "firingTriggerId").filter((id): id is string => typeof id === "string" && Boolean(id.trim()));
+};
+
+const getBlockingTriggerIds = (tag: GTMItem): string[] => {
+  return getArray(tag, "blockingTriggerId").filter((id): id is string => typeof id === "string" && Boolean(id.trim()));
 };
 
 // =====================================================
 // GTM URL HELPERS
 // =====================================================
 
-const buildGTMListUrl = (
-  type: "tags" | "triggers" | "variables",
-  accountId: string,
-  containerId: string,
-  workspaceId: string
-): string => {
-  return `https://tagmanager.google.com/#/container/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/${type}`;
+const buildGTMListUrl = (type: AssetType, accountId: string, containerId: string, workspaceId: string): string => {
+  return (`https://tagmanager.google.com/#/container/accounts/` + `${accountId}/containers/${containerId}/workspaces/` + `${workspaceId}/${type}`);
 };
 
-const buildGTMEditUrl = (
-  type: "tags" | "triggers" | "variables",
-  accountId: string,
-  containerId: string,
-  workspaceId: string,
-  id: string
-): string => {
-  return `https://tagmanager.google.com/#/container/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}/${type}/${id}/edit`;
+const buildGTMEditUrl = (type: AssetType, accountId: string, containerId: string, workspaceId: string, id: string): string => {
+  return (`https://tagmanager.google.com/#/container/accounts/` + `${accountId}/containers/${containerId}/workspaces/` + `${workspaceId}/${type}/${id}/edit`);
 };
 
 // =====================================================
 // AFFECTED ITEM HELPERS
 // =====================================================
 
-const mapToAffectedItem = (
-  item: Record<string, unknown>,
-  type: "tags" | "triggers" | "variables",
-  accountId: string,
-  containerId: string,
-  workspaceId: string
-): AffectedItem => {
-  const name =
-    typeof item.name === "string"
-      ? item.name
-      : "Unnamed";
-
-  const id =
-    typeof item.tagId === "string"
-      ? item.tagId
-      : typeof item.triggerId === "string"
-        ? item.triggerId
-        : typeof item.variableId === "string"
-          ? item.variableId
-          : "";
-
-  return {
-    name,
-    id,
-    editUrl: id
-      ? buildGTMEditUrl(
-          type,
-          accountId,
-          containerId,
-          workspaceId,
-          id
-        )
-      : undefined,
-  };
+const getAssetId = (item: GTMItem): string => {
+  return (getTagId(item) || getTriggerId(item) || getVariableId(item));
 };
 
-const mapTags = (
-  items: Record<string, unknown>[],
-  data: GTMHealthData
-): AffectedItem[] => {
-  return items.map((item) =>
-    mapToAffectedItem(
-      item,
-      "tags",
-      data.accountId,
-      data.containerId,
-      data.workspaceId
-    )
-  );
+const mapToAffectedItem = (item: GTMItem, type: AssetType, accountId: string, containerId: string, workspaceId: string): AffectedItem => {
+  const name = getName(item) || "Unnamed";
+
+  const id = getAssetId(item);
+
+  return { name, id, editUrl: id ? buildGTMEditUrl(type, accountId, containerId, workspaceId, id) : undefined, };
 };
 
-const mapTriggers = (
-  items: Record<string, unknown>[],
-  data: GTMHealthData
-): AffectedItem[] => {
-  return items.map((item) =>
-    mapToAffectedItem(
-      item,
-      "triggers",
-      data.accountId,
-      data.containerId,
-      data.workspaceId
-    )
-  );
+const mapTags = (tags: GTMItem[], data: GTMHealthData): AffectedItem[] => {
+  return tags.map((tag) => mapToAffectedItem(tag, "tags", data.accountId, data.containerId, data.workspaceId));
 };
 
-const mapVariables = (
-  items: Record<string, unknown>[],
-  data: GTMHealthData
-): AffectedItem[] => {
-  return items.map((item) =>
-    mapToAffectedItem(
-      item,
-      "variables",
-      data.accountId,
-      data.containerId,
-      data.workspaceId
-    )
-  );
+const mapTriggers = (triggers: GTMItem[], data: GTMHealthData): AffectedItem[] => {
+  return triggers.map((trigger) => mapToAffectedItem(trigger, "triggers", data.accountId, data.containerId, data.workspaceId));
+};
+
+const mapVariables = (variables: GTMItem[], data: GTMHealthData): AffectedItem[] => {
+  return variables.map((variable) =>
+    mapToAffectedItem(variable, "variables", data.accountId, data.containerId, data.workspaceId));
 };
 
 // =====================================================
-// BUILT-IN TRIGGERS
+// BUILT-IN GTM TRIGGERS
 // =====================================================
 
-const BUILT_IN_TRIGGER_IDS = new Set([
-  "2147479553",
-  "2147479572",
-  "2147479573",
-]);
-
-const isBuiltInTriggerId = (
-  id: string
-): boolean => {
+const BUILT_IN_TRIGGER_IDS = new Set<string>(["2147479553", "2147479572", "2147479573",]);
+const BUILT_IN_ALL_PAGES_LIKE_TRIGGER_IDS = new Set<string>(["2147479553", "2147479572",]);
+const CONSENT_INITIALIZATION_TRIGGER_ID = "2147479573";
+const isBuiltInTriggerId = (id: string): boolean => {
   return BUILT_IN_TRIGGER_IDS.has(id);
 };
 
-const firesOnBuiltInAllPages = (
-  triggerIds: string[]
-): boolean => {
-  return triggerIds.some((id) =>
-    BUILT_IN_TRIGGER_IDS.has(id)
-  );
+const isBuiltInAllPagesTriggerId = (id: string): boolean => {
+  return BUILT_IN_ALL_PAGES_LIKE_TRIGGER_IDS.has(id);
 };
 
 // =====================================================
-// TAG CLASSIFICATION
+// TRIGGER HELPERS
 // =====================================================
 
-const NON_GA4_GOOGTAG_PREFIXES = [
-  "aw-",
-  "dc-",
-];
+const getTriggerById = (data: GTMHealthData, triggerId: string): GTMItem | undefined => {
+  return data.triggers.find((trigger) => getTriggerId(trigger) === triggerId);
+};
 
-const isGA4ConfigTag = (
-  tag: Record<string, unknown>
-): boolean => {
+const getTriggerNamesForTag = (tag: GTMItem, data: GTMHealthData): string[] => {
+  return getFiringTriggerIds(tag).map((id) => getTriggerById(data, id)).filter(
+    (trigger): trigger is GTMItem => Boolean(trigger)).map((trigger) => getName(trigger).toLowerCase());
+};
+
+const triggerNameLooksLikeAllPages = (name: string): boolean => {
+  const normalized = name.trim().toLowerCase();
+
+  return (normalized === "all pages" || normalized.includes("all pages") || normalized.includes("initialization"));
+};
+
+const firesOnBuiltInAllPages = (triggerIds: string[]): boolean => {
+  return triggerIds.some((id) => isBuiltInAllPagesTriggerId(id));
+};
+
+const firesOnAllPagesOrInitialization = (tag: GTMItem, data: GTMHealthData): boolean => {
+  const triggerIds = getFiringTriggerIds(tag);
+  if (firesOnBuiltInAllPages(triggerIds)) {
+    return true;
+  }
+  const triggerNames = getTriggerNamesForTag(tag, data);
+  return triggerNames.some(triggerNameLooksLikeAllPages);
+};
+
+// =====================================================
+// CLASSIFICATION HELPERS
+// =====================================================
+
+const NON_GA4_GOOGTAG_PREFIXES = ["aw-", "dc-", "gtag-", "gtm-", "ua-"];
+const isGA4ConfigTag = (tag: GTMItem): boolean => {
   const type = getType(tag);
 
   if (type === "gaawc") {
@@ -241,496 +200,449 @@ const isGA4ConfigTag = (
   }
 
   if (type === "googtag") {
-    const tagId =
-      getParamValue(tag, "tagId")
-        .trim()
-        .toLowerCase();
+    const tagId = getParamValue(tag, "tagId").trim().toLowerCase();
 
-    return !NON_GA4_GOOGTAG_PREFIXES.some(
-      (prefix) =>
+    return (
+      Boolean(tagId) &&
+      !NON_GA4_GOOGTAG_PREFIXES.some((prefix) =>
         tagId.startsWith(prefix)
+      )
     );
   }
 
   return false;
 };
 
-const isGA4EventTag = (
-  tag: Record<string, unknown>
-): boolean => {
-  return getType(tag) === "gaawe";
+const isGA4EventTag = (tag: GTMItem): boolean => {
+  return (getType(tag) === "gaawe");
 };
 
-const isGoogleAdsTag = (
-  tag: Record<string, unknown>
-): boolean => {
+const isGoogleAdsTag = (tag: GTMItem): boolean => {
   const type = getType(tag);
 
-  if (
-    type === "awct" ||
-    type === "sp"
-  ) {
+  if (type === "awct" || type === "sp") {
     return true;
   }
 
-  if (type === "googtag") {
-    return getParamValue(
-      tag,
-      "tagId"
-    )
-      .trim()
-      .toLowerCase()
-      .startsWith("aw-");
+  if (type !== "googtag") {
+    return false;
   }
 
-  return false;
+  const tagId = getParamValue(tag, "tagId").trim().toLowerCase();
+
+  return tagId.startsWith("aw-");
 };
 
-const isConversionLinkerTag = (
-  tag: Record<string, unknown>
-): boolean => {
-  return getType(tag) === "gclidw";
+const isConversionLinkerTag = (tag: GTMItem): boolean => {
+  return (getType(tag) === "gclidw");
 };
 
-const isCustomHTMLTag = (
-  tag: Record<string, unknown>
-): boolean => {
-  return getType(tag) === "html";
+const isPurchaseTag = (tag: GTMItem): boolean => {
+  const name = getName(tag).toLowerCase();
+  const eventName = getParamValue(tag, "eventName").trim().toLowerCase();
+  return (name.includes("purchase") || eventName === "purchase");
 };
 
-const isPurchaseTag = (
-  tag: Record<string, unknown>
-): boolean => {
-  const name =
-    getString(tag, "name")
-      .toLowerCase();
-
-  const eventName =
-    getParamValue(
-      tag,
-      "eventName"
-    ).toLowerCase();
-
-  return (
-    name.includes("purchase") ||
-    eventName.includes("purchase")
-  );
+const isAnalyticsTag = (tag: GTMItem): boolean => {
+  return (isGA4ConfigTag(tag) || isGA4EventTag(tag));
 };
 
-// =====================================================
-// VARIABLE USAGE
-// =====================================================
+const isMarketingTag = (tag: GTMItem): boolean => {
+  const type = getType(tag);
 
-const buildUsageHaystack = (
-  data: GTMHealthData
-): string => {
-  return (
-    JSON.stringify(data.tags) +
-    JSON.stringify(data.triggers) +
-    JSON.stringify(data.variables)
-  );
+  return (isGoogleAdsTag(tag) || type.includes("floodlight") || type.includes("marketing") || type.includes("adwords") || type.includes("adroll") || type.includes("facebook") || type.includes("linkedin") || type.includes("twitter") || type.includes("pinterest"));
+};
+
+const isCustomHTMLTag = (tag: GTMItem): boolean => {
+  return (getType(tag) === "html");
+};
+
+const isCustomJavaScriptVariable = (variable: GTMItem): boolean => {
+  return (getType(variable) === "jsm");
 };
 
 // =====================================================
-// VARIABLE REFERENCE DETECTION
+// VARIABLE REFERENCE HELPERS
 // =====================================================
 
-const extractVariableReferences = (
-  value: string
-): string[] => {
-  const matches =
-    value.match(/\{\{([^}]+)\}\}/g);
+const VARIABLE_REFERENCE_REGEX = /\{\{\s*([^{}]+?)\s*\}\}/g;
 
-  if (!matches) return [];
+const extractVariableReferences = (value: unknown): string[] => {
+  if (typeof value !== "string") {
+    return [];
+  }
 
-  return matches.map(
-    (match) =>
-      match
-        .replace("{{", "")
-        .replace("}}", "")
-        .trim()
-  );
-};
+  const references: string[] = [];
 
-const getMissingVariableReferences = (
-  data: GTMHealthData
-): Set<string> => {
-  const existing = new Set(
-    data.variables
-      .map((variable) =>
-        getString(variable, "name")
-      )
-      .filter(Boolean)
-  );
+  let match: | RegExpExecArray | null;
 
-  const references = new Set<string>();
+  while ((match = VARIABLE_REFERENCE_REGEX.exec(value)) !== null
+  ) {
+    const name = match[1].trim();
 
-  const scan = (
-    value: unknown
-  ): void => {
-    if (typeof value === "string") {
-      extractVariableReferences(
-        value
-      ).forEach((name) => {
-        if (!existing.has(name)) {
-          references.add(name);
-        }
-      });
-
-      return;
+    if (name) {
+      references.push(name);
     }
+  }
 
-    if (Array.isArray(value)) {
-      value.forEach(scan);
-      return;
-    }
-
-    if (
-      value &&
-      typeof value === "object"
-    ) {
-      Object.values(
-        value as Record<string, unknown>
-      ).forEach(scan);
-    }
-  };
-
-  scan(data.tags);
-  scan(data.triggers);
-  scan(data.variables);
-
+  VARIABLE_REFERENCE_REGEX.lastIndex = 0;
   return references;
 };
 
-const objectContainsMissingVariable = (
-  object: Record<string, unknown>,
-  missing: Set<string>
-): boolean => {
-  const json =
-    JSON.stringify(object);
+const extractReferencesFromObject = (value: unknown): string[] => {
+  const references: string[] = [];
 
-  return Array.from(missing).some(
-    (name) =>
-      json.includes(`{{${name}}}`)
+  const visit = (current: unknown): void => {
+    if (typeof current === "string") {
+      references.push(...extractVariableReferences(current));
+      return;
+    }
+
+    if (Array.isArray(current)) {
+      current.forEach(visit);
+      return;
+    }
+
+    if (typeof current === "object" && current !== null) {
+      Object.values(current as Record<string, unknown>).forEach(visit);
+    }
+  };
+  visit(value);
+  return references;
+};
+
+// =====================================================
+// BUILT-IN VARIABLE NAMES
+// =====================================================
+
+const BUILT_IN_VARIABLE_NAMES =
+  new Set(
+    [
+      "Event",
+      "Page Hostname",
+      "Page Path",
+      "Page URL",
+      "Referrer",
+      "Click Classes",
+      "Click Element",
+      "Click ID",
+      "Click Target",
+      "Click Text",
+      "Click URL",
+      "Form Classes",
+      "Form Element",
+      "Form ID",
+      "Form Target",
+      "Form Text",
+      "Form URL",
+      "History Source",
+      "History New URL Fragment",
+      "History New State",
+      "History Old URL Fragment",
+      "History Old State",
+      "Random Number",
+      "Container ID",
+      "Debug Mode",
+      "Environment Name",
+      "HTML ID",
+      "Error Message",
+      "Error URL",
+      "Error Line",
+      "Video Current Time",
+      "Video Duration",
+      "Video Percent",
+      "Video Provider",
+      "Video Status",
+      "Video Title",
+      "Video URL",
+      "Scroll Depth Threshold",
+      "Scroll Depth Units",
+      "Scroll Direction",
+    ].map(
+      (name) => name.toLowerCase()));
+
+const isBuiltInVariableName = (name: string): boolean => {
+  return BUILT_IN_VARIABLE_NAMES.has(name.trim().toLowerCase());
+};
+
+// =====================================================
+// USAGE HELPERS
+// =====================================================
+
+const getAllVariableReferences = (data: GTMHealthData): Set<string> => {
+  const references = new Set<string>();
+  [...data.tags, ...data.triggers, ...data.variables].forEach((item) => {
+    extractReferencesFromObject(item).forEach((reference) => references.add(reference));
+  });
+  return references;
+};
+
+const getMissingVariableReferences = (data: GTMHealthData): Set<string> => {
+  const definedVariables = new Set(data.variables.map((variable) => getName(variable)).filter(Boolean).map((name) => name.toLowerCase()));
+  const references = getAllVariableReferences(data);
+  const missing = new Set<string>();
+
+  references.forEach((reference) => {
+    if (isBuiltInVariableName(reference)) {
+      return;
+    }
+    if (!definedVariables.has(reference.toLowerCase())) {
+      missing.add(reference);
+    }
+  }
+  );
+  return missing;
+};
+
+const objectContainsMissingVariable = (item: GTMItem, missingVariables: Set<string>): boolean => {
+  const references = extractReferencesFromObject(item);
+  return references.some((reference) => Array.from(missingVariables).some((missing) => missing.toLowerCase() === reference.toLowerCase())
   );
 };
 
 // =====================================================
-// PLACEHOLDER NAME RULE
+// CONSENT HELPERS
 // =====================================================
 
-const PLACEHOLDER_NAME_PATTERN =
-  /^(test|testing|untitled|new tag|new trigger|new variable|copy|copy of.*|\d+)$/i;
+const hasConfiguredConsentSettings = (tag: GTMItem): boolean => {
+  const settings = getObject(tag, "consentSettings");
+  if (!settings) {
+    return false;
+  }
+  const status = getString(settings, "consentStatus").trim().toLowerCase();
+  const consentType = getObject(settings, "consentType");
+  return Boolean(status || consentType);
+};
+
+const isConsentRelatedTag = (tag: GTMItem): boolean => {
+  const type = getType(tag);
+  const name = getName(tag).toLowerCase();
+  return (type.includes("consent") || name.includes("consent") || name.includes("cmp"));
+};
+
+const hasConsentInitializationTrigger = (tag: GTMItem, data: GTMHealthData): boolean => {
+  const triggerIds = getFiringTriggerIds(tag);
+  if (triggerIds.includes(CONSENT_INITIALIZATION_TRIGGER_ID)) {
+    return true;
+  }
+  const triggerNames = getTriggerNamesForTag(tag, data);
+  return triggerNames.some((name) => name.includes("consent initialization"));
+};
 
 // =====================================================
-// HIGH RISK RULES
+// REGEX HELPERS
+// =====================================================
+
+const isBroadRegex = (value: string): boolean => {
+  const normalized = value.trim().replace(/^\/|\/$/g, "").toLowerCase();
+
+  return (normalized === ".*" || normalized === "^.*$" || normalized === ".+" || normalized === "^.+$");
+};
+
+// =====================================================
+// NAME HELPERS
+// =====================================================
+
+const normalizeName = (name: string): string => {
+  return name.trim();
+};
+
+const findDuplicateGroups = (items: GTMItem[]): GTMItem[][] => {
+  const groups = new Map<string, GTMItem[]>();
+  items.forEach((item) => {
+    const name = getName(item);
+    if (!name) {
+      return;
+    }
+    const key = normalizeName(name);
+    const existing = groups.get(key) || [];
+    existing.push(item);
+    groups.set(key, existing);
+  }
+  );
+
+  return Array.from(groups.values()).filter((group) => group.length > 1);
+};
+
+// =====================================================
+// PURCHASE PARAMETER HELPERS
+// =====================================================
+
+const hasPurchaseParameter = (tag: GTMItem, key: string): boolean => {
+  return hasParameter(tag, key);
+};
+
+const getMissingPurchaseParameters = (tag: GTMItem): string[] => {
+  const required = ["transaction_id", "value", "currency", "items",];
+
+  return required.filter((key) => !hasPurchaseParameter(tag, key));
+};
+
+// =====================================================
+// HEALTH RESULT HELPERS
+// =====================================================
+
+const getBaseResult = (
+  id: string,
+  title: string,
+  description: string,
+  severity: Severity,
+  passed: boolean): HealthCheckResult => {
+  return {
+    id,
+    title,
+    description,
+    severity,
+    passed,
+  };
+};
+
+// =====================================================
+// HEALTHCHECK RULES
 // =====================================================
 
 export const healthCheckRules = [
 
-  // ===================================================
-  // HC_HR_001
-  // ===================================================
+  // =====================================================
+  // HIGH RISK
+  // =====================================================
 
   {
     id: "HC_HR_001",
     title: "Multiple GA4 Config Tags Found",
-    description:
-      "Only one primary GA4 configuration tag should exist.",
+    description: "Only one primary GA4 configuration tag should exist.",
     severity: "HIGH",
 
-    check: (
-      data: GTMHealthData
-    ): HealthCheckResult => {
-      const configs =
-        data.tags.filter(
-          isGA4ConfigTag
-        );
+    check: (data: GTMHealthData): HealthCheckResult => {
+      const configs = data.tags.filter(isGA4ConfigTag);
 
-      const passed =
-        configs.length <= 1;
+      const passed = configs.length <= 1;
 
       return {
-        id: "HC_HR_001",
-        title:
+        ...getBaseResult(
+          "HC_HR_001",
           "Multiple GA4 Config Tags Found",
-        description:
           "Only one primary GA4 configuration tag should exist.",
-        severity: "HIGH",
-        passed,
-
-        affectedTags:
+          "HIGH",
           passed
-            ? []
-            : mapTags(
-                configs,
-                data
-              ),
+        ),
 
-        recommendation:
-          passed
-            ? ""
-            : `Found ${configs.length} GA4 configuration tags. Keep one primary GA4 configuration.`,
+        affectedTags: passed ? [] : mapTags(configs, data),
+        recommendation: passed ? "" : `Found ${configs.length} GA4 configuration tags. Keep one primary Google tag configuration.`,
 
         gtmLinks: {
-          tags:
-            buildGTMListUrl(
-              "tags",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
+          tags: buildGTMListUrl("tags", data.accountId, data.containerId, data.workspaceId),
         },
       };
     },
   },
-
-  // ===================================================
-  // HC_HR_002
-  // ===================================================
 
   {
     id: "HC_HR_002",
-    title:
-      "Google Ads Tag Without Conversion Linker",
-    description:
-      "Google Ads tags should have a Conversion Linker tag.",
+    title: "Google Ads Tag Without Conversion Linker",
+    description: "Google Ads tags detected but Conversion Linker tag is missing.",
     severity: "HIGH",
 
-    check: (
-      data: GTMHealthData
-    ): HealthCheckResult => {
-      const adsTags =
-        data.tags.filter(
-          isGoogleAdsTag
-        );
-
-      const linker =
-        data.tags.find(
-          isConversionLinkerTag
-        );
-
-      const passed =
-        adsTags.length === 0 ||
-        Boolean(linker);
+    check: (data: GTMHealthData): HealthCheckResult => {
+      const adsTags = data.tags.filter(isGoogleAdsTag);
+      const hasLinker = data.tags.some(isConversionLinkerTag);
+      const passed = adsTags.length === 0 || hasLinker;
 
       return {
-        id: "HC_HR_002",
-        title:
+        ...getBaseResult(
+          "HC_HR_002",
           "Google Ads Tag Without Conversion Linker",
-        description:
-          "Google Ads tags should have a Conversion Linker tag.",
-        severity: "HIGH",
-        passed,
-
-        affectedTags:
+          "Google Ads tags detected but Conversion Linker tag is missing.",
+          "HIGH",
           passed
-            ? []
-            : mapTags(
-                adsTags,
-                data
-              ),
+        ),
 
-        recommendation:
-          passed
-            ? ""
-            : "Add a Conversion Linker tag for Google Ads attribution.",
+        affectedTags: passed ? [] : mapTags(adsTags, data),
+        recommendation: passed ? "" : `Found ${adsTags.length} Google Ads tags without a Conversion Linker. Add a Conversion Linker tag for proper attribution.`,
 
         gtmLinks: {
-          tags:
-            buildGTMListUrl(
-              "tags",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
+          tags: buildGTMListUrl("tags", data.accountId, data.containerId, data.workspaceId),
         },
       };
     },
   },
-
-  // ===================================================
-  // HC_HR_003
-  // ===================================================
 
   {
     id: "HC_HR_003",
-    title:
-      "Purchase Trigger Firing Multiple Same Platform Tags",
-    description:
-      "A purchase trigger should not fire multiple same-platform purchase tags.",
+    title: "Purchase Trigger Firing Multiple Same Platform Tags",
+    description: "A purchase trigger should not fire multiple GA4 purchase tags for the same conversion event.",
     severity: "HIGH",
 
-    check: (
-      data: GTMHealthData
-    ): HealthCheckResult => {
-      const purchaseTags =
-        data.tags.filter(
-          isPurchaseTag
-        );
+    check: (data: GTMHealthData): HealthCheckResult => {
+      const purchaseTags = data.tags.filter(isPurchaseTag);
+      const triggerMap = new Map<string, GTMItem[]>();
+      purchaseTags.forEach((tag) => {
+        getFiringTriggerIds(tag).forEach((triggerId) => {
+          const group = triggerMap.get(triggerId) || []; group.push(tag); triggerMap.set(triggerId, group);
+        });
+      });
+      const duplicateGroups = Array.from(triggerMap.entries()).filter(([, tags]) => {
+        const ga4PurchaseTags = tags.filter((tag) => isGA4EventTag(tag) && getParamValue(tag, "eventName").trim().toLowerCase() === "purchase");
 
-      const triggerMap =
-        new Map<
-          string,
-          Record<string, unknown>[]
-        >();
+        return (ga4PurchaseTags.length > 1);
+      });
 
-      purchaseTags.forEach(
-        (tag) => {
-          getFiringTriggerIds(
-            tag
-          ).forEach(
-            (triggerId) => {
-              if (
-                !triggerMap.has(
-                  triggerId
-                )
-              ) {
-                triggerMap.set(
-                  triggerId,
-                  []
-                );
-              }
+      const affected = duplicateGroups.flatMap(([, tags]) => tags);
 
-              triggerMap
-                .get(triggerId)!
-                .push(tag);
-            }
-          );
-        }
-      );
-
-      const duplicateGroups =
-        Array.from(
-          triggerMap.values()
-        ).filter(
-          (tags) =>
-            tags.filter(
-              (tag) =>
-                isGA4EventTag(tag) ||
-                isGA4ConfigTag(tag)
-            ).length > 1
-        );
-
-      const affected =
-        duplicateGroups.flat();
-
-      const passed =
-        affected.length === 0;
+      const passed = duplicateGroups.length === 0;
 
       return {
-        id: "HC_HR_003",
-        title:
+        ...getBaseResult(
+          "HC_HR_003",
           "Purchase Trigger Firing Multiple Same Platform Tags",
-        description:
-          "A purchase trigger should not fire multiple same-platform purchase tags.",
-        severity: "HIGH",
-        passed,
-
-        affectedTags:
+          "A purchase trigger should not fire multiple GA4 purchase tags for the same conversion event.",
+          "HIGH",
           passed
-            ? []
-            : mapTags(
-                affected,
-                data
-              ),
+        ),
 
-        recommendation:
-          passed
-            ? ""
-            : "Review purchase triggers and remove duplicate same-platform purchase tags.",
-
+        affectedTags: passed ? [] : mapTags(affected, data),
+        recommendation: passed ? "" : "Review purchase tags sharing the same trigger and consolidate duplicate purchase tracking.",
         gtmLinks: {
-          tags:
-            buildGTMListUrl(
-              "tags",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
-          triggers:
-            buildGTMListUrl(
-              "triggers",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
+          tags: buildGTMListUrl("tags", data.accountId, data.containerId, data.workspaceId),
+          triggers: buildGTMListUrl("triggers", data.accountId, data.containerId, data.workspaceId),
         },
       };
     },
   },
-
-  // ===================================================
-  // HC_HR_004
-  // ===================================================
 
   {
     id: "HC_HR_004",
-    title:
-      "Purchase Tag Has Multiple Triggers",
-    description:
-      "Purchase tags should ideally use a single clean purchase trigger.",
+    title: "Purchase Tag Has Multiple Triggers",
+    description: "Purchase tags should avoid unnecessary multiple firing triggers.",
     severity: "HIGH",
 
-    check: (
-      data: GTMHealthData
-    ): HealthCheckResult => {
-      const invalid =
-        data.tags.filter(
-          (tag) =>
-            isPurchaseTag(tag) &&
-            getFiringTriggerIds(tag)
-              .length > 1
-        );
-
-      const passed =
-        invalid.length === 0;
+    check: (data: GTMHealthData): HealthCheckResult => {
+      const invalid = data.tags.filter((tag) => isPurchaseTag(tag) && getFiringTriggerIds(tag).length > 1);
+      const passed = invalid.length === 0;
 
       return {
-        id: "HC_HR_004",
-        title:
+        ...getBaseResult(
+          "HC_HR_004",
           "Purchase Tag Has Multiple Triggers",
-        description:
-          "Purchase tags should ideally use a single clean purchase trigger.",
-        severity: "HIGH",
-        passed,
-
-        affectedTags:
+          "Purchase tags should avoid unnecessary multiple firing triggers.",
+          "HIGH",
           passed
-            ? []
-            : mapTags(
-                invalid,
-                data
-              ),
+        ),
 
-        recommendation:
-          passed
-            ? ""
-            : "Purchase tags have multiple triggers. Consolidate the firing logic to avoid duplicate purchases.",
+        affectedTags: passed ? [] : mapTags(invalid, data),
+        recommendation: passed ? "" : "Review purchase trigger logic and use one controlled purchase trigger where possible.",
 
         gtmLinks: {
-          tags:
-            buildGTMListUrl(
-              "tags",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
+          tags: buildGTMListUrl("tags", data.accountId, data.containerId, data.workspaceId),
         },
       };
     },
   },
 
-  // ===================================================
-  // HC_HR_005
-  // ===================================================
-
   {
     id: "HC_HR_005",
-    title:
-      "Custom HTML Missing Try Catch",
-    description:
-      "Custom HTML tags should use appropriate error handling.",
+    title: "Custom HTML Missing Try Catch",
+    description: "Custom HTML tags should contain safe error handling where the script performs operations that may fail.",
     severity: "HIGH",
 
     check: (
@@ -750,7 +662,9 @@ export const healthCheckRules = [
                 "html"
               );
 
-            if (!html.trim()) {
+            if (
+              !html.trim()
+            ) {
               return false;
             }
 
@@ -764,21 +678,21 @@ export const healthCheckRules = [
         invalid.length === 0;
 
       return {
-        id: "HC_HR_005",
-        title:
+        ...getBaseResult(
+          "HC_HR_005",
           "Custom HTML Missing Try Catch",
-        description:
-          "Custom HTML tags should use appropriate error handling.",
-        severity: "HIGH",
-        passed,
+          "Custom HTML tags should contain safe error handling where the script performs operations that may fail.",
+          "HIGH",
+          passed
+        ),
 
         affectedTags:
           passed
             ? []
             : mapTags(
-                invalid,
-                data
-              ),
+              invalid,
+              data
+            ),
 
         recommendation:
           passed
@@ -786,67 +700,60 @@ export const healthCheckRules = [
             : "Review Custom HTML scripts and add appropriate try-catch handling where runtime failures are possible.",
 
         gtmLinks: {
-          tags:
-            buildGTMListUrl(
-              "tags",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
+          tags: buildGTMListUrl(
+            "tags",
+            data.accountId,
+            data.containerId,
+            data.workspaceId
+          ),
         },
       };
     },
   },
-
-  // ===================================================
-  // HC_HR_006
-  // ===================================================
 
   {
     id: "HC_HR_006",
     title:
       "GA4 Event Without GA4 Configuration",
     description:
-      "GA4 Event tags should have a valid GA4 Google tag configuration.",
+      "GA4 Event tags should have a valid GA4 Google tag configuration available.",
     severity: "HIGH",
 
     check: (
       data: GTMHealthData
     ): HealthCheckResult => {
-      const events =
+      const eventTags =
         data.tags.filter(
           isGA4EventTag
         );
 
-      const configs =
+      const configTags =
         data.tags.filter(
           isGA4ConfigTag
         );
 
       const invalid =
-        configs.length === 0
-          ? events
+        configTags.length === 0
+          ? eventTags
           : [];
 
       const passed =
         invalid.length === 0;
 
       return {
-        id: "HC_HR_006",
-        title:
+        ...getBaseResult(
+          "HC_HR_006",
           "GA4 Event Without GA4 Configuration",
-        description:
-          "GA4 Event tags should have a valid GA4 Google tag configuration.",
-        severity: "HIGH",
-        passed,
+          "GA4 Event tags should have a valid GA4 Google tag configuration available.",
+          "HIGH",
+          passed
+        ),
 
         affectedTags:
-          passed
-            ? []
-            : mapTags(
-                invalid,
-                data
-              ),
+          mapTags(
+            invalid,
+            data
+          ),
 
         recommendation:
           passed
@@ -854,21 +761,16 @@ export const healthCheckRules = [
             : "Create a valid GA4 Google tag configuration before firing GA4 Event tags.",
 
         gtmLinks: {
-          tags:
-            buildGTMListUrl(
-              "tags",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
+          tags: buildGTMListUrl(
+            "tags",
+            data.accountId,
+            data.containerId,
+            data.workspaceId
+          ),
         },
       };
     },
   },
-
-  // ===================================================
-  // HC_HR_007
-  // ===================================================
 
   {
     id: "HC_HR_007",
@@ -884,41 +786,49 @@ export const healthCheckRules = [
       const triggerIds =
         new Set(
           data.triggers
-            .map(getTriggerId)
+            .map(
+              getTriggerId
+            )
             .filter(Boolean)
         );
 
       const invalid =
         data.tags.filter(
-          (tag) =>
-            getFiringTriggerIds(
-              tag
-            ).some(
+          (tag) => {
+            const ids =
+              getFiringTriggerIds(
+                tag
+              );
+
+            return ids.some(
               (id) =>
-                !triggerIds.has(id) &&
-                !isBuiltInTriggerId(id)
-            )
+                !triggerIds.has(
+                  id
+                ) &&
+                !isBuiltInTriggerId(
+                  id
+                )
+            );
+          }
         );
 
       const passed =
         invalid.length === 0;
 
       return {
-        id: "HC_HR_007",
-        title:
+        ...getBaseResult(
+          "HC_HR_007",
           "Missing Trigger Dependency",
-        description:
           "Tags reference trigger IDs that do not exist in the workspace.",
-        severity: "HIGH",
-        passed,
+          "HIGH",
+          passed
+        ),
 
         affectedTags:
-          passed
-            ? []
-            : mapTags(
-                invalid,
-                data
-              ),
+          mapTags(
+            invalid,
+            data
+          ),
 
         recommendation:
           passed
@@ -926,13 +836,12 @@ export const healthCheckRules = [
             : "Create the missing trigger or remove the broken trigger reference.",
 
         gtmLinks: {
-          tags:
-            buildGTMListUrl(
-              "tags",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
+          tags: buildGTMListUrl(
+            "tags",
+            data.accountId,
+            data.containerId,
+            data.workspaceId
+          ),
           triggers:
             buildGTMListUrl(
               "triggers",
@@ -945,84 +854,46 @@ export const healthCheckRules = [
     },
   },
 
-  // ===================================================
-  // HC_HR_008
-  // ===================================================
-
   {
     id: "HC_HR_008",
-    title:
-      "Missing Variable Dependency",
-    description:
-      "Tags or triggers reference variables that do not exist.",
+    title: "Missing Variable Dependency",
+    description: "Tags or triggers reference variables that do not exist.",
     severity: "HIGH",
 
-    check: (
-      data: GTMHealthData
-    ): HealthCheckResult => {
-      const missing =
-        getMissingVariableReferences(
-          data
-        );
+    check: (data: GTMHealthData): HealthCheckResult => {
+      const missing = getMissingVariableReferences(data);
 
-      const invalidTags =
-        data.tags.filter(
-          (tag) =>
-            objectContainsMissingVariable(
-              tag,
-              missing
-            )
-        );
+      const invalidTags = data.tags.filter((tag) => objectContainsMissingVariable(tag, missing));
+      const invalidTriggers = data.triggers.filter((trigger) => objectContainsMissingVariable(trigger, missing));
 
-      const invalidTriggers =
-        data.triggers.filter(
-          (trigger) =>
-            objectContainsMissingVariable(
-              trigger,
-              missing
-            )
-        );
-
-      const passed =
-        invalidTags.length === 0 &&
-        invalidTriggers.length === 0;
+      const passed = invalidTags.length === 0 && invalidTriggers.length === 0;
 
       return {
-        id: "HC_HR_008",
-        title:
+        ...getBaseResult(
+          "HC_HR_008",
           "Missing Variable Dependency",
-        description:
           "Tags or triggers reference variables that do not exist.",
-        severity: "HIGH",
-        passed,
+          "HIGH",
+          passed
+        ),
+        affectedTags: mapTags(invalidTags, data),
 
-        affectedTags:
-          mapTags(
-            invalidTags,
-            data
-          ),
-
-        affectedTriggers:
-          mapTriggers(
-            invalidTriggers,
-            data
-          ),
+        affectedTriggers: mapTriggers(invalidTriggers, data),
 
         recommendation:
           passed
             ? ""
             : `Create or correct the missing variable references: ${Array.from(
-                missing
-              ).join(", ")}.`,
+              missing
+            ).join(", ")}.`,
 
         gtmLinks: {
-          tags:
-            buildGTMListUrl(
-              "tags",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
+          tags: buildGTMListUrl(
+            "tags",
+            data.accountId,
+            data.containerId,
+            data.workspaceId
+          ),
           triggers:
             buildGTMListUrl(
               "triggers",
@@ -1042,16 +913,12 @@ export const healthCheckRules = [
     },
   },
 
-  // ===================================================
-  // NEW HIGH-RISK RULE
-  // ===================================================
-
   {
     id: "HC_HR_009",
     title:
-      "Tag Fires and Blocks on the Same Trigger",
+      "Legacy Universal Analytics Tag Found",
     description:
-      "A tag cannot fire when the same trigger is also configured as a blocking trigger.",
+      "Universal Analytics tags are deprecated and should be removed or migrated.",
     severity: "HIGH",
 
     check: (
@@ -1060,21 +927,23 @@ export const healthCheckRules = [
       const invalid =
         data.tags.filter(
           (tag) => {
-            const firing =
-              new Set(
-                getFiringTriggerIds(
-                  tag
-                )
-              );
+            const type =
+              getType(tag);
 
-            const blocking =
-              getBlockingTriggerIds(
-                tag
-              );
+            const name =
+              getName(tag)
+                .toLowerCase();
 
-            return blocking.some(
-              (id) =>
-                firing.has(id)
+            return (
+              type === "ua" ||
+              type ===
+              "analytics" ||
+              type.includes(
+                "universal"
+              ) ||
+              name.includes(
+                "universal analytics"
+              )
             );
           }
         );
@@ -1083,42 +952,39 @@ export const healthCheckRules = [
         invalid.length === 0;
 
       return {
-        id: "HC_HR_009",
-        title:
-          "Tag Fires and Blocks on the Same Trigger",
-        description:
-          "A tag cannot fire when the same trigger is also configured as a blocking trigger.",
-        severity: "HIGH",
-        passed,
+        ...getBaseResult(
+          "HC_HR_009",
+          "Legacy Universal Analytics Tag Found",
+          "Universal Analytics tags are deprecated and should be removed or migrated.",
+          "HIGH",
+          passed
+        ),
 
         affectedTags:
-          passed
-            ? []
-            : mapTags(
-                invalid,
-                data
-              ),
+          mapTags(
+            invalid,
+            data
+          ),
 
         recommendation:
           passed
             ? ""
-            : "Remove the conflicting trigger from either firingTriggerId or blockingTriggerId.",
+            : "Remove legacy Universal Analytics tags and migrate tracking to GA4.",
 
         gtmLinks: {
-          tags:
-            buildGTMListUrl(
-              "tags",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
+          tags: buildGTMListUrl(
+            "tags",
+            data.accountId,
+            data.containerId,
+            data.workspaceId
+          ),
         },
       };
     },
   },
 
   // =====================================================
-  // MEDIUM RISK RULES
+  // MEDIUM RISK
   // =====================================================
 
   {
@@ -1139,62 +1005,42 @@ export const healthCheckRules = [
 
       const invalid =
         purchaseTags.filter(
-          (tag) => {
-            const json =
-              JSON.stringify(
-                tag
-              ).toLowerCase();
-
-            return !(
-              json.includes(
-                "transaction_id"
-              ) &&
-              json.includes(
-                "value"
-              ) &&
-              json.includes(
-                "currency"
-              ) &&
-              json.includes(
-                "items"
-              )
-            );
-          }
+          (tag) =>
+            getMissingPurchaseParameters(
+              tag
+            ).length > 0
         );
 
       const passed =
         invalid.length === 0;
 
       return {
-        id: "HC_MR_001",
-        title:
+        ...getBaseResult(
+          "HC_MR_001",
           "Purchase Event Missing Ecommerce Parameters",
-        description:
           "Purchase tags should contain transaction_id, value, currency and items.",
-        severity: "MEDIUM",
-        passed,
+          "MEDIUM",
+          passed
+        ),
 
         affectedTags:
-          passed
-            ? []
-            : mapTags(
-                invalid,
-                data
-              ),
+          mapTags(
+            invalid,
+            data
+          ),
 
         recommendation:
           passed
             ? ""
-            : "Add transaction_id, value, currency and items to the purchase implementation.",
+            : "Add transaction_id, value, currency and items to purchase events.",
 
         gtmLinks: {
-          tags:
-            buildGTMListUrl(
-              "tags",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
+          tags: buildGTMListUrl(
+            "tags",
+            data.accountId,
+            data.containerId,
+            data.workspaceId
+          ),
         },
       };
     },
@@ -1205,7 +1051,7 @@ export const healthCheckRules = [
     title:
       "GA4 Config Not Firing on All Pages",
     description:
-      "GA4 configuration should fire on All Pages or Initialization.",
+      "The primary GA4 Google tag should normally fire on All Pages or Initialization.",
     severity: "MEDIUM",
 
     check: (
@@ -1218,83 +1064,43 @@ export const healthCheckRules = [
 
       const invalid =
         configs.filter(
-          (tag) => {
-            const triggerIds =
-              getFiringTriggerIds(
-                tag
-              );
-
-            if (
-              firesOnBuiltInAllPages(
-                triggerIds
-              )
-            ) {
-              return false;
-            }
-
-            const names =
-              data.triggers
-                .filter(
-                  (trigger) =>
-                    triggerIds.includes(
-                      getTriggerId(
-                        trigger
-                      )
-                    )
-                )
-                .map(
-                  (trigger) =>
-                    getString(
-                      trigger,
-                      "name"
-                    ).toLowerCase()
-                );
-
-            return !names.some(
-              (name) =>
-                name.includes(
-                  "all pages"
-                ) ||
-                name.includes(
-                  "initialization"
-                )
-            );
-          }
+          (tag) =>
+            !firesOnAllPagesOrInitialization(
+              tag,
+              data
+            )
         );
 
       const passed =
         invalid.length === 0;
 
       return {
-        id: "HC_MR_002",
-        title:
+        ...getBaseResult(
+          "HC_MR_002",
           "GA4 Config Not Firing on All Pages",
-        description:
-          "GA4 configuration should fire on All Pages or Initialization.",
-        severity: "MEDIUM",
-        passed,
+          "The primary GA4 Google tag should normally fire on All Pages or Initialization.",
+          "MEDIUM",
+          passed
+        ),
 
         affectedTags:
-          passed
-            ? []
-            : mapTags(
-                invalid,
-                data
-              ),
+          mapTags(
+            invalid,
+            data
+          ),
 
         recommendation:
           passed
             ? ""
-            : "Fire the GA4 configuration on All Pages or Initialization.",
+            : "Fire the primary GA4 Google tag on All Pages or Initialization, depending on your implementation.",
 
         gtmLinks: {
-          tags:
-            buildGTMListUrl(
-              "tags",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
+          tags: buildGTMListUrl(
+            "tags",
+            data.accountId,
+            data.containerId,
+            data.workspaceId
+          ),
         },
       };
     },
@@ -1305,7 +1111,7 @@ export const healthCheckRules = [
     title:
       "Large Number of Custom JS Variables",
     description:
-      "More than 25 Custom JavaScript variables detected.",
+      "More than 25 Custom JavaScript variables were detected.",
     severity: "MEDIUM",
 
     check: (
@@ -1313,35 +1119,33 @@ export const healthCheckRules = [
     ): HealthCheckResult => {
       const variables =
         data.variables.filter(
-          (variable) =>
-            getType(variable) ===
-            "jsm"
+          isCustomJavaScriptVariable
         );
 
       const passed =
         variables.length <= 25;
 
       return {
-        id: "HC_MR_003",
-        title:
+        ...getBaseResult(
+          "HC_MR_003",
           "Large Number of Custom JS Variables",
-        description:
-          "More than 25 Custom JavaScript variables detected.",
-        severity: "MEDIUM",
-        passed,
+          "More than 25 Custom JavaScript variables were detected.",
+          "MEDIUM",
+          passed
+        ),
 
         affectedVariables:
           passed
             ? []
             : mapVariables(
-                variables,
-                data
-              ),
+              variables,
+              data
+            ),
 
         recommendation:
           passed
             ? ""
-            : `Found ${variables.length} Custom JavaScript variables. Reduce and consolidate JavaScript usage.`,
+            : `Found ${variables.length} Custom JavaScript variables. Reduce and consolidate JavaScript usage where possible.`,
 
         gtmLinks: {
           variables:
@@ -1361,7 +1165,7 @@ export const healthCheckRules = [
     title:
       "Trigger Attached to Multiple Same Platform Tags",
     description:
-      "A single trigger should not fire multiple same-platform GA4 tags.",
+      "A single trigger should not fire multiple GA4 tags that produce the same event.",
     severity: "MEDIUM",
 
     check: (
@@ -1370,7 +1174,7 @@ export const healthCheckRules = [
       const triggerMap =
         new Map<
           string,
-          Record<string, unknown>[]
+          GTMItem[]
         >();
 
       data.tags.forEach(
@@ -1379,75 +1183,102 @@ export const healthCheckRules = [
             tag
           ).forEach(
             (triggerId) => {
-              if (
-                !triggerMap.has(
+              const group =
+                triggerMap.get(
                   triggerId
-                )
-              ) {
-                triggerMap.set(
-                  triggerId,
-                  []
-                );
-              }
+                ) || [];
 
-              triggerMap
-                .get(triggerId)!
-                .push(tag);
+              group.push(
+                tag
+              );
+
+              triggerMap.set(
+                triggerId,
+                group
+              );
             }
           );
         }
       );
 
-      const invalidIds =
+      const invalidTriggerIds =
         Array.from(
           triggerMap.entries()
         )
           .filter(
-            ([, tags]) =>
-              tags.filter(
-                (tag) =>
-                  isGA4EventTag(tag) ||
-                  isGA4ConfigTag(tag)
-              ).length > 1
+            ([, tags]) => {
+              const ga4Events =
+                tags.filter(
+                  isGA4EventTag
+                );
+
+              const eventNames =
+                new Set(
+                  ga4Events
+                    .map(
+                      (tag) =>
+                        getParamValue(
+                          tag,
+                          "eventName"
+                        )
+                          .trim()
+                          .toLowerCase()
+                    )
+                    .filter(Boolean)
+                );
+
+              return (
+                eventNames.size >
+                0 &&
+                eventNames.size <
+                ga4Events.length
+              );
+            }
           )
           .map(
-            ([id]) => id
+            ([triggerId]) =>
+              triggerId
           );
 
-      const invalid =
-        data.triggers.filter(
-          (trigger) =>
-            invalidIds.includes(
-              getTriggerId(
-                trigger
+      const affectedTriggers =
+        invalidTriggerIds
+          .map(
+            (triggerId) =>
+              getTriggerById(
+                data,
+                triggerId
               )
-            )
-        );
+          )
+          .filter(
+            (
+              trigger
+            ): trigger is GTMItem =>
+              Boolean(trigger)
+          );
 
       const passed =
-        invalid.length === 0;
+        invalidTriggerIds.length ===
+        0;
 
       return {
-        id: "HC_MR_004",
-        title:
+        ...getBaseResult(
+          "HC_MR_004",
           "Trigger Attached to Multiple Same Platform Tags",
-        description:
-          "A single trigger should not fire multiple same-platform GA4 tags.",
-        severity: "MEDIUM",
-        passed,
+          "A single trigger should not fire multiple GA4 tags that produce the same event.",
+          "MEDIUM",
+          passed
+        ),
 
         affectedTriggers:
-          passed
-            ? []
-            : mapTriggers(
-                invalid,
-                data
-              ),
+          mapTriggers(
+            affectedTriggers,
+            data
+          ),
 
         recommendation:
           passed
             ? ""
-            : "Review duplicate GA4 tags attached to the same trigger.",
+            : "Review triggers that fire duplicate GA4 events and differentiate or consolidate their firing conditions.",
 
         gtmLinks: {
           triggers:
@@ -1465,338 +1296,9 @@ export const healthCheckRules = [
   {
     id: "HC_MR_005",
     title:
-      "Too Many All Pages Triggers",
+      "GA4 Event Name Missing",
     description:
-      "More than three All Pages-like triggers may indicate unnecessary trigger duplication.",
-    severity: "MEDIUM",
-
-    check: (
-      data: GTMHealthData
-    ): HealthCheckResult => {
-      const allPages =
-        data.triggers.filter(
-          (trigger) => {
-            const name =
-              getString(
-                trigger,
-                "name"
-              ).toLowerCase();
-
-            return (
-              name.includes(
-                "all pages"
-              ) ||
-              name.includes(
-                "all page"
-              )
-            );
-          }
-        );
-
-      const passed =
-        allPages.length <= 3;
-
-      return {
-        id: "HC_MR_005",
-        title:
-          "Too Many All Pages Triggers",
-        description:
-          "More than three All Pages-like triggers may indicate unnecessary trigger duplication.",
-        severity: "MEDIUM",
-        passed,
-
-        affectedTriggers:
-          passed
-            ? []
-            : mapTriggers(
-                allPages,
-                data
-              ),
-
-        recommendation:
-          passed
-            ? ""
-            : `Found ${allPages.length} All Pages-like triggers. Consolidate duplicate page-view triggers where possible.`,
-
-        gtmLinks: {
-          triggers:
-            buildGTMListUrl(
-              "triggers",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
-        },
-      };
-    },
-  },
-
-  {
-    id: "HC_MR_006",
-    title:
-      "Duplicate Trigger Names",
-    description:
-      "Triggers with duplicate names can make GTM maintenance difficult.",
-    severity: "MEDIUM",
-
-    check: (
-      data: GTMHealthData
-    ): HealthCheckResult => {
-      const groups =
-        new Map<
-          string,
-          Record<string, unknown>[]
-        >();
-
-      data.triggers.forEach(
-        (trigger) => {
-          const name =
-            getString(
-              trigger,
-              "name"
-            )
-              .trim()
-              .toLowerCase();
-
-          if (!name) return;
-
-          if (!groups.has(name)) {
-            groups.set(
-              name,
-              []
-            );
-          }
-
-          groups
-            .get(name)!
-            .push(trigger);
-        }
-      );
-
-      const invalid =
-        Array.from(
-          groups.values()
-        )
-          .filter(
-            (group) =>
-              group.length > 1
-          )
-          .flat();
-
-      const passed =
-        invalid.length === 0;
-
-      return {
-        id: "HC_MR_006",
-        title:
-          "Duplicate Trigger Names",
-        description:
-          "Triggers with duplicate names can make GTM maintenance difficult.",
-        severity: "MEDIUM",
-        passed,
-
-        affectedTriggers:
-          passed
-            ? []
-            : mapTriggers(
-                invalid,
-                data
-              ),
-
-        recommendation:
-          passed
-            ? ""
-            : "Rename or consolidate duplicate triggers.",
-
-        gtmLinks: {
-          triggers:
-            buildGTMListUrl(
-              "triggers",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
-        },
-      };
-    },
-  },
-
-  {
-    id: "HC_MR_007",
-    title:
-      "Too Many Custom HTML Tags",
-    description:
-      "Large numbers of Custom HTML tags increase maintenance and execution risk.",
-    severity: "MEDIUM",
-
-    check: (
-      data: GTMHealthData
-    ): HealthCheckResult => {
-      const htmlTags =
-        data.tags.filter(
-          isCustomHTMLTag
-        );
-
-      const passed =
-        htmlTags.length <= 5;
-
-      return {
-        id: "HC_MR_007",
-        title:
-          "Too Many Custom HTML Tags",
-        description:
-          "Large numbers of Custom HTML tags increase maintenance and execution risk.",
-        severity: "MEDIUM",
-        passed,
-
-        affectedTags:
-          passed
-            ? []
-            : mapTags(
-                htmlTags,
-                data
-              ),
-
-        recommendation:
-          passed
-            ? ""
-            : `Found ${htmlTags.length} Custom HTML tags. Prefer native GTM templates where possible.`,
-
-        gtmLinks: {
-          tags:
-            buildGTMListUrl(
-              "tags",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
-        },
-      };
-    },
-  },
-
-  // ===================================================
-  // NEW: DUPLICATE/SIMILAR GA4 EVENT NAMES
-  // ===================================================
-
-  {
-    id: "HC_MR_008",
-    title:
-      "Duplicate or Similar GA4 Event Names",
-    description:
-      "Multiple GA4 Event tags use the same or very similar event names.",
-    severity: "MEDIUM",
-
-    check: (
-      data: GTMHealthData
-    ): HealthCheckResult => {
-      const events =
-        data.tags.filter(
-          isGA4EventTag
-        );
-
-      const normalize =
-        (value: string) =>
-          value
-            .trim()
-            .toLowerCase()
-            .replace(
-              /[\s_-]+/g,
-              ""
-            );
-
-      const groups =
-        new Map<
-          string,
-          Record<string, unknown>[]
-        >();
-
-      events.forEach(
-        (tag) => {
-          const eventName =
-            getParamValue(
-              tag,
-              "eventName"
-            );
-
-          if (!eventName) return;
-
-          const key =
-            normalize(
-              eventName
-            );
-
-          if (!groups.has(key)) {
-            groups.set(
-              key,
-              []
-            );
-          }
-
-          groups
-            .get(key)!
-            .push(tag);
-        }
-      );
-
-      const invalid =
-        Array.from(
-          groups.values()
-        )
-          .filter(
-            (group) =>
-              group.length > 1
-          )
-          .flat();
-
-      const passed =
-        invalid.length === 0;
-
-      return {
-        id: "HC_MR_008",
-        title:
-          "Duplicate or Similar GA4 Event Names",
-        description:
-          "Multiple GA4 Event tags use the same or very similar event names.",
-        severity: "MEDIUM",
-        passed,
-
-        affectedTags:
-          passed
-            ? []
-            : mapTags(
-                invalid,
-                data
-              ),
-
-        recommendation:
-          passed
-            ? ""
-            : "Review GA4 Event tags with duplicate or similar event names to prevent duplicate event collection.",
-
-        gtmLinks: {
-          tags:
-            buildGTMListUrl(
-              "tags",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
-        },
-      };
-    },
-  },
-
-  // ===================================================
-  // NEW: GA4 EVENT MULTIPLE TRIGGERS
-  // ===================================================
-
-  {
-    id: "HC_MR_009",
-    title:
-      "GA4 Event Tag Has Multiple Firing Triggers",
-    description:
-      "A GA4 Event tag with multiple firing triggers can cause unnecessary or duplicate executions.",
+      "GA4 Event tags should define a valid event name.",
     severity: "MEDIUM",
 
     check: (
@@ -1806,429 +1308,339 @@ export const healthCheckRules = [
         data.tags.filter(
           (tag) =>
             isGA4EventTag(tag) &&
-            getFiringTriggerIds(
-              tag
-            ).length > 1
+            !getParamValue(
+              tag,
+              "eventName"
+            ).trim()
         );
 
       const passed =
         invalid.length === 0;
 
       return {
-        id: "HC_MR_009",
-        title:
-          "GA4 Event Tag Has Multiple Firing Triggers",
-        description:
-          "A GA4 Event tag with multiple firing triggers can cause unnecessary or duplicate executions.",
-        severity: "MEDIUM",
-        passed,
+        ...getBaseResult(
+          "HC_MR_005",
+          "GA4 Event Name Missing",
+          "GA4 Event tags should define a valid event name.",
+          "MEDIUM",
+          passed
+        ),
 
         affectedTags:
-          passed
-            ? []
-            : mapTags(
-                invalid,
-                data
-              ),
+          mapTags(
+            invalid,
+            data
+          ),
 
         recommendation:
           passed
             ? ""
-            : "Review multiple firing triggers attached to GA4 Event tags and consolidate them where possible.",
+            : "Add a valid eventName parameter to every GA4 Event tag.",
 
         gtmLinks: {
-          tags:
-            buildGTMListUrl(
-              "tags",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
+          tags: buildGTMListUrl(
+            "tags",
+            data.accountId,
+            data.containerId,
+            data.workspaceId
+          ),
         },
       };
     },
   },
 
-  // ===================================================
-  // NEW: TAGS ATTACHED TO PAUSED TRIGGERS
-  // ===================================================
+  {
+    id: "HC_MR_006",
+    title:
+      "Duplicate GA4 Event Names",
+    description:
+      "Multiple GA4 Event tags use the same event name.",
+    severity: "MEDIUM",
+
+    check: (
+      data: GTMHealthData
+    ): HealthCheckResult => {
+      const groups =
+        new Map<
+          string,
+          GTMItem[]
+        >();
+
+      data.tags
+        .filter(
+          isGA4EventTag
+        )
+        .forEach(
+          (tag) => {
+            const eventName =
+              getParamValue(
+                tag,
+                "eventName"
+              ).trim();
+
+            if (!eventName) {
+              return;
+            }
+
+            const group =
+              groups.get(
+                eventName
+              ) || [];
+
+            group.push(
+              tag
+            );
+
+            groups.set(
+              eventName,
+              group
+            );
+          }
+        );
+
+      const duplicates =
+        Array.from(
+          groups.values()
+        )
+          .filter(
+            (group) =>
+              group.length > 1
+          )
+          .flat();
+
+      const passed =
+        duplicates.length ===
+        0;
+
+      return {
+        ...getBaseResult(
+          "HC_MR_006",
+          "Duplicate GA4 Event Names",
+          "Multiple GA4 Event tags use the same event name.",
+          "MEDIUM",
+          passed
+        ),
+
+        affectedTags:
+          mapTags(
+            duplicates,
+            data
+          ),
+
+        recommendation:
+          passed
+            ? ""
+            : "Review duplicate GA4 event tags and consolidate them or differentiate their firing conditions.",
+
+        gtmLinks: {
+          tags: buildGTMListUrl(
+            "tags",
+            data.accountId,
+            data.containerId,
+            data.workspaceId
+          ),
+        },
+      };
+    },
+  },
+
+  {
+    id: "HC_MR_007",
+    title:
+      "Analytics Tags Missing Consent Settings",
+    description:
+      "Analytics tags should be reviewed for appropriate consent behavior.",
+    severity: "MEDIUM",
+
+    check: (
+      data: GTMHealthData
+    ): HealthCheckResult => {
+      const analyticsTags =
+        data.tags.filter(
+          isAnalyticsTag
+        );
+
+      const invalid =
+        analyticsTags.filter(
+          (tag) => {
+            if (
+              isConsentRelatedTag(
+                tag
+              )
+            ) {
+              return false;
+            }
+
+            return !hasConfiguredConsentSettings(
+              tag
+            );
+          }
+        );
+
+      const passed =
+        invalid.length === 0;
+
+      return {
+        ...getBaseResult(
+          "HC_MR_007",
+          "Analytics Tags Missing Consent Settings",
+          "Analytics tags should be reviewed for appropriate consent behavior.",
+          "MEDIUM",
+          passed
+        ),
+
+        affectedTags:
+          mapTags(
+            invalid,
+            data
+          ),
+
+        recommendation:
+          passed
+            ? ""
+            : "Review consent behavior for analytics tags and configure additional consent requirements where required by your implementation.",
+
+        gtmLinks: {
+          tags: buildGTMListUrl(
+            "tags",
+            data.accountId,
+            data.containerId,
+            data.workspaceId
+          ),
+        },
+      };
+    },
+  },
+
+  {
+    id: "HC_MR_008",
+    title:
+      "Marketing Tags Missing Consent Settings",
+    description:
+      "Marketing and advertising tags should respect user consent.",
+    severity: "MEDIUM",
+
+    check: (
+      data: GTMHealthData
+    ): HealthCheckResult => {
+      const marketingTags =
+        data.tags.filter(
+          isMarketingTag
+        );
+
+      const invalid =
+        marketingTags.filter(
+          (tag) =>
+            !isConsentRelatedTag(
+              tag
+            ) &&
+            !hasConfiguredConsentSettings(
+              tag
+            )
+        );
+
+      const passed =
+        invalid.length === 0;
+
+      return {
+        ...getBaseResult(
+          "HC_MR_008",
+          "Marketing Tags Missing Consent Settings",
+          "Marketing and advertising tags should respect user consent.",
+          "MEDIUM",
+          passed
+        ),
+
+        affectedTags:
+          mapTags(
+            invalid,
+            data
+          ),
+
+        recommendation:
+          passed
+            ? ""
+            : "Configure appropriate consent requirements for marketing and advertising tags.",
+
+        gtmLinks: {
+          tags: buildGTMListUrl(
+            "tags",
+            data.accountId,
+            data.containerId,
+            data.workspaceId
+          ),
+        },
+      };
+    },
+  },
+
+  {
+    id: "HC_MR_009",
+    title:
+      "Consent Initialization Not Detected",
+    description:
+      "Consent configuration should be initialized before other tracking tags.",
+    severity: "MEDIUM",
+
+    check: (
+      data: GTMHealthData
+    ): HealthCheckResult => {
+      const consentTags =
+        data.tags.filter(
+          isConsentRelatedTag
+        );
+
+      const initializationTags =
+        consentTags.filter(
+          (tag) =>
+            hasConsentInitializationTrigger(
+              tag,
+              data
+            )
+        );
+
+      const passed =
+        consentTags.length ===
+        0 ||
+        initializationTags.length >
+        0;
+
+      return {
+        ...getBaseResult(
+          "HC_MR_009",
+          "Consent Initialization Not Detected",
+          "Consent configuration should be initialized before other tracking tags.",
+          "MEDIUM",
+          passed
+        ),
+
+        affectedTags:
+          passed
+            ? []
+            : mapTags(
+              consentTags,
+              data
+            ),
+
+        recommendation:
+          passed
+            ? ""
+            : "Configure consent defaults or consent-management logic on the Consent Initialization trigger.",
+
+        gtmLinks: {
+          tags: buildGTMListUrl(
+            "tags",
+            data.accountId,
+            data.containerId,
+            data.workspaceId
+          ),
+        },
+      };
+    },
+  },
 
   {
     id: "HC_MR_010",
-    title:
-      "Tags Attached to Paused Triggers",
-    description:
-      "Active tags should not depend on paused triggers.",
-    severity: "MEDIUM",
-
-    check: (
-      data: GTMHealthData
-    ): HealthCheckResult => {
-      const pausedTriggerIds =
-        new Set(
-          data.triggers
-            .filter(
-              (trigger) =>
-                Boolean(
-                  trigger.paused
-                )
-            )
-            .map(
-              getTriggerId
-            )
-            .filter(Boolean)
-        );
-
-      const invalid =
-        data.tags.filter(
-          (tag) => {
-            if (
-              Boolean(
-                tag.paused
-              )
-            ) {
-              return false;
-            }
-
-            return getFiringTriggerIds(
-              tag
-            ).some(
-              (id) =>
-                pausedTriggerIds.has(
-                  id
-                )
-            );
-          }
-        );
-
-      const passed =
-        invalid.length === 0;
-
-      return {
-        id: "HC_MR_010",
-        title:
-          "Tags Attached to Paused Triggers",
-        description:
-          "Active tags should not depend on paused triggers.",
-        severity: "MEDIUM",
-        passed,
-
-        affectedTags:
-          passed
-            ? []
-            : mapTags(
-                invalid,
-                data
-              ),
-
-        recommendation:
-          passed
-            ? ""
-            : "Review active tags attached to paused triggers and either activate the trigger or update the tag firing logic.",
-
-        gtmLinks: {
-          tags:
-            buildGTMListUrl(
-              "tags",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
-          triggers:
-            buildGTMListUrl(
-              "triggers",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
-        },
-      };
-    },
-  },
-
-  // ===================================================
-  // NON-ESSENTIAL ALL PAGES TAGS
-  // ===================================================
-
-  {
-    id: "HC_MR_011",
-    title:
-      "Non-Essential Tags Firing on All Pages",
-    description:
-      "Non-core tags firing globally should be reviewed.",
-    severity: "MEDIUM",
-
-    check: (
-      data: GTMHealthData
-    ): HealthCheckResult => {
-      const invalid =
-        data.tags.filter(
-          (tag) => {
-            if (
-              Boolean(
-                tag.paused
-              )
-            ) {
-              return false;
-            }
-
-            if (
-              isGA4ConfigTag(tag) ||
-              isGA4EventTag(tag) ||
-              isGoogleAdsTag(tag) ||
-              isConversionLinkerTag(tag)
-            ) {
-              return false;
-            }
-
-            const ids =
-              getFiringTriggerIds(
-                tag
-              );
-
-            if (
-              firesOnBuiltInAllPages(
-                ids
-              )
-            ) {
-              return true;
-            }
-
-            const names =
-              data.triggers
-                .filter(
-                  (trigger) =>
-                    ids.includes(
-                      getTriggerId(
-                        trigger
-                      )
-                    )
-                )
-                .map(
-                  (trigger) =>
-                    getString(
-                      trigger,
-                      "name"
-                    ).toLowerCase()
-                );
-
-            return names.some(
-              (name) =>
-                name.includes(
-                  "all pages"
-                )
-            );
-          }
-        );
-
-      const passed =
-        invalid.length === 0;
-
-      return {
-        id: "HC_MR_011",
-        title:
-          "Non-Essential Tags Firing on All Pages",
-        description:
-          "Non-core tags firing globally should be reviewed.",
-        severity: "MEDIUM",
-        passed,
-
-        affectedTags:
-          passed
-            ? []
-            : mapTags(
-                invalid,
-                data
-              ),
-
-        recommendation:
-          passed
-            ? ""
-            : "Review non-core tags firing on All Pages and narrow their triggers where possible.",
-
-        gtmLinks: {
-          tags:
-            buildGTMListUrl(
-              "tags",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
-        },
-      };
-    },
-  },
-
-  // ===================================================
-  // HARDCODED GA4 MEASUREMENT ID
-  // ===================================================
-
-  {
-    id: "HC_MR_012",
-    title:
-      "Hardcoded Measurement ID Detected",
-    description:
-      "GA4 measurement IDs should be centralized where reuse is beneficial.",
-    severity: "MEDIUM",
-
-    check: (
-      data: GTMHealthData
-    ): HealthCheckResult => {
-      const pattern =
-        /^G-[A-Z0-9]{6,}$/i;
-
-      const invalid =
-        data.tags.filter(
-          (tag) => {
-            if (
-              !isGA4ConfigTag(tag)
-            ) {
-              return false;
-            }
-
-            const id =
-              getParamValue(
-                tag,
-                "tagId"
-              ).trim();
-
-            return (
-              pattern.test(id) &&
-              !id.includes(
-                "{{"
-              )
-            );
-          }
-        );
-
-      const passed =
-        invalid.length === 0;
-
-      return {
-        id: "HC_MR_012",
-        title:
-          "Hardcoded Measurement ID Detected",
-        description:
-          "GA4 measurement IDs should be centralized where reuse is beneficial.",
-        severity: "MEDIUM",
-        passed,
-
-        affectedTags:
-          passed
-            ? []
-            : mapTags(
-                invalid,
-                data
-              ),
-
-        recommendation:
-          passed
-            ? ""
-            : "Consider storing reusable GA4 measurement IDs in a GTM variable.",
-
-        gtmLinks: {
-          tags:
-            buildGTMListUrl(
-              "tags",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
-        },
-      };
-    },
-  },
-
-  // ===================================================
-  // SUSPICIOUS CUSTOM HTML
-  // ===================================================
-
-  {
-    id: "HC_MR_013",
-    title:
-      "Suspicious Custom HTML Detected",
-    description:
-      "Custom HTML contains potentially risky JavaScript patterns.",
-    severity: "MEDIUM",
-
-    check: (
-      data: GTMHealthData
-    ): HealthCheckResult => {
-      const invalid =
-        data.tags.filter(
-          (tag) => {
-            if (
-              !isCustomHTMLTag(
-                tag
-              )
-            ) {
-              return false;
-            }
-
-            const html =
-              getParamValue(
-                tag,
-                "html"
-              ).toLowerCase();
-
-            return (
-              html.includes(
-                "document.write"
-              ) ||
-              html.includes(
-                "eval("
-              ) ||
-              html.includes(
-                "innerhtml"
-              )
-            );
-          }
-        );
-
-      const passed =
-        invalid.length === 0;
-
-      return {
-        id: "HC_MR_013",
-        title:
-          "Suspicious Custom HTML Detected",
-        description:
-          "Custom HTML contains potentially risky JavaScript patterns.",
-        severity: "MEDIUM",
-        passed,
-
-        affectedTags:
-          passed
-            ? []
-            : mapTags(
-                invalid,
-                data
-              ),
-
-        recommendation:
-          passed
-            ? ""
-            : "Review Custom HTML for document.write, eval(), innerHTML, or other risky JavaScript patterns.",
-
-        gtmLinks: {
-          tags:
-            buildGTMListUrl(
-              "tags",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
-        },
-      };
-    },
-  },
-
-  // ===================================================
-  // BROAD REGEX TRIGGERS
-  // ===================================================
-
-  {
-    id: "HC_MR_014",
     title:
       "Broad Regex Trigger Detected",
     description:
@@ -2241,18 +1653,47 @@ export const healthCheckRules = [
       const invalid =
         data.triggers.filter(
           (trigger) => {
-            const json =
-              JSON.stringify(
-                trigger
-              ).toLowerCase();
+            const filters =
+              getArray(
+                trigger,
+                "filter"
+              ).filter(
+                (
+                  item
+                ): item is GTMItem =>
+                  typeof item ===
+                  "object" &&
+                  item !== null &&
+                  !Array.isArray(
+                    item
+                  )
+              );
 
-            return (
-              json.includes(
-                ".*"
-              ) ||
-              json.includes(
-                ".+"
-              )
+            return filters.some(
+              (filter) => {
+                const operator =
+                  getString(
+                    filter,
+                    "type"
+                  )
+                    .trim()
+                    .toLowerCase();
+
+                const value =
+                  getString(
+                    filter,
+                    "value"
+                  );
+
+                return (
+                  operator.includes(
+                    "regex"
+                  ) &&
+                  isBroadRegex(
+                    value
+                  )
+                );
+              }
             );
           }
         );
@@ -2261,26 +1702,24 @@ export const healthCheckRules = [
         invalid.length === 0;
 
       return {
-        id: "HC_MR_014",
-        title:
+        ...getBaseResult(
+          "HC_MR_010",
           "Broad Regex Trigger Detected",
-        description:
           "Overly broad regular expressions can cause unintended tag firing.",
-        severity: "MEDIUM",
-        passed,
+          "MEDIUM",
+          passed
+        ),
 
         affectedTriggers:
-          passed
-            ? []
-            : mapTriggers(
-                invalid,
-                data
-              ),
+          mapTriggers(
+            invalid,
+            data
+          ),
 
         recommendation:
           passed
             ? ""
-            : "Review broad regex conditions and replace unrestricted patterns with narrower matching rules.",
+            : "Review broad regex conditions and replace .* or similarly unrestricted patterns with narrower matching rules.",
 
         gtmLinks: {
           triggers:
@@ -2295,12 +1734,8 @@ export const healthCheckRules = [
     },
   },
 
-  // ===================================================
-  // CUSTOM EVENT WITHOUT EVENT NAME
-  // ===================================================
-
   {
-    id: "HC_MR_015",
+    id: "HC_MR_011",
     title:
       "Custom Event Trigger Missing Event Name",
     description:
@@ -2333,21 +1768,19 @@ export const healthCheckRules = [
         invalid.length === 0;
 
       return {
-        id: "HC_MR_015",
-        title:
+        ...getBaseResult(
+          "HC_MR_011",
           "Custom Event Trigger Missing Event Name",
-        description:
           "Custom Event triggers should define the event they listen for.",
-        severity: "MEDIUM",
-        passed,
+          "MEDIUM",
+          passed
+        ),
 
         affectedTriggers:
-          passed
-            ? []
-            : mapTriggers(
-                invalid,
-                data
-              ),
+          mapTriggers(
+            invalid,
+            data
+          ),
 
         recommendation:
           passed
@@ -2367,65 +1800,142 @@ export const healthCheckRules = [
     },
   },
 
+  {
+    id: "HC_MR_012",
+    title: "Hardcoded Measurement ID Detected",
+    description: "Repeated hardcoded GA4 measurement IDs should be centralized where reuse is beneficial.",
+    severity: "MEDIUM",
+
+    check: (data: GTMHealthData): HealthCheckResult => {
+      const measurementPattern = /^G-[A-Z0-9]{6,}$/i;
+      const invalid = data.tags.filter((tag) => {
+        if (!isGA4ConfigTag(tag)) {
+          return false;
+        }
+        const tagId = getParamValue(tag, "tagId").trim();
+        return (measurementPattern.test(tagId) && !tagId.includes("{{"));
+      }
+      );
+
+      const passed = invalid.length === 0;
+
+      return {
+        ...getBaseResult(
+          "HC_MR_012",
+          "Hardcoded Measurement ID Detected",
+          "Repeated hardcoded GA4 measurement IDs should be centralized where reuse is beneficial.",
+          "MEDIUM",
+          passed
+        ),
+
+        affectedTags: mapTags(invalid, data),
+        recommendation: passed ? "" : "Consider storing reusable GA4 measurement IDs in a GTM variable.",
+        gtmLinks: {
+          tags: buildGTMListUrl("tags", data.accountId, data.containerId, data.workspaceId),
+        },
+      };
+    },
+  },
+
+  {
+    id: "HC_MR_013",
+    title: "Suspicious Custom HTML Detected",
+    description: "Custom HTML contains potentially unsafe or unnecessary JavaScript patterns.",
+    severity: "MEDIUM",
+
+    check: (data: GTMHealthData): HealthCheckResult => {
+      const patterns = [/\beval\s*\(/i, /\bnew\s+Function\s*\(/i, /document\.write\s*\(/i, /javascript\s*:/i,];
+      const invalid = data.tags.filter((tag) => {
+        if (!isCustomHTMLTag(tag)) {
+          return false;
+        }
+        const html = getParamValue(tag, "html");
+        return patterns.some((pattern) => pattern.test(html));
+      }
+      );
+
+      const passed = invalid.length === 0;
+
+      return {
+        ...getBaseResult(
+          "HC_MR_013",
+          "Suspicious Custom HTML Detected",
+          "Custom HTML contains potentially unsafe or unnecessary JavaScript patterns.",
+          "MEDIUM",
+          passed
+        ),
+
+        affectedTags: mapTags(invalid, data),
+        recommendation: passed ? "" : "Review Custom HTML for unsafe or unnecessary JavaScript patterns and replace them with safer implementations where possible.",
+        gtmLinks: {
+          tags: buildGTMListUrl("tags", data.accountId, data.containerId, data.workspaceId),
+        },
+      };
+    },
+  },
+
+  {
+    id: "HC_MR_014",
+    title: "Large Custom HTML Tag",
+    description: "Very large Custom HTML tags can reduce maintainability and performance.",
+    severity: "MEDIUM",
+
+    check: (data: GTMHealthData): HealthCheckResult => {
+      const invalid = data.tags.filter((tag) => {
+        if (!isCustomHTMLTag(tag)) {
+          return false;
+        }
+        const html = getParamValue(tag, "html");
+        return (html.length > 10000);
+      }
+      );
+
+      const passed = invalid.length === 0;
+
+      return {
+        ...getBaseResult(
+          "HC_MR_014",
+          "Large Custom HTML Tag",
+          "Very large Custom HTML tags can reduce maintainability and performance.",
+          "MEDIUM",
+          passed
+        ),
+        affectedTags: mapTags(invalid, data),
+        recommendation: passed ? "" : "Move large custom scripts to a Custom Template or external implementation where appropriate.",
+        gtmLinks: {
+          tags: buildGTMListUrl("tags", data.accountId, data.containerId, data.workspaceId),
+        },
+      };
+    },
+  },
+
   // =====================================================
-  // LOW RISK RULES
+  // LOW RISK
   // =====================================================
 
   {
     id: "HC_LR_001",
-    title:
-      "Unused Tags Found",
-    description:
-      "Tags without firing triggers should be reviewed.",
+    title: "Unused Tags Found",
+    description: "Tags without firing triggers should be reviewed.",
     severity: "LOW",
 
-    check: (
-      data: GTMHealthData
-    ): HealthCheckResult => {
-      const invalid =
-        data.tags.filter(
-          (tag) =>
-            getFiringTriggerIds(
-              tag
-            ).length === 0 &&
-            !Boolean(
-              tag.paused
-            )
-        );
-
-      const passed =
-        invalid.length === 0;
+    check: (data: GTMHealthData): HealthCheckResult => {
+      const invalid = data.tags.filter((tag) => getFiringTriggerIds(tag).length === 0 && !Boolean(tag.paused));
+      const passed = invalid.length === 0;
 
       return {
-        id: "HC_LR_001",
-        title:
+        ...getBaseResult(
+          "HC_LR_001",
           "Unused Tags Found",
-        description:
           "Tags without firing triggers should be reviewed.",
-        severity: "LOW",
-        passed,
-
-        affectedTags:
+          "LOW",
           passed
-            ? []
-            : mapTags(
-                invalid,
-                data
-              ),
+        ),
 
-        recommendation:
-          passed
-            ? ""
-            : `Found ${invalid.length} unused tags.`,
-
+        affectedTags: mapTags(invalid, data),
+        recommendation: passed ? "" : `Found ${invalid.length} tags without firing triggers.`,
         gtmLinks: {
-          tags:
-            buildGTMListUrl(
-              "tags",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
+          tags: buildGTMListUrl("tags", data.accountId, data.containerId, data.workspaceId),
         },
       };
     },
@@ -2433,56 +1943,28 @@ export const healthCheckRules = [
 
   {
     id: "HC_LR_002",
-    title:
-      "Paused Tags Found",
-    description:
-      "Paused tags should be reviewed before publishing.",
+    title: "Paused Tags Found",
+    description: "Paused tags should be reviewed before publishing.",
     severity: "LOW",
 
-    check: (
-      data: GTMHealthData
-    ): HealthCheckResult => {
-      const invalid =
-        data.tags.filter(
-          (tag) =>
-            Boolean(
-              tag.paused
-            )
-        );
-
-      const passed =
-        invalid.length === 0;
+    check: (data: GTMHealthData): HealthCheckResult => {
+      const invalid = data.tags.filter((tag) => Boolean(tag.paused));
+      const passed = invalid.length === 0;
 
       return {
-        id: "HC_LR_002",
-        title:
+        ...getBaseResult(
+          "HC_LR_002",
           "Paused Tags Found",
-        description:
           "Paused tags should be reviewed before publishing.",
-        severity: "LOW",
-        passed,
-
-        affectedTags:
+          "LOW",
           passed
-            ? []
-            : mapTags(
-                invalid,
-                data
-              ),
+        ),
 
-        recommendation:
-          passed
-            ? ""
-            : `Found ${invalid.length} paused tags.`,
+        affectedTags: mapTags(invalid, data),
 
+        recommendation: passed ? "" : `Found ${invalid.length} paused tags.`,
         gtmLinks: {
-          tags:
-            buildGTMListUrl(
-              "tags",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
+          tags: buildGTMListUrl("tags", data.accountId, data.containerId, data.workspaceId),
         },
       };
     },
@@ -2490,865 +1972,369 @@ export const healthCheckRules = [
 
   {
     id: "HC_LR_003",
-    title:
-      "Unused Variables Found",
-    description:
-      "Variables not used inside tags, triggers, or variables should be reviewed.",
+    title: "Unused Variables Found",
+    description: "Variables not used inside tags or triggers should be reviewed.",
     severity: "LOW",
 
-    check: (
-      data: GTMHealthData
-    ): HealthCheckResult => {
-      const haystack =
-        buildUsageHaystack(
-          data
+    check: (data: GTMHealthData): HealthCheckResult => {
+      const references = new Set<string>();
+      [...data.tags, ...data.triggers].forEach((item) => {
+        extractReferencesFromObject(item).forEach((reference) => {
+          references.add(reference);
+        });
+      });
+
+      const invalid = data.variables.filter((variable) => {
+        const name = getName(variable);
+
+        if (!name) {
+          return false;
+        }
+
+        return !Array.from(references).some(
+          (reference) =>
+            reference.toLowerCase() === name.toLowerCase()
         );
+      });
 
-      const invalid =
-        data.variables.filter(
-          (variable) => {
-            const name =
-              getString(
-                variable,
-                "name"
-              );
-
-            if (!name) {
-              return false;
-            }
-
-            return !haystack.includes(
-              `{{${name}}}`
-            );
-          }
-        );
-
-      const passed =
-        invalid.length === 0;
+      const passed = invalid.length === 0;
 
       return {
-        id: "HC_LR_003",
-        title:
+        ...getBaseResult(
+          "HC_LR_003",
           "Unused Variables Found",
-        description:
-          "Variables not used inside tags, triggers, or variables should be reviewed.",
-        severity: "LOW",
-        passed,
-
-        affectedVariables:
+          "Variables not used inside tags or triggers should be reviewed.",
+          "LOW",
           passed
-            ? []
-            : mapVariables(
-                invalid,
-                data
-              ),
-
-        recommendation:
-          passed
-            ? ""
-            : `Found ${invalid.length} unused variables. Cleanup recommended.`,
-
+        ),
+        affectedVariables: mapVariables(invalid, data),
+        recommendation: passed ? "" : `Found ${invalid.length} unused variables.`,
         gtmLinks: {
-          variables:
-            buildGTMListUrl(
-              "variables",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
+          variables: buildGTMListUrl("variables", data.accountId, data.containerId, data.workspaceId),
         },
       };
     },
   },
-
-  // ===================================================
-  // UNATTACHED TAGS + VARIABLES
-  // ===================================================
-
-  {
-    id: "HC_LR_003A",
-    title:
-      "Unattached Tags and Variables",
-    description:
-      "Tags without triggers and variables not used anywhere should be reviewed.",
-    severity: "LOW",
-
-    check: (
-      data: GTMHealthData
-    ): HealthCheckResult => {
-      const unattachedTags =
-        data.tags.filter(
-          (tag) =>
-            getFiringTriggerIds(
-              tag
-            ).length === 0
-        );
-
-      const haystack =
-        buildUsageHaystack(
-          data
-        );
-
-      const unusedVariables =
-        data.variables.filter(
-          (variable) => {
-            const name =
-              getString(
-                variable,
-                "name"
-              );
-
-            return (
-              Boolean(name) &&
-              !haystack.includes(
-                `{{${name}}}`
-              )
-            );
-          }
-        );
-
-      const passed =
-        unattachedTags.length === 0 &&
-        unusedVariables.length === 0;
-
-      return {
-        id: "HC_LR_003A",
-        title:
-          "Unattached Tags and Variables",
-        description:
-          "Tags without triggers and variables not used anywhere should be reviewed.",
-        severity: "LOW",
-        passed,
-
-        affectedTags:
-          mapTags(
-            unattachedTags,
-            data
-          ),
-
-        affectedVariables:
-          mapVariables(
-            unusedVariables,
-            data
-          ),
-
-        recommendation:
-          passed
-            ? ""
-            : `Found ${unattachedTags.length} unattached tags and ${unusedVariables.length} unused variables.`,
-
-        gtmLinks: {
-          tags:
-            buildGTMListUrl(
-              "tags",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
-          variables:
-            buildGTMListUrl(
-              "variables",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
-        },
-      };
-    },
-  },
-
-  // ===================================================
-  // DUPLICATE ASSET NAMES
-  // ===================================================
-
-  {
-    id: "HC_LR_003B",
-    title:
-      "Duplicate Tag, Trigger and Variable Names",
-    description:
-      "Duplicate asset names are difficult to maintain.",
-    severity: "LOW",
-
-    check: (
-      data: GTMHealthData
-    ): HealthCheckResult => {
-      const normalize =
-        (name: string) =>
-          name
-            .toLowerCase()
-            .replace(
-              /[_\-\s]/g,
-              ""
-            );
-
-      const duplicates = (
-        items: Record<string, unknown>[]
-      ): Record<string, unknown>[] => {
-        const groups =
-          new Map<
-            string,
-            Record<string, unknown>[]
-          >();
-
-        items.forEach(
-          (item) => {
-            const name =
-              getString(
-                item,
-                "name"
-              );
-
-            if (!name) return;
-
-            const key =
-              normalize(name);
-
-            if (
-              !groups.has(key)
-            ) {
-              groups.set(
-                key,
-                []
-              );
-            }
-
-            groups
-              .get(key)!
-              .push(item);
-          }
-        );
-
-        return Array.from(
-          groups.values()
-        )
-          .filter(
-            (group) =>
-              group.length > 1
-          )
-          .flat();
-      };
-
-      const tags =
-        duplicates(
-          data.tags
-        );
-
-      const triggers =
-        duplicates(
-          data.triggers
-        );
-
-      const variables =
-        duplicates(
-          data.variables
-        );
-
-      const passed =
-        tags.length === 0 &&
-        triggers.length === 0 &&
-        variables.length === 0;
-
-      return {
-        id: "HC_LR_003B",
-        title:
-          "Duplicate Tag, Trigger and Variable Names",
-        description:
-          "Duplicate asset names are difficult to maintain.",
-        severity: "LOW",
-        passed,
-
-        affectedTags:
-          mapTags(
-            tags,
-            data
-          ),
-
-        affectedTriggers:
-          mapTriggers(
-            triggers,
-            data
-          ),
-
-        affectedVariables:
-          mapVariables(
-            variables,
-            data
-          ),
-
-        recommendation:
-          passed
-            ? ""
-            : "Rename or consolidate duplicate assets using a consistent naming convention.",
-
-        gtmLinks: {
-          tags:
-            buildGTMListUrl(
-              "tags",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
-          triggers:
-            buildGTMListUrl(
-              "triggers",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
-          variables:
-            buildGTMListUrl(
-              "variables",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
-        },
-      };
-    },
-  },
-
-  // ===================================================
-  // LARGE NUMBER OF TAGS
-  // ===================================================
 
   {
     id: "HC_LR_004",
-    title:
-      "Large Number of Tags",
-    description:
-      "Large containers require optimization and cleanup.",
+    title: "Large Number of Tags",
+    description: "Large containers require optimization and cleanup.",
     severity: "LOW",
 
-    check: (
-      data: GTMHealthData
-    ): HealthCheckResult => {
-      const count =
-        data.tags.length;
-
-      const passed =
-        count < 300;
+    check: (data: GTMHealthData): HealthCheckResult => {
+      const count = data.tags.length;
+      const passed = count < 300;
 
       return {
-        id: "HC_LR_004",
-        title:
+        ...getBaseResult(
+          "HC_LR_004",
           "Large Number of Tags",
-        description:
           "Large containers require optimization and cleanup.",
-        severity: "LOW",
-        passed,
-
-        recommendation:
+          "LOW",
           passed
-            ? ""
-            : `Container contains ${count} tags. Review and optimize tag structure.`,
+        ),
+        recommendation: passed ? "" : `Container contains ${count} tags. Review and optimize tag structure.`,
 
         gtmLinks: {
-          tags:
-            buildGTMListUrl(
-              "tags",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
+          tags: buildGTMListUrl("tags", data.accountId, data.containerId, data.workspaceId),
         },
       };
     },
   },
-
-  // ===================================================
-  // LARGE NUMBER OF TRIGGERS
-  // ===================================================
 
   {
     id: "HC_LR_005",
-    title:
-      "Large Number of Triggers",
-    description:
-      "Large trigger setups require optimization and cleanup.",
+    title: "Large Number of Triggers",
+    description: "Large trigger setups require optimization and cleanup.",
     severity: "LOW",
 
-    check: (
-      data: GTMHealthData
-    ): HealthCheckResult => {
-      const count =
-        data.triggers.length;
-
-      const passed =
-        count < 200;
+    check: (data: GTMHealthData): HealthCheckResult => {
+      const count = data.triggers.length;
+      const passed = count < 200;
 
       return {
-        id: "HC_LR_005",
-        title:
+        ...getBaseResult(
+          "HC_LR_005",
           "Large Number of Triggers",
-        description:
           "Large trigger setups require optimization and cleanup.",
-        severity: "LOW",
-        passed,
-
-        recommendation:
+          "LOW",
           passed
-            ? ""
-            : `Container contains ${count} triggers. Review and consolidate trigger structure.`,
-
+        ),
+        recommendation: passed ? "" : `Container contains ${count} triggers. Review and optimize trigger structure.`,
         gtmLinks: {
-          triggers:
-            buildGTMListUrl(
-              "triggers",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
+          triggers: buildGTMListUrl("triggers", data.accountId, data.containerId, data.workspaceId
+          ),
         },
       };
     },
   },
-
-  // ===================================================
-  // UNUSED TRIGGERS
-  // ===================================================
 
   {
     id: "HC_LR_006",
-    title:
-      "Unused Triggers Found",
-    description:
-      "Triggers not attached to any tag should be reviewed.",
+    title: "Unused Triggers Found",
+    description: "Triggers that are not referenced by any tag should be reviewed.",
     severity: "LOW",
 
-    check: (
-      data: GTMHealthData
-    ): HealthCheckResult => {
-      const used =
-        new Set<string>();
-
-      data.tags.forEach(
-        (tag) => {
-          [
-            ...getFiringTriggerIds(
-              tag
-            ),
-            ...getBlockingTriggerIds(
-              tag
-            ),
-          ].forEach(
-            (id) =>
-              used.add(id)
-          );
-        }
+    check: (data: GTMHealthData): HealthCheckResult => {
+      const usedTriggerIds = new Set<string>(); data.tags.forEach((tag) => {
+        getFiringTriggerIds(tag).forEach((id) => usedTriggerIds.add(id));
+        getBlockingTriggerIds(tag).forEach((id) => usedTriggerIds.add(id));
+      }
       );
 
-      const invalid =
-        data.triggers.filter(
-          (trigger) => {
-            const id =
-              getTriggerId(
-                trigger
-              );
-
-            return (
-              Boolean(id) &&
-              !used.has(id)
-            );
-          }
-        );
-
-      const passed =
-        invalid.length === 0;
-
+      const invalid = data.triggers.filter((trigger) => {
+        const id = getTriggerId(trigger); return (Boolean(id) && !usedTriggerIds.has(id));
+      });
+      const passed = invalid.length === 0;
       return {
-        id: "HC_LR_006",
-        title:
+        ...getBaseResult(
+          "HC_LR_006",
           "Unused Triggers Found",
-        description:
-          "Triggers not attached to any tag should be reviewed.",
-        severity: "LOW",
-        passed,
-
-        affectedTriggers:
+          "Triggers that are not referenced by any tag should be reviewed.",
+          "LOW",
           passed
-            ? []
-            : mapTriggers(
-                invalid,
-                data
-              ),
+        ),
 
-        recommendation:
-          passed
-            ? ""
-            : `Found ${invalid.length} unused triggers.`,
-
-        gtmLinks: {
-          triggers:
-            buildGTMListUrl(
-              "triggers",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
-        },
+        affectedTriggers: mapTriggers(invalid, data),
+        recommendation: passed ? "" : `Found ${invalid.length} unused triggers. Review and remove triggers that are no longer required.`,
+        gtmLinks: { triggers: buildGTMListUrl("triggers", data.accountId, data.containerId, data.workspaceId), },
       };
     },
   },
-
-  // ===================================================
-  // LARGE NUMBER OF VARIABLES
-  // ===================================================
 
   {
     id: "HC_LR_007",
-    title:
-      "Large Number of Variables",
-    description:
-      "Large variable counts require optimization and cleanup.",
+    title: "Paused Triggers Found",
+    description: "Paused triggers should be reviewed before publishing.",
     severity: "LOW",
 
-    check: (
-      data: GTMHealthData
-    ): HealthCheckResult => {
-      const count =
-        data.variables.length;
-
-      const passed =
-        count < 150;
+    check: (data: GTMHealthData): HealthCheckResult => {
+      const invalid = data.triggers.filter((trigger) => Boolean(trigger.paused));
+      const passed = invalid.length === 0;
 
       return {
-        id: "HC_LR_007",
-        title:
-          "Large Number of Variables",
-        description:
-          "Large variable counts require optimization and cleanup.",
-        severity: "LOW",
-        passed,
-
-        recommendation:
+        ...getBaseResult(
+          "HC_LR_007",
+          "Paused Triggers Found",
+          "Paused triggers should be reviewed before publishing.",
+          "LOW",
           passed
-            ? ""
-            : `Container contains ${count} variables. Review and consolidate where possible.`,
+        ),
 
+        affectedTriggers: mapTriggers(invalid, data),
+        recommendation: passed ? "" : `Found ${invalid.length} paused triggers.`,
         gtmLinks: {
-          variables:
-            buildGTMListUrl(
-              "variables",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
+          triggers: buildGTMListUrl("triggers", data.accountId, data.containerId, data.workspaceId),
         },
       };
     },
   },
-
-  // ===================================================
-  // PLACEHOLDER TAG NAMES
-  // ===================================================
 
   {
     id: "HC_LR_008",
-    title:
-      "Placeholder or Generic Tag Names",
-    description:
-      "Generic names such as test, untitled, copy, or numeric names reduce maintainability.",
+    title: "Test or Debug Tags Found",
+    description: "Tags with test, debug, temporary or development naming should be reviewed.",
     severity: "LOW",
 
     check: (
-      data: GTMHealthData
-    ): HealthCheckResult => {
-      const invalid =
-        data.tags.filter(
-          (tag) => {
-            const name =
-              getString(
-                tag,
-                "name"
-              ).trim();
-
-            return (
-              name !== "" &&
-              PLACEHOLDER_NAME_PATTERN.test(
-                name
-              )
-            );
-          }
-        );
-
-      const passed =
-        invalid.length === 0;
+      data: GTMHealthData): HealthCheckResult => {
+      const pattern = /\b(test|testing|debug|temporary|temp|dev)\b/i;
+      const invalid = data.tags.filter((tag) => pattern.test(getName(tag)));
+      const passed = invalid.length === 0;
 
       return {
-        id: "HC_LR_008",
-        title:
-          "Placeholder or Generic Tag Names",
-        description:
-          "Generic names such as test, untitled, copy, or numeric names reduce maintainability.",
-        severity: "LOW",
-        passed,
-
-        affectedTags:
+        ...getBaseResult(
+          "HC_LR_008",
+          "Test or Debug Tags Found",
+          "Tags with test, debug, temporary or development naming should be reviewed.",
+          "LOW",
           passed
-            ? []
-            : mapTags(
-                invalid,
-                data
-              ),
+        ),
 
-        recommendation:
-          passed
-            ? ""
-            : `Found ${invalid.length} tag(s) with placeholder-style names. Rename them using a consistent naming convention.`,
-
+        affectedTags: mapTags(invalid, data),
+        recommendation: passed ? "" : "Review test/debug tags and remove them before production publishing.",
         gtmLinks: {
-          tags:
-            buildGTMListUrl(
-              "tags",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
+          tags: buildGTMListUrl("tags", data.accountId, data.containerId, data.workspaceId),
         },
       };
     },
   },
-
-  // ===================================================
-  // NEW: VARIABLES USED ONLY BY PAUSED TAGS
-  // ===================================================
 
   {
     id: "HC_LR_009",
-    title:
-      "Variables Used Only by Paused Tags",
-    description:
-      "Variables referenced only by paused tags may be candidates for cleanup.",
+    title: "Generic Tag Names Found",
+    description: "Generic names make GTM containers difficult to maintain.",
     severity: "LOW",
 
-    check: (
-      data: GTMHealthData
-    ): HealthCheckResult => {
-      const pausedTags =
-        data.tags.filter(
-          (tag) =>
-            Boolean(
-              tag.paused
-            )
-        );
-
-      const activeTags =
-        data.tags.filter(
-          (tag) =>
-            !Boolean(
-              tag.paused
-            )
-        );
-
-      const activeHaystack =
-        JSON.stringify(
-          activeTags
-        ) +
-        JSON.stringify(
-          data.triggers
-        ) +
-        JSON.stringify(
-          data.variables
-        );
-
-      const invalid =
-        data.variables.filter(
-          (variable) => {
-            const name =
-              getString(
-                variable,
-                "name"
-              );
-
-            if (!name) {
-              return false;
-            }
-
-            const reference =
-              `{{${name}}}`;
-
-            const pausedUsage =
-              pausedTags.some(
-                (tag) =>
-                  JSON.stringify(
-                    tag
-                  ).includes(
-                    reference
-                  )
-              );
-
-            const activeUsage =
-              activeHaystack.includes(
-                reference
-              );
-
-            return (
-              pausedUsage &&
-              !activeUsage
-            );
-          }
-        );
-
-      const passed =
-        invalid.length === 0;
+    check: (data: GTMHealthData): HealthCheckResult => {
+      const genericNames = new Set(["tag", "tag 1", "tag 2", "new tag", "html", "test tag", "copy"]);
+      const invalid = data.tags.filter((tag) => genericNames.has(getName(tag).toLowerCase()));
+      const passed = invalid.length === 0;
 
       return {
-        id: "HC_LR_009",
-        title:
-          "Variables Used Only by Paused Tags",
-        description:
-          "Variables referenced only by paused tags may be candidates for cleanup.",
-        severity: "LOW",
-        passed,
-
-        affectedVariables:
+        ...getBaseResult(
+          "HC_LR_009",
+          "Generic Tag Names Found",
+          "Generic names make GTM containers difficult to maintain.",
+          "LOW",
           passed
-            ? []
-            : mapVariables(
-                invalid,
-                data
-              ),
+        ),
 
-        recommendation:
-          passed
-            ? ""
-            : `Found ${invalid.length} variable(s) used only by paused tags. Review whether they are still required.`,
-
+        affectedTags: mapTags(invalid, data),
+        recommendation: passed ? "" : "Rename generic tags using descriptive names that explain their purpose.",
         gtmLinks: {
-          variables:
-            buildGTMListUrl(
-              "variables",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
+          tags: buildGTMListUrl("tags", data.accountId, data.containerId, data.workspaceId),
         },
       };
     },
   },
 
-  // ===================================================
-  // NEW: VARIABLES USED BY UNUSED TRIGGERS
-  // ===================================================
-
   {
     id: "HC_LR_010",
-    title:
-      "Variables Used by Unused Triggers",
-    description:
-      "Variables referenced by unused triggers may be candidates for cleanup.",
+    title: "Duplicate Tag, Trigger and Variable Names",
+    description: "Duplicate asset names can make containers difficult to maintain.",
     severity: "LOW",
 
-    check: (
-      data: GTMHealthData
-    ): HealthCheckResult => {
-      const usedTriggerIds =
-        new Set<string>();
-
-      data.tags.forEach(
-        (tag) => {
-          getFiringTriggerIds(
-            tag
-          ).forEach(
-            (id) =>
-              usedTriggerIds.add(
-                id
-              )
-          );
-
-          getBlockingTriggerIds(
-            tag
-          ).forEach(
-            (id) =>
-              usedTriggerIds.add(
-                id
-              )
-          );
-        }
-      );
-
-      const unusedTriggers =
-        data.triggers.filter(
-          (trigger) => {
-            const id =
-              getTriggerId(
-                trigger
-              );
-
-            return (
-              Boolean(id) &&
-              !usedTriggerIds.has(
-                id
-              )
-            );
-          }
-        );
-
-      const haystack =
-        JSON.stringify(
-          unusedTriggers
-        );
-
-      const invalid =
-        data.variables.filter(
-          (variable) => {
-            const name =
-              getString(
-                variable,
-                "name"
-              );
-
-            return (
-              Boolean(name) &&
-              haystack.includes(
-                `{{${name}}}`
-              )
-            );
-          }
-        );
-
-      const passed =
-        invalid.length === 0;
+    check: (data: GTMHealthData): HealthCheckResult => {
+      const duplicateTags = findDuplicateGroups(data.tags).flat();
+      const duplicateTriggers = findDuplicateGroups(data.triggers).flat();
+      const duplicateVariables = findDuplicateGroups(data.variables).flat();
+      const passed = duplicateTags.length === 0 && duplicateTriggers.length === 0 && duplicateVariables.length === 0;
 
       return {
-        id: "HC_LR_010",
-        title:
-          "Variables Used by Unused Triggers",
-        description:
-          "Variables referenced by unused triggers may be candidates for cleanup.",
-        severity: "LOW",
-        passed,
-
-        affectedVariables:
+        ...getBaseResult(
+          "HC_LR_010",
+          "Duplicate Tag, Trigger and Variable Names",
+          "Duplicate asset names can make containers difficult to maintain.",
+          "LOW",
           passed
-            ? []
-            : mapVariables(
-                invalid,
-                data
-              ),
+        ),
 
-        recommendation:
-          passed
-            ? ""
-            : `Found ${invalid.length} variable(s) referenced by unused triggers. Review and remove unnecessary dependencies.`,
-
+        affectedTags: mapTags(duplicateTags, data),
+        affectedTriggers: mapTriggers(duplicateTriggers, data),
+        affectedVariables: mapVariables(duplicateVariables, data),
+        recommendation: passed ? "" : "Rename duplicate assets using a consistent naming convention.",
         gtmLinks: {
-          variables:
-            buildGTMListUrl(
-              "variables",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
-          triggers:
-            buildGTMListUrl(
-              "triggers",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
+          tags: buildGTMListUrl("tags", data.accountId, data.containerId, data.workspaceId),
+          triggers: buildGTMListUrl("triggers", data.accountId, data.containerId, data.workspaceId), variables: buildGTMListUrl("variables", data.accountId, data.containerId, data.workspaceId),
+        },
+      };
+    },
+  },
+
+  {
+    id: "HC_LR_011",
+    title: "Recommended GA4 Events Missing",
+    description: "Common ecommerce GA4 events should be reviewed when ecommerce tracking is implemented.",
+    severity: "LOW",
+
+    check: (data: GTMHealthData): HealthCheckResult => {
+      const eventNames = new Set(data.tags.filter(isGA4EventTag).map((tag) => getParamValue(tag, "eventName").trim().toLowerCase()).filter(Boolean));
+      const ecommerceSignals = ["purchase", "add_to_cart", "begin_checkout", "view_item",];
+      const hasEcommerce = ecommerceSignals.some((event) => eventNames.has(event));
+
+      if (!hasEcommerce) {
+        return {
+          ...getBaseResult(
+            "HC_LR_011",
+            "Recommended GA4 Events Missing",
+            "Common ecommerce GA4 events should be reviewed when ecommerce tracking is implemented.",
+            "LOW",
+            true
+          ),
+          recommendation: "",
+          gtmLinks: { tags: buildGTMListUrl("tags", data.accountId, data.containerId, data.workspaceId), },
+        };
+      }
+
+      const recommended = ["view_item", "add_to_cart", "begin_checkout", "purchase",];
+      const missing = recommended.filter((event) => !eventNames.has(event));
+      const passed = missing.length === 0;
+
+      return {
+        ...getBaseResult(
+          "HC_LR_011",
+          "Recommended GA4 Events Missing",
+          "Common ecommerce GA4 events should be reviewed when ecommerce tracking is implemented.",
+          "LOW",
+          passed
+        ),
+
+        recommendation: passed ? "" : `Recommended GA4 ecommerce events not detected: ${missing.join(", ")}.`,
+        gtmLinks: {
+          tags: buildGTMListUrl("tags", data.accountId, data.containerId, data.workspaceId),
+        },
+      };
+    },
+  },
+
+  {
+    id: "HC_LR_012",
+    title: "Large Number of Variables",
+    description: "A very large variable collection may indicate container clutter.",
+    severity: "LOW",
+
+    check: (data: GTMHealthData): HealthCheckResult => {
+      const count = data.variables.length;
+      const passed = count < 300;
+
+      return {
+        ...getBaseResult(
+          "HC_LR_012",
+          "Large Number of Variables",
+          "A very large variable collection may indicate container clutter.",
+          "LOW",
+          passed
+        ),
+
+        recommendation: passed ? "" : `Container contains ${count} variables. Review unused and duplicated variables.`,
+        gtmLinks: {
+          variables: buildGTMListUrl("variables", data.accountId, data.containerId, data.workspaceId),
+        },
+      };
+    },
+  },
+
+  {
+    id: "HC_LR_013",
+    title: "Inconsistent GA4 Event Naming",
+    description: "GA4 event names should follow consistent lowercase snake_case naming.",
+    severity: "LOW",
+
+    check: (data: GTMHealthData): HealthCheckResult => {
+      const invalid = data.tags.filter((tag) => {
+        if (!isGA4EventTag(tag)) {
+          return false;
+        }
+        const eventName = getParamValue(tag, "eventName").trim();
+
+        if (!eventName) {
+          return false;
+        }
+        return !/^[a-z][a-z0-9_]*$/.test(eventName);
+      }
+      );
+
+      const passed = invalid.length === 0;
+
+      return {
+        ...getBaseResult(
+          "HC_LR_013",
+          "Inconsistent GA4 Event Naming",
+          "GA4 event names should follow consistent lowercase snake_case naming.",
+          "LOW",
+          passed
+        ),
+
+        affectedTags: mapTags(invalid, data),
+        recommendation: passed ? "" : "Use lowercase GA4 event names with letters, numbers and underscores.",
+        gtmLinks: {
+          tags: buildGTMListUrl("tags", data.accountId, data.containerId, data.workspaceId),
         },
       };
     },
   },
 ];
+
+export default healthCheckRules;
