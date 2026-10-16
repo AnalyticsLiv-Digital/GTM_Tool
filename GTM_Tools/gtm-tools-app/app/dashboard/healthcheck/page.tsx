@@ -16,13 +16,27 @@ import {
   ArrowUp,
   Plus,
   Loader2,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+<<<<<<< HEAD
 import { useState } from "react";
+=======
+import {
+  useRef,
+  useState,
+  useEffect,
+  type ReactNode,
+} from "react";
+
+>>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
 import { HealthCheckResult } from "@/lib/healthcheck/types";
 import { useDashboardStore } from "@/app/store/useDashboardStore";
+import { useAnthropicKey } from "@/hooks/useAnthropicKey";
+import { ApiKeyModal, ConnectionBadge } from "@/app/dashboard/components/ApiKeyModal";
 
 type ChatMessage = { role: "user" | "assistant"; content: string; };
 
@@ -39,18 +53,141 @@ type HealthCheckReport = {
 };
 
 type ClaudeAuditResponse = {
+<<<<<<< HEAD
   success: true;
   healthReport: unknown;
   resultText: string;
   truncated: boolean;
+=======
+  success: boolean;
+  healthReport?: HealthCheckReport;
+  resultText?: string;
+  truncated?: boolean;
+  report?: unknown;
+  rawText?: string;
+  parseError?: string;
+  error?: string;
+  code?: string;
+};
+
+/* =====================================================
+   HELPERS
+===================================================== */
+
+function keyNoticeFromCode(code?: string, fallback?: string) {
+  switch (code) {
+    case "invalid_key":
+      return "Your API key is invalid or expired. Please enter a new one.";
+    case "quota":
+      return "This key has run out of credits/quota. Enter a different key to continue.";
+    case "rate_limit":
+      return "This key hit its rate/usage limit. Wait a moment or connect a different key.";
+    case "no_key":
+      return "Please connect an Anthropic API key to use the AI audit.";
+    default:
+      return fallback || "Please reconnect your Anthropic API key.";
+  }
+}
+
+function normalizeHealthReport(
+  data: HealthCheckApiResponse
+): HealthCheckReport | null {
+  const candidate =
+    data?.healthReport ??
+    data?.report ??
+    data;
+
+  if (
+    !candidate ||
+    typeof candidate !== "object"
+  ) {
+    return null;
+  }
+
+  const value = candidate as any;
+
+  if (!Array.isArray(value.results)) {
+    return null;
+  }
+
+  return {
+    score: Number(value.score ?? 0),
+    passedCount: Number(
+      value.passedCount ??
+      value.results.filter((r: any) => r?.passed === true).length
+    ),
+    failedCount: Number(
+      value.failedCount ??
+      value.results.filter((r: any) => r?.passed === false).length
+    ),
+    counts: value.counts
+      ? {
+        tags: Number(value.counts.tags ?? 0),
+        triggers: Number(value.counts.triggers ?? 0),
+        variables: Number(value.counts.variables ?? 0),
+      }
+      : undefined,
+    results: value.results,
+  };
+>>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
 }
   | {
     success: false;
     error: string;
   };
 
+/*
+ * Total number of affected / unused items on a single check.
+ * Used to render the "Affected" column in the table.
+ */
+function affectedItemCount(r: HealthCheckResult): number {
+  const any = r as any;
+
+  return (
+    (r.affectedTags?.length ?? 0) +
+    (r.affectedTriggers?.length ?? 0) +
+    (r.affectedVariables?.length ?? 0) +
+    (any.unusedTags?.length ?? 0) +
+    (any.unusedTriggers?.length ?? 0) +
+    (any.unusedVariables?.length ?? 0)
+  );
+}
+
+/*
+ * A row has expandable detail if it has a recommendation,
+ * a description, or any affected items.
+ */
+function rowHasDetail(r: HealthCheckResult): boolean {
+  return Boolean(
+    r.recommendation ||
+    r.description ||
+    affectedItemCount(r) > 0
+  );
+}
+
 export default function HealthCheckPage() {
   const store = useDashboardStore();
+
+  /*
+   * --------------------------------------------------
+   * ANTHROPIC (BRING YOUR OWN KEY)
+   * --------------------------------------------------
+   */
+  const anthropic = useAnthropicKey();
+  const [keyModalOpen, setKeyModalOpen] = useState(false);
+  const [keyModalNotice, setKeyModalNotice] =
+    useState<string | null>(null);
+
+  /*
+   * When true, a Claude audit run is waiting for the
+   * user to connect a key. Once they connect, we auto
+   * continue the run.
+   */
+  const pendingRunRef = useRef(false);
+
+  const hasKey =
+    anthropic.status !== "no_key" &&
+    anthropic.status !== "unknown";
 
   const [loading, setLoading] = useState(false);
   const [claudeLoading, setClaudeLoading] = useState(false);
@@ -98,6 +235,7 @@ export default function HealthCheckPage() {
 
       const data = await res.json().catch(() => null);
 
+<<<<<<< HEAD
       if (!res.ok || !data?.results) {
         console.warn("HealthCheck API returned an unexpected response:", data);
 
@@ -107,6 +245,21 @@ export default function HealthCheckPage() {
       }
 
       setReport(data);
+=======
+      if (!res.ok) {
+        throw new Error(
+          data?.error ||
+          `HealthCheck request failed (${res.status}).`
+        );
+      }
+
+      if (data?.success === false) {
+        throw new Error(
+          data?.error ||
+          "HealthCheck request failed."
+        );
+      }
+>>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
 
       // Clear previous Claude result because the underlying
       // health report has changed.
@@ -138,6 +291,41 @@ export default function HealthCheckPage() {
       return;
     }
 
+<<<<<<< HEAD
+=======
+    /*
+     * 1. Ensure we have a working API key first.
+     *    If not -> open modal and wait for the user.
+     */
+    let activeKey = await anthropic.getKey();
+
+    if (!activeKey) {
+      pendingRunRef.current = true;
+      setKeyModalNotice(
+        keyNoticeFromCode("no_key")
+      );
+      setKeyModalOpen(true);
+      return;
+    }
+
+    if (anthropic.status !== "connected") {
+      const ok = await anthropic.verify();
+      if (!ok) {
+        pendingRunRef.current = true;
+        setKeyModalNotice(
+          "Please connect a valid Anthropic API key to run the AI audit."
+        );
+        setKeyModalOpen(true);
+        return;
+      }
+      activeKey =
+        (await anthropic.getKey()) ?? activeKey;
+    }
+
+    setClaudeError(null);
+    setPageError(null);
+
+>>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
     try {
       setClaudeLoading(true);
       setChatMessages([]);
@@ -152,26 +340,84 @@ export default function HealthCheckPage() {
         }),
       });
 
+<<<<<<< HEAD
       const data: ClaudeAuditResponse = await res
         .json()
         .catch(() => ({
           success: false,
           error: "Invalid response from Claude AI Audit API.",
         }));
+=======
+      /*
+       * Claude Audit can work independently.
+       *
+       * If the user hasn't run the functional
+       * HealthCheck yet, get the report first.
+       */
+      if (!currentReport) {
+
+        const healthRes = await fetch(
+          "/api/auth/healthcheck",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              accountId: store.selectedAccountId,
+              containerId: store.selectedContainerId,
+              workspaceId: store.selectedWorkspaceId,
+            }),
+          }
+        );
+>>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
 
       if (!res.ok) {
         console.error("Claude HealthCheck API Response:", data);
 
+<<<<<<< HEAD
         setClaudeError("error" in data ? data.error : `Request failed (${res.status}).`);
+=======
+        if (!healthRes.ok) {
+          throw new Error(
+            healthData?.error ||
+            `HealthCheck request failed (${healthRes.status}).`
+          );
+        }
+>>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
 
         return;
       }
 
+<<<<<<< HEAD
       if (!data.success) {
         console.error("Claude HealthCheck Error:", data.error);
+=======
+      /*
+       * Send the actual HealthCheck report
+       * to Claude, along with the user's key.
+       */
+      const aiRes = await fetch(
+        "/api/auth/healthcheck/ai",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-anthropic-key": activeKey,
+          },
+          body: JSON.stringify({
+            accountId: store.selectedAccountId,
+            containerId: store.selectedContainerId,
+            workspaceId: store.selectedWorkspaceId,
+            healthReport: currentReport,
+          }),
+        }
+      );
+>>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
 
         setClaudeError(data.error);
 
+<<<<<<< HEAD
         return;
       }
 
@@ -183,6 +429,88 @@ export default function HealthCheckPage() {
 
       setClaudeError("Something went wrong while running the Claude AI Audit.");
     } finally { setClaudeLoading(false); }
+=======
+
+      if (!aiRes.ok || aiData?.success === false) {
+        // Known key / quota problems -> handle via modal, don't throw.
+        if (
+          aiData?.code &&
+          ["no_key", "invalid_key", "quota", "rate_limit"].includes(
+            aiData.code
+          )
+        ) {
+          if (
+            aiData.code === "invalid_key" ||
+            aiData.code === "quota"
+          ) {
+            anthropic.disconnect();
+          } else {
+            anthropic.markDisconnected();
+          }
+
+          pendingRunRef.current = false;
+          setKeyModalNotice(
+            keyNoticeFromCode(aiData.code, aiData.error)
+          );
+          setKeyModalOpen(true);
+
+          // Show inline message, then stop quietly (no red overlay).
+          setClaudeError(
+            keyNoticeFromCode(aiData.code, aiData.error)
+          );
+          setClaudeLoading(false);
+          return;
+        }
+
+        // Genuine unexpected failures still throw.
+        throw new Error(
+          aiData?.error ||
+          aiData?.parseError ||
+          `Claude AI Audit failed (${aiRes.status}).`
+        );
+      }
+
+
+      /*
+       * Current AI route returns resultText.
+       * Keep support for rawText/report too so the
+       * page remains compatible if the API changes.
+       */
+      const text =
+        aiData.resultText ??
+        aiData.rawText ??
+        (
+          typeof aiData.report === "string"
+            ? aiData.report
+            : ""
+        );
+
+      if (!text.trim()) {
+        throw new Error(
+          aiData.parseError ||
+          "Claude returned an empty audit response."
+        );
+      }
+
+      setClaudeText(text);
+      setClaudeTruncated(
+        Boolean(aiData.truncated)
+      );
+    } catch (error) {
+      console.error(
+        "Claude AI Audit Error:",
+        error
+      );
+
+      setClaudeError(
+        error instanceof Error
+          ? error.message
+          : "Unable to run Claude AI Audit."
+      );
+    } finally {
+      setClaudeLoading(false);
+    }
+>>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
   };
 
   // ============================================================
@@ -204,6 +532,7 @@ export default function HealthCheckPage() {
     setChatSending(true);
 
     try {
+<<<<<<< HEAD
       const res = await fetch("/api/auth/healthcheck/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json", },
@@ -225,6 +554,92 @@ export default function HealthCheckPage() {
               }`,
           },
         ]);
+=======
+      /*
+       * Chat also needs the user's API key.
+       */
+      const chatKey = await anthropic.getKey();
+
+      if (!chatKey) {
+        setChatMessages([
+          ...nextMessages,
+          {
+            role: "assistant",
+            content:
+              "Please connect your Anthropic API key first.",
+          },
+        ]);
+        setKeyModalNotice(
+          keyNoticeFromCode("no_key")
+        );
+        setKeyModalOpen(true);
+        return;
+      }
+
+      const res = await fetch(
+        "/api/auth/healthcheck/chat",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-anthropic-key": chatKey,
+          },
+          body: JSON.stringify({
+            healthReport: report,
+
+            /*
+             * IMPORTANT:
+             *
+             * Your chat API expects "claudeReport".
+             * The previous page was sending "claudeText".
+             */
+            claudeReport: claudeText
+              ? {
+                resultText: claudeText,
+              }
+              : null,
+
+            messages: nextMessages,
+          }),
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok || !data?.success) {
+        /*
+         * Key / quota issues while chatting -> prompt reconnect.
+         */
+        if (
+          data?.code &&
+          ["no_key", "invalid_key", "quota", "rate_limit"].includes(
+            data.code
+          )
+        ) {
+          if (
+            data.code === "invalid_key" ||
+            data.code === "quota"
+          ) {
+            anthropic.disconnect();
+          } else {
+            anthropic.markDisconnected();
+          }
+
+          setKeyModalNotice(
+            keyNoticeFromCode(
+              data.code,
+              data.error
+            )
+          );
+          setKeyModalOpen(true);
+        }
+
+        throw new Error(
+          data?.error ||
+          `Chat request failed (${res.status}).`
+        );
+      }
+>>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
 
         return;
       }
@@ -247,9 +662,46 @@ export default function HealthCheckPage() {
     }
   };
 
+<<<<<<< HEAD
   // ============================================================
   // FAILED / PASSED CHECKS
   // ============================================================
+=======
+  /*
+   * --------------------------------------------------
+   * KEY MODAL: connect handler (auto-resume run)
+   * --------------------------------------------------
+   */
+
+  const handleConnectKey = async (k: string) => {
+    const res = await anthropic.connect(k);
+
+    if (res.ok && pendingRunRef.current) {
+      pendingRunRef.current = false;
+      setKeyModalOpen(false);
+
+      /*
+       * Resume the audit that was blocked on the key.
+       */
+      setTimeout(() => {
+        void handleClaudeHealthCheck();
+      }, 0);
+    }
+
+    return res;
+  };
+
+  const openKeyManager = () => {
+    setKeyModalNotice(null);
+    setKeyModalOpen(true);
+  };
+
+  /*
+   * --------------------------------------------------
+   * FAILED / PASSED CHECKS
+   * --------------------------------------------------
+   */
+>>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
 
   const failedChecks = (report?.results || []).filter((r) => !r.passed);
 
@@ -292,6 +744,7 @@ export default function HealthCheckPage() {
             "Affected Items",
           ],
         ],
+<<<<<<< HEAD
 
         body: failedChecks.map((r) => [
           r.id,
@@ -314,6 +767,33 @@ Vars: ${(r.affectedVariables || [])
           }`,
         ]),
 
+=======
+        body: failedChecks.map(
+          (r) => [
+            r.id,
+            r.title,
+            r.severity,
+            `Tags: ${(r.affectedTags || [])
+              .map(
+                (x: any) => x.name
+              )
+              .join(", ") || "-"
+            }
+Triggers: ${(r.affectedTriggers || [])
+              .map(
+                (x: any) => x.name
+              )
+              .join(", ") || "-"
+            }
+Vars: ${(r.affectedVariables || [])
+              .map(
+                (x: any) => x.name
+              )
+              .join(", ") || "-"
+            }`,
+          ]
+        ),
+>>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
         styles: {
           fontSize: 9,
           cellPadding: 2,
@@ -375,9 +855,24 @@ Vars: ${(r.affectedVariables || [])
 
   return (
     <div>
+<<<<<<< HEAD
       {/* ========================================================
           EMPTY STATE
       ======================================================== */}
+=======
+      {/* API KEY MODAL (always mounted, controlled by open) */}
+      <ApiKeyModal
+        open={keyModalOpen}
+        notice={keyModalNotice}
+        checking={anthropic.checking}
+        hasKey={hasKey}
+        onConnect={handleConnectKey}
+        onRemove={anthropic.disconnect}
+        onClose={() => setKeyModalOpen(false)}
+      />
+
+      {/* HERO */}
+>>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
 
       {!report && (
         <section className="relative max-w-4xl mx-auto py-16 text-center overflow-hidden">
@@ -435,6 +930,14 @@ Vars: ${(r.affectedVariables || [])
                   ? "Analyzing…"
                   : "Claude AI Audit"}
               </button>
+            </div>
+
+            {/* CONNECTION STATUS */}
+            <div className="mt-4 flex justify-center">
+              <ConnectionBadge
+                status={anthropic.status}
+                onManage={openKeyManager}
+              />
             </div>
 
             {!store.selectedWorkspaceId && (
@@ -552,7 +1055,7 @@ Vars: ${(r.affectedVariables || [])
               </div>
             </div>
 
-            <div className="mt-6 flex flex-wrap gap-2">
+            <div className="mt-6 flex flex-wrap items-center gap-2">
               <button
                 onClick={handleRunHealthCheck}
                 disabled={loading}
@@ -607,6 +1110,14 @@ Vars: ${(r.affectedVariables || [])
 
                 Download PDF
               </button>
+
+              {/* CONNECTION STATUS */}
+              <div className="ml-auto">
+                <ConnectionBadge
+                  status={anthropic.status}
+                  onManage={openKeyManager}
+                />
+              </div>
             </div>
 
             {claudeError && (
@@ -634,6 +1145,7 @@ Vars: ${(r.affectedVariables || [])
               />
             )}
 
+<<<<<<< HEAD
             {/* ==================================================
                 FAILED CHECKS
             ================================================== */}
@@ -729,6 +1241,15 @@ Vars: ${(r.affectedVariables || [])
                 </div>
               </div>
             )}
+=======
+            {/* TABLE VIEW */}
+
+            <HealthCheckTable
+              results={report.results}
+              passedCount={report.passedCount}
+              failedCount={report.failedCount}
+            />
+>>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
 
             {/* ==================================================
                 NOTE
@@ -814,9 +1335,352 @@ Vars: ${(r.affectedVariables || [])
   );
 }
 
+<<<<<<< HEAD
 // ============================================================
 // CLAUDE AUDIT CHAT BLOCK
 // ============================================================
+=======
+/* =====================================================
+   HEALTHCHECK TABLE (report displayed as a table)
+===================================================== */
+
+type TableFilter = "all" | "failed" | "passed";
+
+function HealthCheckTable({
+  results,
+  passedCount,
+  failedCount,
+}: {
+  results: HealthCheckResult[];
+  passedCount: number;
+  failedCount: number;
+}) {
+  const [filter, setFilter] =
+    useState<TableFilter>("all");
+
+  const [expandedId, setExpandedId] =
+    useState<string | null>(null);
+
+  const filtered = results.filter((r) => {
+    if (filter === "failed") return !r.passed;
+    if (filter === "passed") return r.passed;
+    return true;
+  });
+
+  const toggleRow = (r: HealthCheckResult) => {
+    if (!rowHasDetail(r)) return;
+
+    setExpandedId((prev) =>
+      prev === r.id ? null : r.id
+    );
+  };
+
+  const tabs: {
+    key: TableFilter;
+    label: string;
+    count: number;
+    tone: "neutral" | "danger" | "accent";
+  }[] = [
+      {
+        key: "all",
+        label: "All",
+        count: results.length,
+        tone: "neutral",
+      },
+      {
+        key: "failed",
+        label: "Failed",
+        count: failedCount,
+        tone: "danger",
+      },
+      {
+        key: "passed",
+        label: "Passed",
+        count: passedCount,
+        tone: "accent",
+      },
+    ];
+
+  return (
+    <div>
+      {/* FILTER TABS */}
+
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        {tabs.map((tab) => {
+          const active = filter === tab.key;
+
+          const base =
+            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px] font-medium border transition-colors";
+
+          const activeClass =
+            tab.tone === "danger"
+              ? "bg-(--danger)/10 border-(--danger)/30 text-(--danger)"
+              : tab.tone === "accent"
+                ? "bg-accent-soft border-accent/30 text-accent"
+                : "bg-card-hi border-edge text-fg";
+
+          const idleClass =
+            "bg-card border-line text-muted hover:text-fg hover:border-edge";
+
+          return (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() =>
+                setFilter(tab.key)
+              }
+              className={`${base} ${active ? activeClass : idleClass
+                }`}
+            >
+              {tab.label}
+              <span className="font-mono text-[11px] opacity-70">
+                {tab.count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* TABLE */}
+
+      <div className="rounded-xl border border-line overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-card-hi border-b border-line">
+                <th className="w-8 px-3 py-2.5" />
+
+                <th className="px-3 py-2.5 text-[11.5px] font-semibold uppercase tracking-wide text-faint w-[92px]">
+                  ID
+                </th>
+
+                <th className="px-3 py-2.5 text-[11.5px] font-semibold uppercase tracking-wide text-faint">
+                  Check
+                </th>
+
+                <th className="px-3 py-2.5 text-[11.5px] font-semibold uppercase tracking-wide text-faint w-[110px]">
+                  Severity
+                </th>
+
+                <th className="px-3 py-2.5 text-[11.5px] font-semibold uppercase tracking-wide text-faint w-[92px] text-center">
+                  Affected
+                </th>
+
+                <th className="px-3 py-2.5 text-[11.5px] font-semibold uppercase tracking-wide text-faint w-[80px] text-center">
+                  Status
+                </th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {filtered.map((r) => {
+                const detail = rowHasDetail(r);
+                const expanded =
+                  expandedId === r.id;
+                const affected =
+                  affectedItemCount(r);
+
+                return (
+                  <FragmentRow
+                    key={r.id}
+                    r={r}
+                    detail={detail}
+                    expanded={expanded}
+                    affected={affected}
+                    onToggle={() =>
+                      toggleRow(r)
+                    }
+                  />
+                );
+              })}
+
+              {filtered.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="px-4 py-8 text-center text-[13px] text-muted"
+                  >
+                    No checks in this
+                    view.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <p className="mt-3 text-[12px] text-faint">
+        Tip: click a row to see the fix
+        and affected items.
+      </p>
+    </div>
+  );
+}
+
+/*
+ * A single check row + its expandable detail row.
+ */
+function FragmentRow({
+  r,
+  detail,
+  expanded,
+  affected,
+  onToggle,
+}: {
+  r: HealthCheckResult;
+  detail: boolean;
+  expanded: boolean;
+  affected: number;
+  onToggle: () => void;
+}) {
+  return (
+    <>
+      <tr
+        onClick={onToggle}
+        className={`border-t border-line transition-colors ${detail
+          ? "cursor-pointer hover:bg-card-hi"
+          : ""
+          } ${expanded ? "bg-card-hi" : ""}`}
+      >
+        {/* CHEVRON */}
+        <td className="px-3 py-3 align-top">
+          {detail ? (
+            expanded ? (
+              <ChevronDown
+                size={14}
+                className="text-muted"
+              />
+            ) : (
+              <ChevronRight
+                size={14}
+                className="text-faint"
+              />
+            )
+          ) : null}
+        </td>
+
+        {/* ID */}
+        <td className="px-3 py-3 align-top">
+          <span className="font-mono text-[11.5px] text-faint">
+            {r.id}
+          </span>
+        </td>
+
+        {/* CHECK */}
+        <td className="px-3 py-3 align-top">
+          <p className="text-[13.5px] font-medium text-fg">
+            {r.title}
+          </p>
+
+          {r.description && (
+            <p className="text-[12px] text-muted mt-0.5 leading-relaxed line-clamp-1">
+              {r.description}
+            </p>
+          )}
+        </td>
+
+        {/* SEVERITY */}
+        <td className="px-3 py-3 align-top">
+          <SeverityBadge
+            severity={r.severity}
+          />
+        </td>
+
+        {/* AFFECTED */}
+        <td className="px-3 py-3 align-top text-center">
+          {affected > 0 ? (
+            <span className="inline-flex items-center justify-center min-w-[22px] px-1.5 py-0.5 rounded-md text-[11.5px] font-mono bg-(--danger)/10 text-(--danger) border border-(--danger)/20">
+              {affected}
+            </span>
+          ) : (
+            <span className="text-faint text-[12px]">
+              —
+            </span>
+          )}
+        </td>
+
+        {/* STATUS */}
+        <td className="px-3 py-3 align-top text-center">
+          {r.passed ? (
+            <span className="inline-flex items-center gap-1 text-accent text-[11.5px] font-medium">
+              <CheckCircle size={13} />
+              Pass
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-(--danger) text-[11.5px] font-medium">
+              <XCircle size={13} />
+              Fail
+            </span>
+          )}
+        </td>
+      </tr>
+
+      {/* EXPANDED DETAIL */}
+      {detail && expanded && (
+        <tr className="border-t border-line bg-card-hi">
+          <td />
+          <td
+            colSpan={5}
+            className="px-3 pb-5 pt-1 align-top"
+          >
+            {r.description && (
+              <p className="text-[13px] text-muted leading-relaxed max-w-2xl">
+                {r.description}
+              </p>
+            )}
+
+            {r.recommendation && (
+              <div className="mt-3 px-3 py-2 rounded-md bg-(--danger)/8 border border-(--danger)/20 text-(--danger) text-[12.5px] max-w-2xl w-fit">
+                <span className="font-semibold">Fix:</span>{" "}
+                {r.recommendation}
+              </div>
+            )}
+
+            <AffectedList
+              label="Affected Tags"
+              items={r.affectedTags}
+            />
+
+            <AffectedList
+              label="Affected Triggers"
+              items={r.affectedTriggers}
+            />
+
+            <AffectedList
+              label="Affected Variables"
+              items={r.affectedVariables}
+            />
+
+            <AffectedList
+              label="Unused Tags"
+              items={(r as any).unusedTags}
+            />
+
+            <AffectedList
+              label="Unused Triggers"
+              items={
+                (r as any).unusedTriggers
+              }
+            />
+
+            <AffectedList
+              label="Unused Variables"
+              items={
+                (r as any).unusedVariables
+              }
+            />
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+/* =====================================================
+   CLAUDE AUDIT CHAT BLOCK
+===================================================== */
+>>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
 
 function ClaudeAuditChatBlock({
   report,
@@ -971,6 +1835,7 @@ function ClaudeAuditChatBlock({
         {/* CHAT MESSAGES */}
 
         {chatMessages.length > 0 && (
+<<<<<<< HEAD
           <div className="space-y-3 pt-2">
             {chatMessages.map((m, i) => (
               <div
@@ -991,6 +1856,33 @@ function ClaudeAuditChatBlock({
                       m.content
                     )
                     : m.content}
+=======
+          <div className="border-t border-line pt-4 space-y-3">
+            {chatMessages.map(
+              (message, index) => (
+                <div
+                  key={`${index}-${message.role}`}
+                  className={`flex ${message.role ===
+                    "user"
+                    ? "justify-end"
+                    : "justify-start"
+                    }`}
+                >
+                  <div
+                    className={`max-w-[85%] rounded-lg px-3.5 py-2 text-[13px] leading-relaxed ${message.role ===
+                      "user"
+                      ? "bg-emerald-600 text-white whitespace-pre-wrap"
+                      : "bg-card-hi border border-line text-fg"
+                      }`}
+                  >
+                    {message.role ===
+                      "assistant"
+                      ? renderMarkdownLite(
+                        message.content
+                      )
+                      : message.content}
+                  </div>
+>>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
                 </div>
               </div>
             ))}
@@ -1083,6 +1975,7 @@ function renderMarkdownLite(
 
     return (
       <span key={key}>
+<<<<<<< HEAD
         {parts.map((part, i) =>
           part.startsWith("**") &&
             part.endsWith("**") ? (
@@ -1095,6 +1988,30 @@ function renderMarkdownLite(
           ) : (
             <span key={i}>{part}</span>
           )
+=======
+        {parts.map(
+          (part, index) =>
+            part.startsWith(
+              "**"
+            ) &&
+              part.endsWith(
+                "**"
+              ) ? (
+              <strong
+                key={index}
+                className="font-semibold text-fg"
+              >
+                {part.slice(
+                  2,
+                  -2
+                )}
+              </strong>
+            ) : (
+              <span key={index}>
+                {part}
+              </span>
+            )
+>>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
         )}
       </span>
     );
@@ -1250,6 +2167,7 @@ function SeverityBadge({
   );
 }
 
+<<<<<<< HEAD
 // ============================================================
 // FAILED CHECK CARD
 // ============================================================
@@ -1354,6 +2272,11 @@ function FailedCheckCard({
 // ============================================================
 // AFFECTED LIST
 // ============================================================
+=======
+/* =====================================================
+   AFFECTED ITEMS
+===================================================== */
+>>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
 
 function AffectedList({
   label,
@@ -1378,6 +2301,7 @@ function AffectedList({
 
       <div className="flex flex-wrap gap-2">
         {items.map(
+<<<<<<< HEAD
           (item: any, index: number) => (
             <a
               key={index}
@@ -1405,6 +2329,47 @@ function AffectedList({
               {item.name}
             </a>
           )
+=======
+          (
+            item: any,
+            index
+          ) => {
+            const content =
+              item?.name ||
+              item?.id ||
+              "Unnamed";
+
+            if (
+              item?.editUrl
+            ) {
+              return (
+                <a
+                  key={index}
+                  href={
+                    item.editUrl
+                  }
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) =>
+                    e.stopPropagation()
+                  }
+                  className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-900 hover:bg-blue-50 transition-colors dark:bg-gray-800 dark:border-gray-600 dark:text-white dark:hover:bg-gray-700"
+                >
+                  {content}
+                </a>
+              );
+            }
+
+            return (
+              <span
+                key={index}
+                className="rounded-md border border-line bg-card px-3 py-1.5 text-xs font-medium text-fg"
+              >
+                {content}
+              </span>
+            );
+          }
+>>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
         )}
       </div>
     </div>
