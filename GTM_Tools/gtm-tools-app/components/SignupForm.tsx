@@ -112,7 +112,7 @@ export default function SignupForm() {
           confirmPassword && (
             <span
               className={`text-[11px] font-mono ${
-                passwordMatch ? "text-accent" : "text-[color:var(--danger)]"
+                passwordMatch ? "text-accent" : "text-(--danger)"
               }`}
             >
               {passwordMatch ? "✓ match" : "✗ mismatch"}
@@ -122,15 +122,15 @@ export default function SignupForm() {
       />
 
       {error && (
-        <div className="border-l-2 border-[color:var(--danger)] pl-3 py-1">
-          <p className="text-[12.5px] text-[color:var(--danger)]">{error}</p>
+        <div className="border-l-2 border-(--danger) pl-3 py-1">
+          <p className="text-[12.5px] text-(--danger)">{error}</p>
         </div>
       )}
 
       <button
         type="submit"
         disabled={loading}
-        className="btn-primary w-full justify-center !py-2.5 disabled:opacity-50 disabled:cursor-not-allowed"
+        className="btn-primary w-full justify-center py-2.5! disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {loading ? (
           <span className="flex items-center gap-2">

@@ -6,6 +6,20 @@ import { gtmList } from "@/lib/gtm/list";
 
 type GtmRecord = Record<string, unknown>;
 
+type ClaudeErrorShape = {
+  status?: number;
+  message?: string;
+  name?: string;
+  type?: string;
+  requestId?: string;
+  request_id?: string;
+  error?: {
+    type?: string;
+    message?: string;
+  };
+  headers?: Record<string, string | string[] | undefined>;
+};
+
 function affectedItem(x: unknown): { name: string } {
   if (typeof x === "string") {
     return {
@@ -13,7 +27,12 @@ function affectedItem(x: unknown): { name: string } {
     };
   }
 
-  if ( x &&typeof x === "object" &&"name" in x && typeof (x as { name: unknown }).name === "string") {
+  if (
+    x &&
+    typeof x === "object" &&
+    "name" in x &&
+    typeof (x as { name: unknown }).name === "string"
+  ) {
     return {
       name: (x as { name: string }).name,
     };
@@ -28,6 +47,161 @@ function affectedItem(x: unknown): { name: string } {
       name: "Unknown item",
     };
   }
+}
+
+function extractErrorDetails(error: unknown): {
+  message: string;
+  errorType: string;
+  status?: number;
+  requestId?: string;
+} {
+  const fallback = {
+    message: "Unknown Claude API error.",
+    errorType: "unknown_error",
+    status: undefined as number | undefined,
+    requestId: undefined as string | undefined,
+  };
+
+  if (error instanceof Error) {
+    fallback.message = error.message;
+    fallback.errorType = error.name || "Error";
+  }
+
+  if (!error || typeof error !== "object") {
+    if (typeof error === "string" && error.trim()) {
+      fallback.message = error;
+    }
+
+    return fallback;
+  }
+
+  const value = error as ClaudeErrorShape;
+
+  if (typeof value.status === "number") {
+    fallback.status = value.status;
+  }
+
+  if (typeof value.name === "string" && value.name.trim()) {
+    fallback.errorType = value.name;
+  }
+
+  if (typeof value.message === "string" && value.message.trim()) {
+    fallback.message = value.message;
+  }
+
+  if (
+    typeof value.error?.message === "string" &&
+    value.error.message.trim()
+  ) {
+    fallback.message = value.error.message;
+  }
+
+  if (
+    typeof value.error?.type === "string" &&
+    value.error.type.trim()
+  ) {
+    fallback.errorType = value.error.type;
+  }
+
+  if (
+    typeof value.type === "string" &&
+    value.type.trim() &&
+    value.type !== "Error"
+  ) {
+    fallback.errorType = value.type;
+  }
+
+  if (
+    typeof value.requestId === "string" &&
+    value.requestId.trim()
+  ) {
+    fallback.requestId = value.requestId;
+  }
+
+  if (
+    typeof value.request_id === "string" &&
+    value.request_id.trim()
+  ) {
+    fallback.requestId = value.request_id;
+  }
+
+  if (!fallback.requestId && value.headers) {
+    const requestIdHeader =
+      value.headers["request-id"] ??
+      value.headers["x-request-id"];
+
+    if (typeof requestIdHeader === "string") {
+      fallback.requestId = requestIdHeader;
+    }
+
+    if (Array.isArray(requestIdHeader) && requestIdHeader.length > 0) {
+      fallback.requestId = requestIdHeader[0];
+    }
+  }
+
+  return fallback;
+}
+
+function buildClaudeUserMessage(details: {
+  message: string;
+  errorType: string;
+  status?: number;
+  requestId?: string;
+}): string {
+  const statusText =
+    typeof details.status === "number"
+      ? `HTTP ${details.status}`
+      : "HTTP status unavailable";
+
+  const requestText =
+    details.requestId
+      ? `Request ID: ${details.requestId}`
+      : "Request ID: unavailable";
+
+  if (
+    details.message.toLowerCase().includes("credit balance") ||
+    details.message.toLowerCase().includes("credit") ||
+    details.message.toLowerCase().includes("billing")
+  ) {
+    return (
+      `Claude API billing/credit error (${statusText}). ` +
+      `${details.message} ` +
+      `${requestText}`
+    );
+  }
+
+  if (
+    details.errorType.toLowerCase().includes("authentication") ||
+    details.status === 401
+  ) {
+    return (
+      `Claude API authentication failed (${statusText}). ` +
+      `${details.message} ` +
+      `${requestText}`
+    );
+  }
+
+  if (details.status === 429) {
+    return (
+      `Claude API rate limit reached (${statusText}). ` +
+      `${details.message} ` +
+      `${requestText}`
+    );
+  }
+
+  if (details.status === 400) {
+    return (
+      `Claude API rejected the request (${statusText}). ` +
+      `${details.message} ` +
+      `${requestText}`
+    );
+  }
+
+  return (
+    `Claude API request failed (${statusText}). ` +
+    `${details.message} ` +
+    `${requestText}`
+  );
 }
 
 export async function POST(req: NextRequest) {
@@ -48,7 +222,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error:"Missing accountId, containerId, or workspaceId.",
+          source: "claude-healthcheck",
+          error: "Missing accountId, containerId, or workspaceId.",
+          errorType: "validation_error",
         },
         {
           status: 400,
@@ -66,7 +242,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
+          source: "claude-healthcheck",
           error: "Missing Google access token.",
+          errorType: "google_auth_error",
         },
         {
           status: 401,
@@ -78,9 +256,15 @@ export async function POST(req: NextRequest) {
        3. GTM BASE URL
     ========================================================= */
 
-    const base =`https://tagmanager.googleapis.com/tagmanager/v2/` + `accounts/${accountId}/`+`containers/${containerId}/`+`workspaces/${workspaceId}`;
+    const base =
+      `https://tagmanager.googleapis.com/tagmanager/v2/` +
+      `accounts/${accountId}/` +
+      `containers/${containerId}/` +
+      `workspaces/${workspaceId}`;
 
-    const opts = {deadlineMs: 8_000,};
+    const opts = {
+      deadlineMs: 8_000,
+    };
 
     /* =========================================================
        4. FETCH TAGS / TRIGGERS / VARIABLES
@@ -131,7 +315,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
+          source: "claude-healthcheck",
           error: "Failed to fetch GTM data.",
+          errorType: "gtm_api_error",
           details: hardFailures.map(
             (result) => result.error
           ),
@@ -341,6 +527,19 @@ ${JSON.stringify(containerExport)}
     let response;
 
     try {
+      console.log(
+        "Starting Claude HealthCheck request..."
+      );
+
+      console.log(
+        "Claude HealthCheck input counts:",
+        {
+          tags: tags.length,
+          triggers: triggers.length,
+          variables: variables.length,
+        }
+      );
+
       response = await client.messages.create({
         model: "claude-sonnet-5",
 
@@ -360,39 +559,130 @@ ${JSON.stringify(containerExport)}
           },
         ],
       });
+
+      console.log(
+        "Claude HealthCheck request completed."
+      );
+
+      console.log(
+        "Claude request ID:",
+        response._request_id ?? "unavailable"
+      );
+
+      console.log(
+        "Claude stop reason:",
+        response.stop_reason
+      );
+
+      console.log(
+        "Claude content blocks:",
+        response.content?.map(
+          (content) => content.type
+        ) ?? []
+      );
     } catch (claudeError: unknown) {
       console.error(
-        "Claude API request failed:",
+        "===================================================="
+      );
+
+      console.error(
+        "CLAUDE HEALTHCHECK FAILED"
+      );
+
+      console.error(
+        "===================================================="
+      );
+
+      console.error(
+        "Raw Claude error:",
         claudeError
       );
 
-      let message =
-        "Claude API request failed.";
+      const details =
+        extractErrorDetails(claudeError);
 
-      if (claudeError instanceof Error) {
-        message = claudeError.message;
-      } else if (
-        typeof claudeError === "string"
-      ) {
-        message = claudeError;
-      } else if (
-        claudeError &&
-        typeof claudeError === "object"
-      ) {
-        try {
-          message = JSON.stringify(
-            claudeError
-          );
-        } catch {
-          message =
-            "Claude API returned an unknown error.";
-        }
-      }
+      const userMessage =
+        buildClaudeUserMessage(details);
+
+      console.error(
+        "Claude error type:",
+        details.errorType
+      );
+
+      console.error(
+        "Claude error status:",
+        details.status
+      );
+
+      console.error(
+        "Claude error message:",
+        details.message
+      );
+
+      console.error(
+        "Claude request ID:",
+        details.requestId ?? "unavailable"
+      );
+
+      console.error(
+        "===================================================="
+      );
 
       return NextResponse.json(
         {
           success: false,
-          error: message,
+          source: "claude-healthcheck",
+          error: userMessage,
+          errorType: details.errorType,
+          status:
+            details.status ?? 502,
+          requestId:
+            details.requestId ?? null,
+
+          claude: {
+            failed: true,
+            message: details.message,
+            type: details.errorType,
+            status:
+              details.status ?? null,
+            requestId:
+              details.requestId ?? null,
+          },
+
+          counts: {
+            tags: tags.length,
+            triggers: triggers.length,
+            variables: variables.length,
+          },
+        },
+        {
+          status:
+            details.status &&
+              details.status >= 400 &&
+              details.status < 600
+              ? 502
+              : 502,
+        }
+      );
+    }
+
+    /* =========================================================
+       13. VERIFY CLAUDE RESPONSE
+    ========================================================= */
+
+    if (!response) {
+      console.error(
+        "Claude returned no response object."
+      );
+
+      return NextResponse.json(
+        {
+          success: false,
+          source: "claude-healthcheck",
+          error:
+            "Claude returned no response object.",
+          errorType:
+            "empty_response_object",
         },
         {
           status: 502,
@@ -401,12 +691,13 @@ ${JSON.stringify(containerExport)}
     }
 
     /* =========================================================
-       13. EXTRACT CLAUDE TEXT
+       14. EXTRACT CLAUDE TEXT
     ========================================================= */
 
     const textBlocks = response.content
       .filter(
-        (content) => content.type === "text"
+        (content) =>
+          content.type === "text"
       )
       .map((content) => {
         if (
@@ -423,30 +714,59 @@ ${JSON.stringify(containerExport)}
       textBlocks.join("\n\n").trim();
 
     /* =========================================================
-       14. EMPTY RESPONSE CHECK
+       15. EMPTY RESPONSE CHECK
     ========================================================= */
 
     if (!resultText) {
       console.error(
-        "Claude returned an empty response.",
-        {
-          stopReason:
-            response.stop_reason,
-          contentTypes:
-            response.content.map(
-              (content) =>
-                content.type
-            ),
-        }
+        "===================================================="
+      );
+
+      console.error(
+        "CLAUDE RETURNED EMPTY TEXT"
+      );
+
+      console.error(
+        "===================================================="
+      );
+
+      console.error(
+        "Claude request ID:",
+        response._request_id ??
+        "unavailable"
+      );
+
+      console.error(
+        "Claude stop reason:",
+        response.stop_reason
+      );
+
+      console.error(
+        "Claude content:",
+        response.content
+      );
+
+      console.error(
+        "===================================================="
       );
 
       return NextResponse.json(
         {
           success: false,
+          source: "claude-healthcheck",
           error:
             "Claude returned an empty response.",
+          errorType:
+            "empty_claude_response",
+          requestId:
+            response._request_id ?? null,
           stopReason:
-            response.stop_reason,
+            response.stop_reason ?? null,
+          contentTypes:
+            response.content?.map(
+              (content) =>
+                content.type
+            ) ?? [],
         },
         {
           status: 502,
@@ -455,7 +775,7 @@ ${JSON.stringify(containerExport)}
     }
 
     /* =========================================================
-       15. TOKEN TRUNCATION
+       16. TOKEN TRUNCATION
     ========================================================= */
 
     const truncated =
@@ -469,17 +789,56 @@ ${JSON.stringify(containerExport)}
     }
 
     /* =========================================================
-       16. SUCCESS
+       17. SUCCESS
     ========================================================= */
+
+    console.log(
+      "===================================================="
+    );
+
+    console.log(
+      "CLAUDE HEALTHCHECK SUCCESS"
+    );
+
+    console.log(
+      "===================================================="
+    );
+
+    console.log(
+      "Claude request ID:",
+      response._request_id ??
+      "unavailable"
+    );
+
+    console.log(
+      "Claude stop reason:",
+      response.stop_reason
+    );
+
+    console.log(
+      "Claude result length:",
+      resultText.length
+    );
+
+    console.log(
+      "===================================================="
+    );
 
     return NextResponse.json({
       success: true,
+      source: "claude-healthcheck",
 
       healthReport,
 
       resultText,
 
       truncated,
+
+      requestId:
+        response._request_id ?? null,
+
+      stopReason:
+        response.stop_reason ?? null,
 
       counts: {
         tags: tags.length,
@@ -489,39 +848,64 @@ ${JSON.stringify(containerExport)}
     });
   } catch (error: unknown) {
     /* =========================================================
-       17. GENERAL ERROR
+       18. GENERAL ERROR
     ========================================================= */
 
     console.error(
-      "Claude HealthCheck Route Error:",
+      "===================================================="
+    );
+
+    console.error(
+      "CLAUDE HEALTHCHECK ROUTE ERROR"
+    );
+
+    console.error(
+      "===================================================="
+    );
+
+    console.error(
+      "Raw error:",
       error
     );
 
-    let message =
-      "Unknown server error.";
+    const details =
+      extractErrorDetails(error);
 
-    if (error instanceof Error) {
-      message = error.message;
-    } else if (
-      typeof error === "string"
-    ) {
-      message = error;
-    } else if (
-      error &&
-      typeof error === "object"
-    ) {
-      try {
-        message = JSON.stringify(error);
-      } catch {
-        message =
-          "Unable to determine server error.";
-      }
-    }
+    console.error(
+      "Error type:",
+      details.errorType
+    );
+
+    console.error(
+      "Error status:",
+      details.status
+    );
+
+    console.error(
+      "Error message:",
+      details.message
+    );
+
+    console.error(
+      "Request ID:",
+      details.requestId ??
+      "unavailable"
+    );
+
+    console.error(
+      "===================================================="
+    );
 
     return NextResponse.json(
       {
         success: false,
-        error: message,
+        source: "claude-healthcheck",
+        error: details.message,
+        errorType: details.errorType,
+        status:
+          details.status ?? 500,
+        requestId:
+          details.requestId ?? null,
       },
       {
         status: 500,

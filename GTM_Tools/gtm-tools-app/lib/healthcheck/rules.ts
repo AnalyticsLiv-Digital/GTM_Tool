@@ -202,12 +202,7 @@ const isGA4ConfigTag = (tag: GTMItem): boolean => {
   if (type === "googtag") {
     const tagId = getParamValue(tag, "tagId").trim().toLowerCase();
 
-    return (
-      Boolean(tagId) &&
-      !NON_GA4_GOOGTAG_PREFIXES.some((prefix) =>
-        tagId.startsWith(prefix)
-      )
-    );
+    return (Boolean(tagId) && !NON_GA4_GOOGTAG_PREFIXES.some((prefix) => tagId.startsWith(prefix)));
   }
 
   return false;
@@ -396,8 +391,7 @@ const getMissingVariableReferences = (data: GTMHealthData): Set<string> => {
 
 const objectContainsMissingVariable = (item: GTMItem, missingVariables: Set<string>): boolean => {
   const references = extractReferencesFromObject(item);
-  return references.some((reference) => Array.from(missingVariables).some((missing) => missing.toLowerCase() === reference.toLowerCase())
-  );
+  return references.some((reference) => Array.from(missingVariables).some((missing) => missing.toLowerCase() === reference.toLowerCase()));
 };
 
 // =====================================================
@@ -645,37 +639,18 @@ export const healthCheckRules = [
     description: "Custom HTML tags should contain safe error handling where the script performs operations that may fail.",
     severity: "HIGH",
 
-    check: (
-      data: GTMHealthData
-    ): HealthCheckResult => {
-      const htmlTags =
-        data.tags.filter(
-          isCustomHTMLTag
-        );
+    check: (data: GTMHealthData): HealthCheckResult => {
+      const htmlTags = data.tags.filter(isCustomHTMLTag);
 
-      const invalid =
-        htmlTags.filter(
-          (tag) => {
-            const html =
-              getParamValue(
-                tag,
-                "html"
-              );
+      const invalid = htmlTags.filter((tag) => {
+        const html = getParamValue(tag, "html");
+        if (!html.trim()) {
+          return false;
+        }
+        return !/try\s*\{/i.test(html);
+      });
 
-            if (
-              !html.trim()
-            ) {
-              return false;
-            }
-
-            return !/try\s*\{/i.test(
-              html
-            );
-          }
-        );
-
-      const passed =
-        invalid.length === 0;
+      const passed = invalid.length === 0;
 
       return {
         ...getBaseResult(
@@ -686,59 +661,29 @@ export const healthCheckRules = [
           passed
         ),
 
-        affectedTags:
-          passed
-            ? []
-            : mapTags(
-              invalid,
-              data
-            ),
+        affectedTags: passed ? [] : mapTags(invalid, data),
 
-        recommendation:
-          passed
-            ? ""
-            : "Review Custom HTML scripts and add appropriate try-catch handling where runtime failures are possible.",
+        recommendation: passed ? "" : "Review Custom HTML scripts and add appropriate try-catch handling where runtime failures are possible.",
 
-        gtmLinks: {
-          tags: buildGTMListUrl(
-            "tags",
-            data.accountId,
-            data.containerId,
-            data.workspaceId
-          ),
-        },
+        gtmLinks: { tags: buildGTMListUrl("tags", data.accountId, data.containerId, data.workspaceId), },
       };
     },
   },
 
   {
     id: "HC_HR_006",
-    title:
-      "GA4 Event Without GA4 Configuration",
-    description:
-      "GA4 Event tags should have a valid GA4 Google tag configuration available.",
+    title: "GA4 Event Without GA4 Configuration",
+    description: "GA4 Event tags should have a valid GA4 Google tag configuration available.",
     severity: "HIGH",
 
-    check: (
-      data: GTMHealthData
-    ): HealthCheckResult => {
-      const eventTags =
-        data.tags.filter(
-          isGA4EventTag
-        );
+    check: (data: GTMHealthData): HealthCheckResult => {
+      const eventTags = data.tags.filter(isGA4EventTag);
 
-      const configTags =
-        data.tags.filter(
-          isGA4ConfigTag
-        );
+      const configTags = data.tags.filter(isGA4ConfigTag);
 
-      const invalid =
-        configTags.length === 0
-          ? eventTags
-          : [];
+      const invalid = configTags.length === 0 ? eventTags : [];
 
-      const passed =
-        invalid.length === 0;
+      const passed = invalid.length === 0;
 
       return {
         ...getBaseResult(
@@ -749,71 +694,31 @@ export const healthCheckRules = [
           passed
         ),
 
-        affectedTags:
-          mapTags(
-            invalid,
-            data
-          ),
+        affectedTags: mapTags(invalid, data),
 
-        recommendation:
-          passed
-            ? ""
-            : "Create a valid GA4 Google tag configuration before firing GA4 Event tags.",
+        recommendation: passed ? "" : "Create a valid GA4 Google tag configuration before firing GA4 Event tags.",
 
-        gtmLinks: {
-          tags: buildGTMListUrl(
-            "tags",
-            data.accountId,
-            data.containerId,
-            data.workspaceId
-          ),
-        },
+        gtmLinks: { tags: buildGTMListUrl("tags", data.accountId, data.containerId, data.workspaceId), },
       };
     },
   },
 
   {
     id: "HC_HR_007",
-    title:
-      "Missing Trigger Dependency",
-    description:
-      "Tags reference trigger IDs that do not exist in the workspace.",
+    title: "Missing Trigger Dependency",
+    description: "Tags reference trigger IDs that do not exist in the workspace.",
     severity: "HIGH",
 
-    check: (
-      data: GTMHealthData
-    ): HealthCheckResult => {
-      const triggerIds =
-        new Set(
-          data.triggers
-            .map(
-              getTriggerId
-            )
-            .filter(Boolean)
-        );
+    check: (data: GTMHealthData): HealthCheckResult => {
+      const triggerIds = new Set(data.triggers.map(getTriggerId).filter(Boolean));
 
-      const invalid =
-        data.tags.filter(
-          (tag) => {
-            const ids =
-              getFiringTriggerIds(
-                tag
-              );
+      const invalid = data.tags.filter((tag) => {
+        const ids = getFiringTriggerIds(tag);
 
-            return ids.some(
-              (id) =>
-                !triggerIds.has(
-                  id
-                ) &&
-                !isBuiltInTriggerId(
-                  id
-                )
-            );
-          }
-        );
+        return ids.some((id) => !triggerIds.has(id) && !isBuiltInTriggerId(id));
+      });
 
-      const passed =
-        invalid.length === 0;
+      const passed = invalid.length === 0;
 
       return {
         ...getBaseResult(
@@ -824,31 +729,13 @@ export const healthCheckRules = [
           passed
         ),
 
-        affectedTags:
-          mapTags(
-            invalid,
-            data
-          ),
+        affectedTags: mapTags(invalid, data),
 
-        recommendation:
-          passed
-            ? ""
-            : "Create the missing trigger or remove the broken trigger reference.",
+        recommendation: passed ? "" : "Create the missing trigger or remove the broken trigger reference.",
 
         gtmLinks: {
-          tags: buildGTMListUrl(
-            "tags",
-            data.accountId,
-            data.containerId,
-            data.workspaceId
-          ),
-          triggers:
-            buildGTMListUrl(
-              "triggers",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
+          tags: buildGTMListUrl("tags", data.accountId, data.containerId, data.workspaceId),
+          triggers: buildGTMListUrl("triggers", data.accountId, data.containerId, data.workspaceId),
         },
       };
     },
@@ -880,34 +767,12 @@ export const healthCheckRules = [
 
         affectedTriggers: mapTriggers(invalidTriggers, data),
 
-        recommendation:
-          passed
-            ? ""
-            : `Create or correct the missing variable references: ${Array.from(
-              missing
-            ).join(", ")}.`,
+        recommendation: passed ? "" : `Create or correct the missing variable references: ${Array.from(missing).join(", ")}.`,
 
         gtmLinks: {
-          tags: buildGTMListUrl(
-            "tags",
-            data.accountId,
-            data.containerId,
-            data.workspaceId
-          ),
-          triggers:
-            buildGTMListUrl(
-              "triggers",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
-          variables:
-            buildGTMListUrl(
-              "variables",
-              data.accountId,
-              data.containerId,
-              data.workspaceId
-            ),
+          tags: buildGTMListUrl("tags", data.accountId, data.containerId, data.workspaceId),
+          triggers: buildGTMListUrl("triggers", data.accountId, data.containerId, data.workspaceId),
+          variables: buildGTMListUrl("variables", data.accountId, data.containerId, data.workspaceId),
         },
       };
     },
@@ -915,38 +780,19 @@ export const healthCheckRules = [
 
   {
     id: "HC_HR_009",
-    title:
-      "Legacy Universal Analytics Tag Found",
-    description:
-      "Universal Analytics tags are deprecated and should be removed or migrated.",
+    title: "Legacy Universal Analytics Tag Found",
+    description: "Universal Analytics tags are deprecated and should be removed or migrated.",
     severity: "HIGH",
 
-    check: (
-      data: GTMHealthData
-    ): HealthCheckResult => {
-      const invalid =
-        data.tags.filter(
-          (tag) => {
-            const type =
-              getType(tag);
+    check: (data: GTMHealthData): HealthCheckResult => {
+      const invalid = data.tags.filter((tag) => {
+        const type = getType(tag);
 
-            const name =
-              getName(tag)
-                .toLowerCase();
+        const name = getName(tag).toLowerCase();
 
-            return (
-              type === "ua" ||
-              type ===
-              "analytics" ||
-              type.includes(
-                "universal"
-              ) ||
-              name.includes(
-                "universal analytics"
-              )
-            );
-          }
-        );
+        return (type === "ua" || type === "analytics" || type.includes("universal") || name.includes("universal analytics"));
+      }
+      );
 
       const passed =
         invalid.length === 0;
@@ -960,16 +806,9 @@ export const healthCheckRules = [
           passed
         ),
 
-        affectedTags:
-          mapTags(
-            invalid,
-            data
-          ),
+        affectedTags: mapTags(invalid, data),
 
-        recommendation:
-          passed
-            ? ""
-            : "Remove legacy Universal Analytics tags and migrate tracking to GA4.",
+        recommendation: passed ? "" : "Remove legacy Universal Analytics tags and migrate tracking to GA4.",
 
         gtmLinks: {
           tags: buildGTMListUrl(
@@ -989,31 +828,18 @@ export const healthCheckRules = [
 
   {
     id: "HC_MR_001",
-    title:
-      "Purchase Event Missing Ecommerce Parameters",
-    description:
-      "Purchase tags should contain transaction_id, value, currency and items.",
+    title: "Purchase Event Missing Ecommerce Parameters",
+    description: "Purchase tags should contain transaction_id, value, currency and items.",
     severity: "MEDIUM",
 
-    check: (
-      data: GTMHealthData
-    ): HealthCheckResult => {
+    check: (data: GTMHealthData): HealthCheckResult => {
       const purchaseTags =
-        data.tags.filter(
-          isPurchaseTag
-        );
+        data.tags.filter(isPurchaseTag);
 
-      const invalid =
-        purchaseTags.filter(
-          (tag) =>
-            getMissingPurchaseParameters(
-              tag
-            ).length > 0
-        );
+      const invalid = purchaseTags.filter((tag) => getMissingPurchaseParameters(tag).length > 0);
 
-      const passed =
-        invalid.length === 0;
-
+      const passed = invalid.length === 0;
+      
       return {
         ...getBaseResult(
           "HC_MR_001",
@@ -1023,16 +849,9 @@ export const healthCheckRules = [
           passed
         ),
 
-        affectedTags:
-          mapTags(
-            invalid,
-            data
-          ),
+        affectedTags: mapTags(invalid, data),
 
-        recommendation:
-          passed
-            ? ""
-            : "Add transaction_id, value, currency and items to purchase events.",
+        recommendation: passed ? "" : "Add transaction_id, value, currency and items to purchase events.",
 
         gtmLinks: {
           tags: buildGTMListUrl(
