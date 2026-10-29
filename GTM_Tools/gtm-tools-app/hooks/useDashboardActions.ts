@@ -21,7 +21,17 @@ export function useDashboardActions() {
       );
 
       if (!response.ok) {
-        throw new Error("Failed to fetch containers");
+        const errorText = await response.text();
+
+        console.error("Fetch workspaces failed:", {
+          status: response.status,
+          statusText: response.statusText,
+          response: errorText,
+        });
+
+        throw new Error(
+          `Failed to fetch workspaces: ${response.status} ${errorText}`
+        );
       }
 
       const data = await response.json();

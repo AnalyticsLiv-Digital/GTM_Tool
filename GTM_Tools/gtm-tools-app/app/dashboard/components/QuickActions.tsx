@@ -1,9 +1,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { Tag, Zap, Database, LayoutTemplate, BarChart2 } from "lucide-react";
+import { Tag, Zap, Database, LayoutTemplate, BarChart2, Workflow } from "lucide-react";
 import { useDashboardStore } from "@/app/store/useDashboardStore";
-
+ 
 export default function QuickActions() {
   const router = useRouter();
   const store = useDashboardStore();
@@ -41,6 +41,12 @@ export default function QuickActions() {
       href: "/dashboard/healthcheck",
       accent: "#ef4444",
     },
+    {
+      title: "Event Automation",
+      icon: Workflow,
+      href: "/dashboard/event-automation",
+      accent: "#06b6d4",
+    },
   ];
 
   return (
@@ -50,11 +56,10 @@ export default function QuickActions() {
           key={title}
           disabled={disabled}
           onClick={() => router.push(href)}
-          className={`group relative text-left p-5 rounded-xl border border-line bg-card transition-all overflow-hidden ${
-            disabled
-              ? "opacity-50 cursor-not-allowed"
-              : "cursor-pointer hover:border-edge hover:bg-card-hi"
-          }`}
+          className={`group relative text-left p-5 rounded-xl border border-line bg-card transition-all overflow-hidden ${disabled
+            ? "opacity-50 cursor-not-allowed"
+            : "cursor-pointer hover:border-edge hover:bg-card-hi"
+            }`}
         >
           <div
             className="absolute left-0 top-4 bottom-4 w-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"

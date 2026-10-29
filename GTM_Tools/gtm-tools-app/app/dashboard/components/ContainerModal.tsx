@@ -37,7 +37,7 @@ export default function ContainerModal({
             type="button"
             disabled={loading}
             onClick={onClose}
-            className="btn-secondary !py-1.5 !px-3 disabled:opacity-50"
+            className="btn-secondary py-1.5! px-3 disabled:opacity-50"
           >
             Cancel
           </button>
@@ -45,7 +45,7 @@ export default function ContainerModal({
             type="button"
             disabled={loading}
             onClick={onSave}
-            className="btn-primary !py-1.5 !px-3 disabled:opacity-50"
+            className="btn-primary py-1.5 px-3 disabled:opacity-50"
           >
             {loading ? "Saving…" : "Save container"}
           </button>
