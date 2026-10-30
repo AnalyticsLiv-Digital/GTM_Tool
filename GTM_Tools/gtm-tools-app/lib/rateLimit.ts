@@ -10,6 +10,9 @@ const sweep = () => {
   for (const [k, b] of buckets) if (b.resetAt < now) buckets.delete(k);
 };
 
+export const clientIp = (req: Request) =>
+  req.headers.get('x-forwarded-for') || 'anon';
+
 export function rateLimit(
   key: string,
   limit: number,
