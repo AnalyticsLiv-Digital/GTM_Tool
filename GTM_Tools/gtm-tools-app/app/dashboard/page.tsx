@@ -1177,317 +1177,319 @@ function GtmAutomationSection({
 
   return (
 
-    <section className="rounded-2xl border border-line bg-card p-6 md:p-8">
+    // <section className="rounded-2xl border border-line bg-card p-6 md:p-8">
 
-      {/* HEADER */}
+    //   {/* HEADER */}
 
 
 
-      <div className="mb-7">
+    //   <div className="mb-7">
 
-        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+    //     <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
 
-          <div>
+    //       <div>
 
-            <h2 className="text-xl font-semibold text-fg">
+    //         <h2 className="text-xl font-semibold text-fg">
 
-              GTM Automation
+    //           GTM Automation
 
-            </h2>
+    //         </h2>
 
 
 
-            <p className="text-sm text-muted mt-1 max-w-2xl">
+    //         <p className="text-sm text-muted mt-1 max-w-2xl">
 
-              Route your Web Google Tag through Server GTM and create the matching server-side event tag.
+    //           Route your Web Google Tag through Server GTM and create the matching server-side event tag.
 
-            </p>
+    //         </p>
 
-          </div>
+    //       </div>
 
 
 
-          <span className="inline-flex w-fit items-center rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[11px] font-medium text-primary">
+    //       <span className="inline-flex w-fit items-center rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[11px] font-medium text-primary">
 
-            Automation
+    //         Automation
 
-          </span>
+    //       </span>
 
-        </div>
+    //     </div>
 
-      </div>
+    //   </div>
 
 
 
-      {/* STEP 1 — WEB GTM */}
+    //   {/* STEP 1 — WEB GTM */}
 
 
 
-      <div className="mb-8">
+    //   <div className="mb-8">
 
-        <h3 className="text-sm font-semibold text-fg mb-4">
+    //     <h3 className="text-sm font-semibold text-fg mb-4">
 
-          1. Web GTM
+    //       1. Web GTM
 
-        </h3>
+    //     </h3>
 
 
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    //     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-          <div>
+    //       <div>
 
-            <label className="block text-xs font-medium text-muted mb-2">
+    //         <label className="block text-xs font-medium text-muted mb-2">
 
-              Web Container
+    //           Web Container
 
-            </label>
+    //         </label>
 
 
 
-            <div className="rounded-lg border border-line bg-card-hi px-3 py-2.5 text-sm text-fg">
+    //         <div className="rounded-lg border border-line bg-card-hi px-3 py-2.5 text-sm text-fg">
 
-              {store.selectedContainerName ||
+    //           {store.selectedContainerName ||
 
-                store.selectedContainerId ||
+    //             store.selectedContainerId ||
 
-                "No Web Container selected"}
+    //             "No Web Container selected"}
 
-            </div>
+    //         </div>
 
-          </div>
+    //       </div>
 
 
 
-          <div>
+    //       <div>
 
-            <label className="block text-xs font-medium text-muted mb-2">
+    //         <label className="block text-xs font-medium text-muted mb-2">
 
-              Web Workspace
+    //           Web Workspace
 
-            </label>
+    //         </label>
 
 
 
-            <div className="rounded-lg border border-line bg-card-hi px-3 py-2.5 text-sm text-fg">
+    //         <div className="rounded-lg border border-line bg-card-hi px-3 py-2.5 text-sm text-fg">
 
-              {store.selectedWorkspaceName ||
+    //           {store.selectedWorkspaceName ||
 
-                store.selectedWorkspaceId ||
+    //             store.selectedWorkspaceId ||
 
-                "No Web Workspace selected"}
+    //             "No Web Workspace selected"}
 
-            </div>
+    //         </div>
 
-          </div>
+    //       </div>
 
-        </div>
+    //     </div>
 
-      </div>
+    //   </div>
 
 
 
-      {/* STEP 2 — SERVER GTM */}
+    //   {/* STEP 2 — SERVER GTM */}
 
 
 
-      <div className="mb-8">
+    //   <div className="mb-8">
 
-        <h3 className="text-sm font-semibold text-fg mb-4">
+    //     <h3 className="text-sm font-semibold text-fg mb-4">
 
-          2. Server GTM
+    //       2. Server GTM
 
-        </h3>
+    //     </h3>
 
 
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    //     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-          <SelectField
+    //       <SelectField
 
-            label="Server Container"
+    //         label="Server Container"
 
-            value={serverContainerId}
+    //         value={serverContainerId}
 
-            onChange={(value) => {
+    //         onChange={(value) => {
 
-              setServerContainerId(value);
+    //           setServerContainerId(value);
 
-              setServerWorkspaceId("");
+    //           setServerWorkspaceId("");
 
-            }}
+    //         }}
 
-            options={serverContainers.map((container) => ({
+    //         options={serverContainers.map((container) => ({
 
-              value: container.containerId,
+    //           value: container.containerId,
 
-              label: container.name || container.containerId,
+    //           label: container.name || container.containerId,
 
-            }))}
+    //         }))}
 
-            placeholder="Select Server Container"
+    //         placeholder="Select Server Container"
 
-          />
+    //       />
 
 
 
-          <SelectField
+    //       <SelectField
 
-            label="Server Workspace"
+    //         label="Server Workspace"
 
-            value={serverWorkspaceId}
+    //         value={serverWorkspaceId}
 
-            onChange={setServerWorkspaceId}
+    //         onChange={setServerWorkspaceId}
 
-            options={serverWorkspaces.map((workspace) => ({
+    //         options={serverWorkspaces.map((workspace) => ({
 
-              value: workspace.workspaceId,
+    //           value: workspace.workspaceId,
 
-              label: workspace.name || workspace.workspaceId,
+    //           label: workspace.name || workspace.workspaceId,
 
-            }))}
+    //         }))}
 
-            placeholder={
+    //         placeholder={
 
-              loadingWorkspaces
+    //           loadingWorkspaces
 
-                ? "Loading workspaces..."
+    //             ? "Loading workspaces..."
 
-                : "Select Server Workspace"
+    //             : "Select Server Workspace"
 
-            }
+    //         }
 
-            disabled={!serverContainerId || loadingWorkspaces}
+    //         disabled={!serverContainerId || loadingWorkspaces}
 
-          />
+    //       />
 
-        </div>
+    //     </div>
 
 
 
-        {serverContainers.length === 0 && (
+    //     {serverContainers.length === 0 && (
 
-          <p className="mt-2 text-xs text-muted">
+    //       <p className="mt-2 text-xs text-muted">
 
-            No Server GTM containers are available in the selected account.
+    //         No Server GTM containers are available in the selected account.
 
-          </p>
+    //       </p>
 
-        )}
+    //     )}
 
 
 
-        <div className="mt-4">
-          <GtmWebServerConnection
-            accountId={store.selectedAccountId}
-            webContainerId={store.selectedContainerId}
-            webWorkspaceId={store.selectedWorkspaceId}
-            serverContainerId={serverContainerId}
-            serverContainerUrl={serverContainerUrl}
-            onServerContainerUrlChange={setServerContainerUrl}
-            onConnect={onConfigure}
-            loading={automationLoading}
-          />
-        </div>
+    //     <div className="mt-4">
+    //       <GtmWebServerConnection
+    //         accountId={store.selectedAccountId}
+    //         webContainerId={store.selectedContainerId}
+    //         webWorkspaceId={store.selectedWorkspaceId}
+    //         serverContainerId={serverContainerId}
+    //         serverContainerUrl={serverContainerUrl}
+    //         onServerContainerUrlChange={setServerContainerUrl}
+    //         onConnect={onConfigure}
+    //         loading={automationLoading}
+    //       />
+    //     </div>
 
 
 
-        <div className="mt-4">
+    //     <div className="mt-4">
 
-          <SelectField
+    //       <SelectField
 
-            label="Event Name"
+    //         label="Event Name"
 
-            value={eventName}
+    //         value={eventName}
 
-            onChange={setEventName}
+    //         onChange={setEventName}
 
-            options={eventOptions.map((event) => ({
+    //         options={eventOptions.map((event) => ({
 
-              value: event,
+    //           value: event,
 
-              label: event,
+    //           label: event,
 
-            }))}
+    //         }))}
 
-            placeholder="Select Event Name"
+    //         placeholder="Select Event Name"
 
-          />
+    //       />
 
-        </div>
+    //     </div>
 
-      </div>
+    //   </div>
 
 
 
-      {/* AUTOMATION ERROR */}
+    //   {/* AUTOMATION ERROR */}
 
 
 
-      {error && (
+    //   {error && (
 
-        <div className="mb-5 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-500">
+    //     <div className="mb-5 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-500">
 
-          {error}
+    //       {error}
 
-        </div>
+    //     </div>
 
-      )}
+    //   )}
 
 
 
-      {/* SUCCESS RESULT */}
+    //   {/* SUCCESS RESULT */}
 
 
 
-      {result?.success && (
+    //   {result?.success && (
 
-        <div className="mb-6 rounded-xl border border-green-500/20 bg-green-500/10 p-5">
+    //     <div className="mb-6 rounded-xl border border-green-500/20 bg-green-500/10 p-5">
 
-          <h3 className="font-semibold text-green-600 mb-3">
+    //       <h3 className="font-semibold text-green-600 mb-3">
 
-            GTM Automation Complete
+    //         GTM Automation Complete
 
-          </h3>
+    //       </h3>
 
 
 
-          <div className="space-y-2 text-sm text-green-700">
+    //       <div className="space-y-2 text-sm text-green-700">
 
-            <ResultItem text="Web GTM → Server GTM connection configured" />
+    //         <ResultItem text="Web GTM → Server GTM connection configured" />
 
-            <ResultItem text="Server event trigger configured" />
+    //         <ResultItem text="Server event trigger configured" />
 
-            <ResultItem text="Server-side GA4 event tag configured" />
+    //         <ResultItem text="Server-side GA4 event tag configured" />
 
-            <ResultItem text="Event trigger attached to the server-side tag" />
+    //         <ResultItem text="Event trigger attached to the server-side tag" />
 
 
 
-            <div className="pt-2 font-medium">
+    //         <div className="pt-2 font-medium">
 
-              ○ Changes have not been published.
+    //           ○ Changes have not been published.
 
-            </div>
+    //         </div>
 
-          </div>
+    //       </div>
 
 
 
-          {result.message && (
+    //       {result.message && (
 
-            <p className="mt-3 text-sm text-green-700">
+    //         <p className="mt-3 text-sm text-green-700">
 
-              {result.message}
+    //           {result.message}
 
-            </p>
+    //         </p>
 
-          )}
+    //       )}
 
-        </div>
+    //     </div>
 
-      )}
-    </section>
+    //   )}
+    // </section>
+    <>
+    </>
 
   );
 

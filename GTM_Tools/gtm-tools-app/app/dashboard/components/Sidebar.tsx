@@ -20,7 +20,7 @@ const NAV_ITEMS = [
   { label: "Variables", href: "/dashboard/variables", icon: Database, accent: "#10b981",},
   { label: "Templates", href: "/dashboard/templates", icon: LayoutTemplate, accent: "#8b5cf6",},
   { label: "HealthCheck", href: "/dashboard/healthcheck", icon: BarChart2, accent: "#ef4444",},
-  { label: "Event Automation", href: "/dashboard/event-automation", icon: Workflow, accent: "#06b6d4",},
+  // { label: "Event Automation", href: "/dashboard/event-automation", icon: Workflow, accent: "#06b6d4",},
 ];
 
 export default function Sidebar({
