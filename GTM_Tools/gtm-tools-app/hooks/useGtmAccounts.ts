@@ -40,5 +40,3 @@ export function useGtmAccounts() {
 
   return { accounts, loading, error };
 }
-
-

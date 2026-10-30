@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import client from "@/lib/claude";
+import Anthropic from "@anthropic-ai/sdk";
+import { classifyAnthropicError } from "@/lib/anthropicError";
+import { clearAnthropicKeyCookie, readAnthropicKey } from "@/lib/anthropicKeyCookie";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
@@ -19,6 +21,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const apiKey = readAnthropicKey(req);
+    if (!apiKey) {
+      return NextResponse.json(
+        { success: false, code: "no_key", error: "Missing Anthropic API key. Please connect your key." },
+        { status: 401 }
+      );
+    }
+
     const systemPrompt = `You are a GTM (Google Tag Manager) health-check assistant embedded in a dashboard chat.
 You already gave the user an initial audit of this container's health check report (included below as your own prior analysis). Continue the conversation naturally — answer their follow-up questions specifically using the report data and your prior analysis. Be concise, write like you're actually talking to them, and if something isn't answerable from this data, say so plainly rather than guessing.
 
@@ -27,6 +37,8 @@ ${JSON.stringify(healthReport, null, 2)}
 
 Your prior analysis:
 ${claudeText ?? "(no prior analysis available)"}`;
+
+    const client = new Anthropic({ apiKey });
 
     const response = await client.messages.create({
       model: "claude-sonnet-5",
@@ -42,7 +54,12 @@ ${claudeText ?? "(no prior analysis available)"}`;
     return NextResponse.json({ success: true, reply });
   } catch (error) {
     console.error("Claude Chat Error:", error);
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    const failure = classifyAnthropicError(error);
+    const response = NextResponse.json(
+      { success: false, code: failure.code, error: failure.message },
+      { status: failure.status }
+    );
+    if (failure.code === "invalid_key") clearAnthropicKeyCookie(response);
+    return response;
   }
 }

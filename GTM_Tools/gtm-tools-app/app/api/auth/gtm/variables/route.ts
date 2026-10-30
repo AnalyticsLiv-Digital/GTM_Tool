@@ -1,15 +1,17 @@
+
 import { NextResponse } from "next/server";
 import { getValidGoogleAccessToken } from "@/lib/googleAuth";
 import { gtmList } from "@/lib/gtm/list";
 import { variableBodySchema } from "@/lib/gtm/schemas";
 import { validateBody } from "@/lib/validation";
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const sleep = (ms: number) =>
+  new Promise((resolve) => setTimeout(resolve, ms));
 
 function cleanVariablePayload(variable: Record<string, unknown>) {
   const cleaned = { ...variable };
 
-  // remove readonly fields
+  // Remove read-only fields.
   delete cleaned.variableId;
   delete cleaned.path;
   delete cleaned.fingerprint;
@@ -27,21 +29,29 @@ function cleanVariablePayload(variable: Record<string, unknown>) {
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
+
     const accountId = searchParams.get("accountId");
     const containerId = searchParams.get("containerId");
     const workspaceId = searchParams.get("workspaceId");
 
     if (!accountId || !containerId || !workspaceId) {
       return NextResponse.json(
-        { error: "accountId, containerId, workspaceId required" },
+        {
+          success: false,
+          error: "accountId, containerId, workspaceId required",
+        },
         { status: 400 }
       );
     }
 
     const accessToken = await getValidGoogleAccessToken();
+
     if (!accessToken) {
       return NextResponse.json(
-        { error: "Missing Google access token" },
+        {
+          success: false,
+          error: "Missing Google access token",
+        },
         { status: 401 }
       );
     }
@@ -52,21 +62,45 @@ export async function GET(req: Request) {
       listKey: "variable",
     });
 
+    // If no variables could be retrieved, return the API error.
     if (result.error && result.items.length === 0) {
       return NextResponse.json(
-        { error: "Failed to fetch variables", details: result.error.body },
+        {
+          success: false,
+          error: "Failed to fetch variables",
+          details: result.error.body,
+          pages: result.pages,
+          truncated: result.truncated,
+        },
         { status: result.error.status || 502 }
       );
     }
 
+    // Preserve partial results and expose pagination errors.
     return NextResponse.json({
+      success: true,
       variable: result.items,
+      total: result.items.length,
       truncated: result.truncated,
       pages: result.pages,
+      partial: Boolean(result.error) || result.truncated,
+      paginationError: result.error
+        ? {
+            status: result.error.status,
+            message: "Some GTM variables could not be loaded.",
+            details: result.error.body,
+          }
+        : null,
     });
   } catch (err: unknown) {
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Internal server error" },
+      {
+        success: false,
+        error:
+          err instanceof Error
+            ? err.message
+            : "Internal server error",
+      },
       { status: 500 }
     );
   }
@@ -75,11 +109,20 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const parsed = await validateBody(req, variableBodySchema);
-    if (!parsed.ok) return parsed.response;
 
-    const { accountId, containerId, workspaceId, variable } = parsed.data;
+    if (!parsed.ok) {
+      return parsed.response;
+    }
+
+    const {
+      accountId,
+      containerId,
+      workspaceId,
+      variable,
+    } = parsed.data;
 
     const accessToken = await getValidGoogleAccessToken();
+
     if (!accessToken) {
       return NextResponse.json(
         { error: "Missing Google access token" },
@@ -107,30 +150,44 @@ export async function POST(req: Request) {
       const data = await res.json().catch(() => ({}));
 
       if (res.ok) {
-        return NextResponse.json({ success: true, variable: data });
+        return NextResponse.json({
+          success: true,
+          variable: data,
+        });
       }
 
-      // ✅ Retry for rate limit + google backend errors
       if ([429, 502, 503, 504].includes(res.status)) {
         attempt++;
-        const waitTime = 1000 * attempt; // 1s,2s,3s...
+
+        const waitTime = 1000 * attempt;
         await sleep(waitTime);
+
         continue;
       }
 
       return NextResponse.json(
-        { error: "Failed to create variable", details: data },
+        {
+          error: "Failed to create variable",
+          details: data,
+        },
         { status: res.status }
       );
     }
 
     return NextResponse.json(
-      { error: "Failed to create variable after retries" },
+      {
+        error: "Failed to create variable after retries",
+      },
       { status: 502 }
     );
   } catch (err: unknown) {
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Internal server error" },
+      {
+        error:
+          err instanceof Error
+            ? err.message
+            : "Internal server error",
+      },
       { status: 500 }
     );
   }
@@ -139,10 +196,18 @@ export async function POST(req: Request) {
 export async function PUT(req: Request) {
   try {
     const parsed = await validateBody(req, variableBodySchema);
-    if (!parsed.ok) return parsed.response;
 
-    const { accountId, containerId, workspaceId, variableId, variable } =
-      parsed.data;
+    if (!parsed.ok) {
+      return parsed.response;
+    }
+
+    const {
+      accountId,
+      containerId,
+      workspaceId,
+      variableId,
+      variable,
+    } = parsed.data;
 
     if (!variableId) {
       return NextResponse.json(
@@ -152,6 +217,7 @@ export async function PUT(req: Request) {
     }
 
     const accessToken = await getValidGoogleAccessToken();
+
     if (!accessToken) {
       return NextResponse.json(
         { error: "Missing Google access token" },
@@ -176,15 +242,26 @@ export async function PUT(req: Request) {
 
     if (!res.ok) {
       return NextResponse.json(
-        { error: "Failed to update variable", details: data },
+        {
+          error: "Failed to update variable",
+          details: data,
+        },
         { status: res.status }
       );
     }
 
-    return NextResponse.json({ success: true, variable: data });
+    return NextResponse.json({
+      success: true,
+      variable: data,
+    });
   } catch (err: unknown) {
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Internal server error" },
+      {
+        error:
+          err instanceof Error
+            ? err.message
+            : "Internal server error",
+      },
       { status: 500 }
     );
   }
@@ -193,6 +270,7 @@ export async function PUT(req: Request) {
 export async function DELETE(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
+
     const accountId = searchParams.get("accountId");
     const containerId = searchParams.get("containerId");
     const workspaceId = searchParams.get("workspaceId");
@@ -200,12 +278,16 @@ export async function DELETE(req: Request) {
 
     if (!accountId || !containerId || !workspaceId || !variableId) {
       return NextResponse.json(
-        { error: "accountId, containerId, workspaceId, variableId required" },
+        {
+          error:
+            "accountId, containerId, workspaceId, variableId required",
+        },
         { status: 400 }
       );
     }
 
     const accessToken = await getValidGoogleAccessToken();
+
     if (!accessToken) {
       return NextResponse.json(
         { error: "Missing Google access token" },
@@ -217,13 +299,19 @@ export async function DELETE(req: Request) {
 
     const res = await fetch(apiUrl, {
       method: "DELETE",
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
     });
 
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
+
       return NextResponse.json(
-        { error: "Failed to delete variable", details: data },
+        {
+          error: "Failed to delete variable",
+          details: data,
+        },
         { status: res.status }
       );
     }
@@ -231,8 +319,14 @@ export async function DELETE(req: Request) {
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Internal server error" },
+      {
+        error:
+          err instanceof Error
+            ? err.message
+            : "Internal server error",
+      },
       { status: 500 }
     );
   }
 }
+ 

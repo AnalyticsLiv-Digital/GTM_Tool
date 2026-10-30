@@ -11,7 +11,7 @@ import type {
 
 type ModalMode = "create" | "edit";
 
-interface DashboardStore {
+export interface DashboardStore {
   searchQuery: string;
   setSearchQuery: (val: string) => void;
   workspaceModalMode: string;

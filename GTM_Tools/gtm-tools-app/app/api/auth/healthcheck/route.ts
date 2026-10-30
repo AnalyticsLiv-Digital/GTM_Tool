@@ -1,162 +1,800 @@
+
 import { NextRequest, NextResponse } from "next/server";
-import client from "@/lib/claude";
-import { runHealthCheck } from "@/lib/healthcheck/engine";
-import { getValidGoogleAccessToken } from "@/lib/googleAuth";
-import { gtmList } from "@/lib/gtm/list";
+import { healthCheckRules } from "@/lib/healthcheck/rules";
+import type {
+  GTMHealthData,
+  HealthCheckResult,
+  Severity,
+} from "@/lib/healthcheck/types";
 
-type GtmRecord = Record<string, unknown>;
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
-function affectedItem(x: unknown): { name: string } {
-  if (typeof x === "string") return { name: x };
-  if (x && typeof x === "object" && "name" in x && typeof (x as { name: unknown }).name === "string") {
-    return { name: (x as { name: string }).name };
+type GTMResource = Record<string, unknown>;
+type JsonObject = Record<string, unknown>;
+type ResourceType = "tags" | "triggers" | "variables";
+
+type RequestBody = {
+  accountId?: string;
+  containerId?: string;
+  workspaceId?: string;
+};
+
+type RuleLike = {
+  id: string;
+  title: string;
+  severity: Severity;
+  check: (data: GTMHealthData) => HealthCheckResult;
+};
+
+type ResourceBundle = {
+  tags: GTMResource[];
+  triggers: GTMResource[];
+  variables: GTMResource[];
+};
+
+type PaginationError = {
+  status?: number;
+  message?: string;
+  details?: unknown;
+};
+
+type ResourceFetchResult = {
+  items: GTMResource[];
+  pages: number;
+  truncated: boolean;
+  partial: boolean;
+  paginationError: PaginationError | null;
+};
+
+type ResourceCompleteness = {
+  complete: boolean;
+  partial: boolean;
+  truncated: boolean;
+  pages: number;
+  loaded: number;
+  error: string | null;
+};
+
+type DataCompleteness = {
+  complete: boolean;
+  partialResources: ResourceType[];
+  failedResources: ResourceType[];
+  resources: Record<ResourceType, ResourceCompleteness>;
+};
+
+const RESOURCE_KEYS: Record<
+  ResourceType,
+  { singular: string; plural: string }
+> = {
+  tags: { singular: "tag", plural: "tags" },
+  triggers: { singular: "trigger", plural: "triggers" },
+  variables: { singular: "variable", plural: "variables" },
+};
+
+const RESOURCE_TYPES: ResourceType[] = [
+  "tags",
+  "triggers",
+  "variables",
+];
+
+function getString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function getObject(value: unknown): JsonObject | null {
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value)
+  ) {
+    return null;
   }
-  return { name: JSON.stringify(x) };
+
+  return value as JsonObject;
+}
+
+function getArray(value: unknown): GTMResource[] | null {
+  if (!Array.isArray(value)) return null;
+
+  return value.filter(
+    (item): item is GTMResource =>
+      Boolean(item) &&
+      typeof item === "object" &&
+      !Array.isArray(item)
+  );
+}
+
+function getBoolean(value: unknown): boolean {
+  return value === true;
+}
+
+function getNumber(value: unknown): number {
+  return typeof value === "number" &&
+    Number.isFinite(value)
+    ? value
+    : 0;
+}
+
+function findResourceArray(
+  sources: Array<JsonObject | null>,
+  singularKey: string,
+  pluralKey: string
+): GTMResource[] | null {
+  for (const source of sources) {
+    if (!source) continue;
+
+    const singular = getArray(source[singularKey]);
+
+    if (singular !== null) return singular;
+
+    const plural = getArray(source[pluralKey]);
+
+    if (plural !== null) return plural;
+  }
+
+  return null;
+}
+
+function normalizeResourceResponse(
+  payload: unknown,
+  type: ResourceType
+): GTMResource[] {
+  const directArray = getArray(payload);
+
+  if (directArray !== null) {
+    return directArray;
+  }
+
+  const root = getObject(payload);
+
+  if (!root) {
+    throw new Error(
+      `The GTM ${type} endpoint returned an unexpected response format.`
+    );
+  }
+
+  const data = getObject(root.data);
+  const result = getObject(root.result);
+  const containerVersion = getObject(root.containerVersion);
+
+  const sources = [
+    root,
+    data,
+    result,
+    containerVersion,
+    getObject(data?.containerVersion),
+    getObject(result?.containerVersion),
+  ];
+
+  const { singular, plural } = RESOURCE_KEYS[type];
+
+  const resources = findResourceArray(
+    sources,
+    singular,
+    plural
+  );
+
+  if (resources === null) {
+    const errorMessage =
+      getString(root.error) ||
+      getString(root.message);
+
+    throw new Error(
+      errorMessage ||
+        `The GTM ${type} endpoint did not return a "${singular}" or "${plural}" array.`
+    );
+  }
+
+  return resources;
+}
+
+function getPaginationError(
+  value: unknown
+): PaginationError | null {
+  const error = getObject(value);
+
+  if (!error) return null;
+
+  return {
+    status: getNumber(error.status) || undefined,
+    message:
+      getString(error.message) ||
+      getString(error.error) ||
+      "Some resources could not be loaded.",
+    details: error.details,
+  };
+}
+
+function normalizeResourceFetchResult(
+  payload: unknown,
+  type: ResourceType
+): ResourceFetchResult {
+  const items = normalizeResourceResponse(payload, type);
+  const root = getObject(payload);
+
+  if (!root) {
+    return {
+      items,
+      pages: 0,
+      truncated: false,
+      partial: false,
+      paginationError: null,
+    };
+  }
+
+  const data = getObject(root.data);
+  const result = getObject(root.result);
+
+  const metadataSources = [
+    root,
+    data,
+    result,
+  ].filter(
+    (source): source is JsonObject => source !== null
+  );
+
+  let pages = 0;
+  let truncated = false;
+  let partial = false;
+  let paginationError: PaginationError | null = null;
+
+  for (const source of metadataSources) {
+    pages = Math.max(pages, getNumber(source.pages));
+
+    truncated ||= getBoolean(source.truncated);
+    partial ||= getBoolean(source.partial);
+
+    paginationError ??= getPaginationError(
+      source.paginationError
+    );
+
+    if (!paginationError && getObject(source.error)) {
+      paginationError = getPaginationError(source.error);
+    }
+  }
+
+  partial ||= truncated || paginationError !== null;
+
+  return {
+    items,
+    pages,
+    truncated,
+    partial,
+    paginationError,
+  };
+}
+
+/**
+ * Fetches a resource list from the authenticated GTM API.
+ *
+ * cache: "no-store" ensures this HealthCheck request does
+ * not reuse a cached response.
+ */
+async function fetchGTMResource(
+  req: NextRequest,
+  type: ResourceType,
+  accountId: string,
+  containerId: string,
+  workspaceId: string
+): Promise<ResourceFetchResult> {
+  const url = new URL(
+    `/api/auth/gtm/${type}`,
+    req.nextUrl.origin
+  );
+
+  url.searchParams.set("accountId", accountId);
+  url.searchParams.set("containerId", containerId);
+  url.searchParams.set("workspaceId", workspaceId);
+
+  const response = await fetch(url.toString(), {
+    method: "GET",
+    headers: {
+      cookie: req.headers.get("cookie") ?? "",
+      authorization:
+        req.headers.get("authorization") ?? "",
+    },
+    cache: "no-store",
+  });
+
+  const responseText = await response.text();
+
+  let payload: unknown;
+
+  try {
+    payload = responseText
+      ? JSON.parse(responseText)
+      : {};
+  } catch {
+    throw new Error(
+      `The GTM ${type} endpoint returned invalid JSON (HTTP ${response.status}).`
+    );
+  }
+
+  if (!response.ok) {
+    const errorObject = getObject(payload);
+
+    const message =
+      getString(errorObject?.error) ||
+      getString(errorObject?.message);
+
+    throw new Error(
+      `${message || `Failed to fetch GTM ${type}`} (HTTP ${response.status}).`
+    );
+  }
+
+  const root = getObject(payload);
+
+  // Do not treat an HTTP 200 error response as a successful fetch.
+  if (root?.success === false) {
+    throw new Error(
+      getString(root.error) ||
+        getString(root.message) ||
+        `The GTM ${type} endpoint reported a failure.`
+    );
+  }
+
+  const result = normalizeResourceFetchResult(
+    payload,
+    type
+  );
+
+  if (result.partial) {
+    console.warn(
+      `[HealthCheck] GTM ${type} list is incomplete`,
+      {
+        pages: result.pages,
+        loaded: result.items.length,
+        truncated: result.truncated,
+        paginationError: result.paginationError,
+      }
+    );
+  }
+
+  return result;
+}
+
+function executeRule(
+  rule: RuleLike,
+  data: GTMHealthData
+): HealthCheckResult {
+  try {
+    const result = rule.check(data);
+
+    return {
+      ...result,
+      id: result.id || rule.id,
+      title: result.title || rule.title,
+      severity: result.severity || rule.severity,
+      passed: Boolean(result.passed),
+      description:
+        result.description ||
+        `${rule.title} health check.`,
+    };
+  } catch (error) {
+    console.error(
+      `[HealthCheck] Rule "${rule.id}" failed:`,
+      error
+    );
+
+    return {
+      id: rule.id,
+      title: rule.title,
+      description:
+        `Could not evaluate "${rule.title}".`,
+      severity: rule.severity,
+      passed: false,
+      recommendation:
+        "Review this rule's implementation and check the GTM configuration manually.",
+    };
+  }
+}
+
+function makeSystemResult(
+  id: string,
+  title: string,
+  description: string,
+  recommendation: string
+): HealthCheckResult {
+  return {
+    id,
+    title,
+    description,
+    severity: "HIGH",
+    passed: false,
+    recommendation,
+  };
+}
+
+function makePartialSystemResult(
+  id: string,
+  title: string,
+  description: string,
+  recommendation: string
+): HealthCheckResult {
+  return {
+    id,
+    title,
+    description,
+    severity: "MEDIUM",
+    passed: false,
+    recommendation,
+  };
+}
+
+function createEmptyCompleteness(): DataCompleteness {
+  return {
+    complete: true,
+    partialResources: [],
+    failedResources: [],
+    resources: {
+      tags: {
+        complete: true,
+        partial: false,
+        truncated: false,
+        pages: 0,
+        loaded: 0,
+        error: null,
+      },
+      triggers: {
+        complete: true,
+        partial: false,
+        truncated: false,
+        pages: 0,
+        loaded: 0,
+        error: null,
+      },
+      variables: {
+        complete: true,
+        partial: false,
+        truncated: false,
+        pages: 0,
+        loaded: 0,
+        error: null,
+      },
+    },
+  };
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
-    const { accountId, containerId, workspaceId } = body;
+    let body: RequestBody;
 
-    if (!accountId || !containerId || !workspaceId) {
+    try {
+      body = (await req.json()) as RequestBody;
+    } catch {
       return NextResponse.json(
-        { success: false, error: "Missing accountId, containerId, or workspaceId." },
+        {
+          success: false,
+          error: "Invalid request body. Expected JSON.",
+        },
         { status: 400 }
       );
     }
 
-    // ── Below this line duplicates /api/auth/healthcheck/route.ts exactly,
-    // so this endpoint is fully independent and never calls that route. ──
+    const accountId = getString(body.accountId);
+    const containerId = getString(body.containerId);
+    const workspaceId = getString(body.workspaceId);
 
-    const accessToken = await getValidGoogleAccessToken();
-    if (!accessToken) {
-      return NextResponse.json(
-        { success: false, error: "Missing Google access token" },
-        { status: 401 }
-      );
-    }
-
-    const base = `https://tagmanager.googleapis.com/tagmanager/v2/accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}`;
-    const opts = { deadlineMs: 8_000 };
-
-    const [tagsRes, triggersRes, variablesRes] = await Promise.all([
-      gtmList<GtmRecord>({ url: `${base}/tags`, accessToken, listKey: "tag", options: opts }),
-      gtmList<GtmRecord>({ url: `${base}/triggers`, accessToken, listKey: "trigger", options: opts }),
-      gtmList<GtmRecord>({ url: `${base}/variables`, accessToken, listKey: "variable", options: opts }),
-    ]);
-
-    const hardFailures = [tagsRes, triggersRes, variablesRes].filter(
-      (r) => r.error && r.items.length === 0
-    );
-    if (hardFailures.length > 0) {
+    // Live workspace selection is mandatory.
+    if (!accountId || !containerId || !workspaceId) {
       return NextResponse.json(
         {
           success: false,
-          error: "Failed to fetch GTM data",
-          details: hardFailures.map((r) => r.error),
+          error:
+            "Select a GTM account, container, and workspace before running HealthCheck.",
         },
-        { status: 502 }
+        { status: 400 }
       );
     }
 
-    const tags = tagsRes.items;
-    const triggers = triggersRes.items;
-    const variables = variablesRes.items;
+    // Always start with empty arrays.
+    // Imported data and client-provided arrays are intentionally ignored.
+    const resources: ResourceBundle = {
+      tags: [],
+      triggers: [],
+      variables: [],
+    };
 
-    const rawReport = runHealthCheck({
-      tags,
-      triggers,
-      variables,
+    const resourceErrors: Partial<
+      Record<ResourceType, string>
+    > = {};
+
+    const completeness = createEmptyCompleteness();
+
+    // Fetch all live workspace resources on every POST.
+    const settled = await Promise.allSettled(
+      RESOURCE_TYPES.map((type) =>
+        fetchGTMResource(
+          req,
+          type,
+          accountId,
+          containerId,
+          workspaceId
+        )
+      )
+    );
+
+    settled.forEach((result, index) => {
+      const type = RESOURCE_TYPES[index];
+
+      if (result.status === "fulfilled") {
+        const fetched = result.value;
+
+        resources[type] = fetched.items;
+
+        completeness.resources[type] = {
+          complete: !fetched.partial,
+          partial: fetched.partial,
+          truncated: fetched.truncated,
+          pages: fetched.pages,
+          loaded: fetched.items.length,
+          error:
+            fetched.paginationError?.message ?? null,
+        };
+
+        if (fetched.partial) {
+          completeness.partialResources.push(type);
+        }
+      } else {
+        const message =
+          result.reason instanceof Error
+            ? result.reason.message
+            : `Unknown error fetching GTM ${type}.`;
+
+        resourceErrors[type] = message;
+
+        completeness.resources[type] = {
+          complete: false,
+          partial: false,
+          truncated: false,
+          pages: 0,
+          loaded: 0,
+          error: message,
+        };
+
+        completeness.failedResources.push(type);
+
+        console.error(
+          `[HealthCheck] Failed to load ${type}:`,
+          message
+        );
+      }
+    });
+
+    completeness.complete =
+      completeness.partialResources.length === 0 &&
+      completeness.failedResources.length === 0;
+
+    const { tags, triggers, variables } = resources;
+
+    const counts = {
+      tags: tags.length,
+      triggers: triggers.length,
+      variables: variables.length,
+    };
+
+    console.info("[HealthCheck] Live GTM resources loaded", {
+      mode: "live",
       accountId,
       containerId,
       workspaceId,
+      ...counts,
+      resourceErrors,
+      dataCompleteness: completeness,
+      totalRules: healthCheckRules.length,
     });
 
-    type ResultRow = {
-      affectedTags?: unknown[];
-      affectedTriggers?: unknown[];
-      affectedVariables?: unknown[];
-      [k: string]: unknown;
+    const healthData: GTMHealthData = {
+      accountId,
+      containerId,
+      workspaceId,
+      tags,
+      triggers,
+      variables,
     };
-    const normalizedResults = ((rawReport.results || []) as ResultRow[]).map((r) => ({
-      ...r,
-      affectedTags: (r.affectedTags ?? []).map(affectedItem),
-      affectedTriggers: (r.affectedTriggers ?? []).map(affectedItem),
-      affectedVariables: (r.affectedVariables ?? []).map(affectedItem),
-    }));
+
+    const rules = healthCheckRules as RuleLike[];
+
+    const results: HealthCheckResult[] = rules.map(
+      (rule) => executeRule(rule, healthData)
+    );
+
+    const warnings: string[] = [];
+
+    // Report resource-fetch failures.
+    for (const type of RESOURCE_TYPES) {
+      const message = resourceErrors[type];
+
+      if (!message) continue;
+
+      results.push(
+        makeSystemResult(
+          `HC_SYS_FETCH_${type.toUpperCase()}`,
+          `Could not load GTM ${type}`,
+          `HealthCheck could not retrieve ${type} from the selected live workspace. ${message}`,
+          "Check your Google authentication, selected account/container/workspace, GTM API endpoint, and required permissions. Fix the fetch error and run HealthCheck again."
+        )
+      );
+
+      warnings.push(
+        `The ${type} resource request failed. Checks depending on ${type} may be incomplete.`
+      );
+    }
+
+    // Report partial or truncated pagination.
+    for (const type of completeness.partialResources) {
+      const resourceInfo = completeness.resources[type];
+
+      const paginationMessage = resourceInfo.error
+        ? ` Pagination detail: ${resourceInfo.error}`
+        : "";
+
+      const truncationMessage = resourceInfo.truncated
+        ? " The pagination or time limit was reached before all pages were loaded."
+        : "";
+
+      results.push(
+        makePartialSystemResult(
+          `HC_SYS_PARTIAL_${type.toUpperCase()}`,
+          `GTM ${type} list is incomplete`,
+          `HealthCheck loaded ${resourceInfo.loaded} ${type} across ${resourceInfo.pages} page(s), but the endpoint reported incomplete data.${truncationMessage}${paginationMessage}`,
+          `Load the complete ${type} list from the selected GTM workspace. Check the pagination endpoint, Google API response, and configured pagination limits, then run HealthCheck again.`
+        )
+      );
+
+      warnings.push(
+        `The ${type} list is incomplete. ${resourceInfo.loaded} resource(s) were loaded across ${resourceInfo.pages} page(s). The audit score is provisional.`
+      );
+    }
+
+    const allResourcesEmpty =
+      counts.tags === 0 &&
+      counts.triggers === 0 &&
+      counts.variables === 0;
+
+    // An entirely empty live workspace should never receive a clean score.
+    if (
+      allResourcesEmpty &&
+      completeness.failedResources.length === 0
+    ) {
+      results.push(
+        makeSystemResult(
+          "HC_SYS_EMPTY",
+          "No GTM resources were loaded",
+          "The selected live workspace returned zero tags, triggers, and variables. A meaningful audit cannot be completed with an entirely empty resource set.",
+          "Confirm the selected account, container, and workspace. Verify that the GTM API endpoints return the expected resource arrays."
+        )
+      );
+
+      warnings.push(
+        "No GTM resources were loaded. This report should not be treated as a reliable assessment of the container."
+      );
+    } else {
+      if (counts.tags === 0) {
+        warnings.push(
+          "No tags were returned. Confirm that the selected workspace is correct."
+        );
+      }
+
+      if (counts.triggers === 0) {
+        warnings.push(
+          "No triggers were returned. Trigger-related checks may be incomplete."
+        );
+      }
+
+      if (counts.variables === 0) {
+        warnings.push(
+          "No variables were returned. Variable-related checks may be incomplete."
+        );
+      }
+    }
+
+    const passedCount = results.filter(
+      (result) => result.passed
+    ).length;
+
+    const failedResults = results.filter(
+      (result) => !result.passed
+    );
+
+    const failedCount = failedResults.length;
+
+    const score =
+      results.length > 0
+        ? Math.round(
+            (passedCount / results.length) * 100
+          )
+        : 0;
+
+    const severityCounts = {
+      high: failedResults.filter(
+        (result) => result.severity === "HIGH"
+      ).length,
+      medium: failedResults.filter(
+        (result) => result.severity === "MEDIUM"
+      ).length,
+      low: failedResults.filter(
+        (result) => result.severity === "LOW"
+      ).length,
+    };
+
+    // A score is final only when every live resource list is complete
+    // and the workspace returned actual resources.
+    const scoreReliable =
+      completeness.complete && !allResourcesEmpty;
+
+    const scoreLabel = scoreReliable
+      ? "Final score"
+      : "Provisional score";
 
     const healthReport = {
-      ...rawReport,
-      results: normalizedResults,
-      truncated:
-        tagsRes.truncated || triggersRes.truncated || variablesRes.truncated,
-      counts: {
-        tags: tags.length,
-        triggers: triggers.length,
-        variables: variables.length,
+      score,
+      scoreReliable,
+      scoreLabel,
+      passedCount,
+      failedCount,
+      counts,
+      severityCounts,
+      dataCompleteness: completeness,
+      results,
+      warnings,
+    };
+
+    console.info("[HealthCheck] Live scan completed", {
+      mode: "live",
+      accountId,
+      containerId,
+      workspaceId,
+      ...counts,
+      totalRules: rules.length,
+      totalResults: results.length,
+      passedCount,
+      failedCount,
+      score,
+      scoreReliable,
+      dataCompleteness: completeness,
+      warnings,
+    });
+
+    return NextResponse.json(
+      {
+        success: true,
+        mode: "live",
+        healthReport,
+        score,
+        scoreReliable,
+        scoreLabel,
+        passedCount,
+        failedCount,
+        counts,
+        severityCounts,
+        dataCompleteness: completeness,
+        warnings,
+        results,
       },
-    };
-
-    // ── End of duplicated logic. From here it's Claude-specific. ──
-
-    // Compact version for the prompt — counts only, no full name lists, so
-    // the input stays small and Claude has less material to over-quote.
-    const compactResults = normalizedResults.map((r: ResultRow) => ({
-      id: r.id,
-      title: r.title,
-      passed: r.passed,
-      severity: r.severity,
-      description: r.description,
-      recommendation: r.recommendation,
-      affectedTagsCount: r.affectedTags?.length ?? 0,
-      affectedTriggersCount: r.affectedTriggers?.length ?? 0,
-      affectedVariablesCount: r.affectedVariables?.length ?? 0,
-    }));
-
-    const compactHealthReport = {
-      score: healthReport.score,
-      passedCount: healthReport.passedCount,
-      failedCount: healthReport.failedCount,
-      counts: healthReport.counts,
-      results: compactResults,
-    };
-
-    // No forced JSON schema — this is a normal Claude conversation turn,
-    // same as talking to Claude directly. It writes its own natural,
-    // well-organized response (markdown headers/bullets are fine), just
-    // grounded in the real rule results instead of inventing new checks.
-    const response = await client.messages.create({
-      model: "claude-sonnet-5",
-      max_tokens: 4000,
-      messages: [
-        {
-          role: "user",
-          content: `You're an expert Google Tag Manager consultant looking at a health check report for my container. Give me your actual take on it — like you would in a normal conversation, not a rigid template.
-
-Ground everything in the report below (score, pass/fail per rule, counts) — don't invent findings beyond what these checks actually found. Feel free to use markdown (headers, bold, bullet points) to organize your answer, prioritize what matters most, and write in your own voice. Keep it focused — I don't need every passing rule restated, just what's actually worth my attention and what to do about it.
-
-Health Check Report:
-${JSON.stringify(compactHealthReport, null, 2)}`,
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
         },
-      ],
-    });
-
-    // Don't assume content[0] is the text block — some responses include a
-    // non-text block first (e.g. thinking), which previously caused an
-    // empty resultText even though Claude actually returned real text.
-    const textBlock = response.content.find((c) => c.type === "text");
-    const resultText = textBlock && "text" in textBlock ? textBlock.text : "";
-
-    return NextResponse.json({
-      success: true,
-      healthReport,
-      resultText,
-      truncated: response.stop_reason === "max_tokens",
-    });
+      }
+    );
   } catch (error) {
-    console.error("Claude Error:", error);
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
+    console.error("[HealthCheck API Error]", error);
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Unknown HealthCheck API error.";
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: message,
+        details:
+          "HealthCheck failed while loading live GTM resources or executing health-check rules.",
+      },
+      { status: 500 }
+    );
   }
 }
