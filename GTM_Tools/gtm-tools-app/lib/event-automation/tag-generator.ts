@@ -36,6 +36,8 @@ export function generateTags(
       // GTM API type for GA4 Event
       type: "gaawe",
 
+      eventName,
+
       parameter: [
         {
           key: "eventName",

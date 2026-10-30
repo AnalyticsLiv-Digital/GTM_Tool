@@ -101,15 +101,15 @@ export async function POST(req: NextRequest) {
     }
 
     // 2) Rate limit: 5 AI audits per hour per user/IP.
-    const limit = rateLimit(`ai-audit:${clientIp(req)}`, 5, 60 * 60 * 1000);
-    if (!limit.ok) {
+    const windowMs = 60 * 60 * 1000;
+    if (!rateLimit(`ai-audit:${clientIp(req)}`, 5, windowMs)) {
       return NextResponse.json(
         {
           success: false,
           code: "rate_limit",
-          error: `AI audit limit reached. Try again in ${Math.ceil(limit.retryAfterSec / 60)} minute(s).`,
+          error: "AI audit limit reached. Please try again later.",
         },
-        { status: 429, headers: { "Retry-After": String(limit.retryAfterSec) } }
+        { status: 429, headers: { "Retry-After": String(windowMs / 1000) } }
       );
     }
 
