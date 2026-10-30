@@ -4,6 +4,7 @@ import { runHealthCheck } from "@/lib/healthcheck/engine";
 import { getValidGoogleAccessToken } from "@/lib/googleAuth";
 import { gtmList } from "@/lib/gtm/list";
 import { classifyAnthropicError } from "@/lib/anthropicError";
+import { clearAnthropicKeyCookie, readAnthropicKey } from "@/lib/anthropicKeyCookie";
 
 type GtmRecord = Record<string, unknown>;
 
@@ -26,7 +27,6 @@ function affectedItem(x: unknown): { name: string } {
   if (x && typeof x === "object" && "name" in x && typeof (x as { name: unknown }).name === "string") {
     return { name: (x as { name: string }).name };
   }
-<<<<<<< HEAD
 
   if (
     x &&
@@ -39,8 +39,6 @@ function affectedItem(x: unknown): { name: string } {
     };
   }
 
-=======
->>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
   try {
     return { name: JSON.stringify(x) };
   } catch {
@@ -211,7 +209,6 @@ export async function POST(req: NextRequest) {
 
     if (!accountId || !containerId || !workspaceId) {
       return NextResponse.json(
-<<<<<<< HEAD
         {
           success: false,
           source: "claude-healthcheck",
@@ -221,15 +218,11 @@ export async function POST(req: NextRequest) {
         {
           status: 400,
         }
-=======
-        { success: false, error: "Missing accountId, containerId, or workspaceId." },
-        { status: 400 }
->>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
       );
     }
 
-    // 1b. READ USER API KEY (from header, never from a DB)
-    const apiKey = req.headers.get("x-anthropic-key")?.trim();
+    // 1b. READ USER API KEY (from the HttpOnly cookie, never from a DB)
+    const apiKey = readAnthropicKey(req);
     if (!apiKey) {
       return NextResponse.json(
         { success: false, code: "no_key", error: "Missing Anthropic API key. Please connect your key." },
@@ -241,7 +234,6 @@ export async function POST(req: NextRequest) {
     const accessToken = await getValidGoogleAccessToken();
     if (!accessToken) {
       return NextResponse.json(
-<<<<<<< HEAD
         {
           success: false,
           source: "claude-healthcheck",
@@ -251,20 +243,11 @@ export async function POST(req: NextRequest) {
         {
           status: 401,
         }
-=======
-        { success: false, error: "Missing Google access token." },
-        { status: 401 }
->>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
       );
     }
 
     // 3. GTM BASE URL
-    const base =
-      `https://tagmanager.googleapis.com/tagmanager/v2/` +
-      `accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}`;
-    const opts = { deadlineMs: 8_000 };
 
-<<<<<<< HEAD
     const base =
       `https://tagmanager.googleapis.com/tagmanager/v2/` +
       `accounts/${accountId}/` +
@@ -304,13 +287,6 @@ export async function POST(req: NextRequest) {
         listKey: "variable",
         options: opts,
       }),
-=======
-    // 4. FETCH TAGS / TRIGGERS / VARIABLES
-    const [tagsRes, triggersRes, variablesRes] = await Promise.all([
-      gtmList<GtmRecord>({ url: `${base}/tags`, accessToken, listKey: "tag", options: opts }),
-      gtmList<GtmRecord>({ url: `${base}/triggers`, accessToken, listKey: "trigger", options: opts }),
-      gtmList<GtmRecord>({ url: `${base}/variables`, accessToken, listKey: "variable", options: opts }),
->>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
     ]);
 
     // 5. CHECK GTM FAILURES
@@ -319,7 +295,6 @@ export async function POST(req: NextRequest) {
     );
     if (hardFailures.length > 0) {
       return NextResponse.json(
-<<<<<<< HEAD
         {
           success: false,
           source: "claude-healthcheck",
@@ -332,10 +307,6 @@ export async function POST(req: NextRequest) {
         {
           status: 502,
         }
-=======
-        { success: false, error: "Failed to fetch GTM data.", details: hardFailures.map((r) => r.error) },
-        { status: 502 }
->>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
       );
     }
 
@@ -436,7 +407,6 @@ ${JSON.stringify(containerExport)}
     // 12. CALL CLAUDE (per-request client using the USER's key)
     let response;
     try {
-<<<<<<< HEAD
       console.log(
         "Starting Claude HealthCheck request..."
       );
@@ -449,9 +419,8 @@ ${JSON.stringify(containerExport)}
           variables: variables.length,
         }
       );
-=======
+
       const client = new Anthropic({ apiKey });
->>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
 
       response = await client.messages.create({
         model: "claude-sonnet-5",
@@ -481,7 +450,6 @@ ${JSON.stringify(containerExport)}
         ) ?? []
       );
     } catch (claudeError: unknown) {
-<<<<<<< HEAD
       console.error(
         "===================================================="
       );
@@ -504,6 +472,9 @@ ${JSON.stringify(containerExport)}
 
       const userMessage =
         buildClaudeUserMessage(details);
+
+      const failure =
+        classifyAnthropicError(claudeError);
 
       console.error(
         "Claude error type:",
@@ -529,10 +500,11 @@ ${JSON.stringify(containerExport)}
         "===================================================="
       );
 
-      return NextResponse.json(
+      const failureResponse = NextResponse.json(
         {
           success: false,
           source: "claude-healthcheck",
+          code: failure.code,
           error: userMessage,
           errorType: details.errorType,
           status:
@@ -557,14 +529,15 @@ ${JSON.stringify(containerExport)}
           },
         },
         {
-          status:
-            details.status &&
-              details.status >= 400 &&
-              details.status < 600
-              ? 502
-              : 502,
+          status: failure.status,
         }
       );
+
+      if (failure.code === "invalid_key") {
+        clearAnthropicKeyCookie(failureResponse);
+      }
+
+      return failureResponse;
     }
 
     /* =========================================================
@@ -617,27 +590,9 @@ ${JSON.stringify(containerExport)}
     /* =========================================================
        15. EMPTY RESPONSE CHECK
     ========================================================= */
-=======
-      const failure = classifyAnthropicError(claudeError);
-      console.error("Claude API request failed:", failure.code, failure.message);
-      return NextResponse.json(
-        { success: false, code: failure.code, error: failure.message },
-        { status: failure.status }
-      );
-    }
-
-    // 13. EXTRACT TEXT
-    const resultText = response.content
-      .filter((c) => c.type === "text")
-      .map((c) => (c.type === "text" ? c.text : ""))
-      .filter(Boolean)
-      .join("\n\n")
-      .trim();
->>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
 
     // 14. EMPTY CHECK
     if (!resultText) {
-<<<<<<< HEAD
       console.error(
         "===================================================="
       );
@@ -748,26 +703,9 @@ ${JSON.stringify(containerExport)}
       success: true,
       source: "claude-healthcheck",
 
-=======
-      console.error("Claude returned an empty response.", { stopReason: response.stop_reason });
-      return NextResponse.json(
-        { success: false, error: "Claude returned an empty response.", stopReason: response.stop_reason },
-        { status: 502 }
-      );
-    }
-
-    // 15. TRUNCATION
-    const truncated = response.stop_reason === "max_tokens";
-    if (truncated) console.warn("Claude AI audit reached max_tokens.");
-
-    // 16. SUCCESS
-    return NextResponse.json({
-      success: true,
->>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
       healthReport,
       resultText,
       truncated,
-<<<<<<< HEAD
 
       requestId:
         response._request_id ?? null,
@@ -846,13 +784,5 @@ ${JSON.stringify(containerExport)}
         status: 500,
       }
     );
-=======
-      counts: { tags: tags.length, triggers: triggers.length, variables: variables.length },
-    });
-  } catch (error: unknown) {
-    console.error("Claude HealthCheck Route Error:", error);
-    const message = error instanceof Error ? error.message : "Unknown server error.";
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
->>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
   }
 }
