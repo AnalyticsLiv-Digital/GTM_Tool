@@ -12,18 +12,12 @@ export const runtime = "nodejs";
 
 type GTMResource = Record<string, unknown>;
 type JsonObject = Record<string, unknown>;
-
 type ResourceType = "tags" | "triggers" | "variables";
 
 type RequestBody = {
   accountId?: string;
   containerId?: string;
   workspaceId?: string;
-  tags?: GTMResource[];
-  triggers?: GTMResource[];
-  variables?: GTMResource[];
-  importData?: JsonObject;
-  containerName?: string;
 };
 
 type RuleLike = {
@@ -78,6 +72,12 @@ const RESOURCE_KEYS: Record<
   variables: { singular: "variable", plural: "variables" },
 };
 
+const RESOURCE_TYPES: ResourceType[] = [
+  "tags",
+  "triggers",
+  "variables",
+];
+
 function getString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -110,7 +110,8 @@ function getBoolean(value: unknown): boolean {
 }
 
 function getNumber(value: unknown): number {
-  return typeof value === "number" && Number.isFinite(value)
+  return typeof value === "number" &&
+    Number.isFinite(value)
     ? value
     : 0;
 }
@@ -124,9 +125,11 @@ function findResourceArray(
     if (!source) continue;
 
     const singular = getArray(source[singularKey]);
+
     if (singular !== null) return singular;
 
     const plural = getArray(source[pluralKey]);
+
     if (plural !== null) return plural;
   }
 
@@ -203,23 +206,11 @@ function getPaginationError(
   };
 }
 
-/**
- * Reads both the resource array and pagination metadata.
- *
- * Supports:
- * - The updated API response:
- *   { success, tag/trigger/variable, truncated, pages, partial, paginationError }
- * - Older API responses:
- *   { tag/trigger/variable }
- * - Nested API responses:
- *   { data: { tag/trigger/variable } }
- */
 function normalizeResourceFetchResult(
   payload: unknown,
   type: ResourceType
 ): ResourceFetchResult {
   const items = normalizeResourceResponse(payload, type);
-
   const root = getObject(payload);
 
   if (!root) {
@@ -258,7 +249,6 @@ function normalizeResourceFetchResult(
       source.paginationError
     );
 
-    // Backward compatibility with endpoints that use `error`.
     if (!paginationError && getObject(source.error)) {
       paginationError = getPaginationError(source.error);
     }
@@ -275,76 +265,12 @@ function normalizeResourceFetchResult(
   };
 }
 
-function getImportedResources(
-  body: RequestBody
-): {
-  resources: ResourceBundle;
-  metadata: JsonObject | null;
-} | null {
-  const imported = getObject(body.importData);
-
-  // Direct resource arrays are supported for imported data and
-  // callers that already provide the GTM resources.
-  const root = imported ?? (body as unknown as JsonObject);
-
-  const data = getObject(root.data);
-  const containerVersion =
-    getObject(root.containerVersion) ??
-    getObject(data?.containerVersion);
-
-  const rootContainer = getObject(root.container);
-  const versionContainer = getObject(containerVersion?.container);
-
-  const sources = [
-    root,
-    data,
-    containerVersion,
-    getObject(containerVersion?.containerVersion),
-  ];
-
-  const tags = findResourceArray(sources, "tag", "tags");
-
-  const triggers = findResourceArray(
-    sources,
-    "trigger",
-    "triggers"
-  );
-
-  const variables = findResourceArray(
-    sources,
-    "variable",
-    "variables"
-  );
-
-  const hasDirectArrays =
-    tags !== null ||
-    triggers !== null ||
-    variables !== null;
-
-const hasExportMetadata = Boolean(
-  rootContainer ||
-  versionContainer ||
-  root.exportFormatVersion !== undefined
-);
-
-  if (!hasDirectArrays && !hasExportMetadata) {
-    return null;
-  }
-
-  return {
-    resources: {
-      tags: tags ?? [],
-      triggers: triggers ?? [],
-      variables: variables ?? [],
-    },
-    metadata:
-      rootContainer ??
-      versionContainer ??
-      getObject(containerVersion) ??
-      root,
-  };
-}
-
+/**
+ * Fetches a resource list from the authenticated GTM API.
+ *
+ * cache: "no-store" ensures this HealthCheck request does
+ * not reuse a cached response.
+ */
 async function fetchGTMResource(
   req: NextRequest,
   type: ResourceType,
@@ -394,6 +320,17 @@ async function fetchGTMResource(
 
     throw new Error(
       `${message || `Failed to fetch GTM ${type}`} (HTTP ${response.status}).`
+    );
+  }
+
+  const root = getObject(payload);
+
+  // Do not treat an HTTP 200 error response as a successful fetch.
+  if (root?.success === false) {
+    throw new Error(
+      getString(root.error) ||
+        getString(root.message) ||
+        `The GTM ${type} endpoint reported a failure.`
     );
   }
 
@@ -535,11 +472,25 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    let accountId = getString(body.accountId);
-    let containerId = getString(body.containerId);
-    let workspaceId = getString(body.workspaceId);
+    const accountId = getString(body.accountId);
+    const containerId = getString(body.containerId);
+    const workspaceId = getString(body.workspaceId);
 
-    let resources: ResourceBundle = {
+    // Live workspace selection is mandatory.
+    if (!accountId || !containerId || !workspaceId) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            "Select a GTM account, container, and workspace before running HealthCheck.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // Always start with empty arrays.
+    // Imported data and client-provided arrays are intentionally ignored.
+    const resources: ResourceBundle = {
       tags: [],
       triggers: [],
       variables: [],
@@ -551,124 +502,69 @@ export async function POST(req: NextRequest) {
 
     const completeness = createEmptyCompleteness();
 
-    const imported = getImportedResources(body);
-    const isImportMode = imported !== null;
+    // Fetch all live workspace resources on every POST.
+    const settled = await Promise.allSettled(
+      RESOURCE_TYPES.map((type) =>
+        fetchGTMResource(
+          req,
+          type,
+          accountId,
+          containerId,
+          workspaceId
+        )
+      )
+    );
 
-    if (imported) {
-      resources = imported.resources;
+    settled.forEach((result, index) => {
+      const type = RESOURCE_TYPES[index];
 
-      const metadata = imported.metadata;
+      if (result.status === "fulfilled") {
+        const fetched = result.value;
 
-      accountId ||= "imported";
+        resources[type] = fetched.items;
 
-      containerId ||=
-        getString(body.containerName) ||
-        getString(metadata?.publicId) ||
-        getString(metadata?.containerId) ||
-        getString(metadata?.name) ||
-        "imported-container";
-
-      workspaceId ||= "imported";
-
-      // Imported data is treated as complete because it is supplied
-      // as one export file rather than fetched through paginated APIs.
-      for (const type of [
-        "tags",
-        "triggers",
-        "variables",
-      ] as ResourceType[]) {
         completeness.resources[type] = {
-          complete: true,
+          complete: !fetched.partial,
+          partial: fetched.partial,
+          truncated: fetched.truncated,
+          pages: fetched.pages,
+          loaded: fetched.items.length,
+          error:
+            fetched.paginationError?.message ?? null,
+        };
+
+        if (fetched.partial) {
+          completeness.partialResources.push(type);
+        }
+      } else {
+        const message =
+          result.reason instanceof Error
+            ? result.reason.message
+            : `Unknown error fetching GTM ${type}.`;
+
+        resourceErrors[type] = message;
+
+        completeness.resources[type] = {
+          complete: false,
           partial: false,
           truncated: false,
           pages: 0,
-          loaded: resources[type].length,
-          error: null,
+          loaded: 0,
+          error: message,
         };
-      }
-    } else {
-      if (!accountId || !containerId || !workspaceId) {
-        return NextResponse.json(
-          {
-            success: false,
-            error:
-              "Select a GTM account, container, and workspace, or provide a supported GTM container export.",
-          },
-          { status: 400 }
+
+        completeness.failedResources.push(type);
+
+        console.error(
+          `[HealthCheck] Failed to load ${type}:`,
+          message
         );
       }
+    });
 
-      // Fetch independently so one failing endpoint does not
-      // discard successful results from the other endpoints.
-      const types: ResourceType[] = [
-        "tags",
-        "triggers",
-        "variables",
-      ];
-
-      const settled = await Promise.allSettled(
-        types.map((type) =>
-          fetchGTMResource(
-            req,
-            type,
-            accountId,
-            containerId,
-            workspaceId
-          )
-        )
-      );
-
-      settled.forEach((result, index) => {
-        const type = types[index];
-
-        if (result.status === "fulfilled") {
-          const fetched = result.value;
-
-          resources[type] = fetched.items;
-
-          completeness.resources[type] = {
-            complete: !fetched.partial,
-            partial: fetched.partial,
-            truncated: fetched.truncated,
-            pages: fetched.pages,
-            loaded: fetched.items.length,
-            error:
-              fetched.paginationError?.message ?? null,
-          };
-
-          if (fetched.partial) {
-            completeness.partialResources.push(type);
-          }
-        } else {
-          const message =
-            result.reason instanceof Error
-              ? result.reason.message
-              : `Unknown error fetching GTM ${type}.`;
-
-          resourceErrors[type] = message;
-
-          completeness.resources[type] = {
-            complete: false,
-            partial: false,
-            truncated: false,
-            pages: 0,
-            loaded: 0,
-            error: message,
-          };
-
-          completeness.failedResources.push(type);
-
-          console.error(
-            `[HealthCheck] Failed to load ${type}:`,
-            message
-          );
-        }
-      });
-
-      completeness.complete =
-        completeness.partialResources.length === 0 &&
-        completeness.failedResources.length === 0;
-    }
+    completeness.complete =
+      completeness.partialResources.length === 0 &&
+      completeness.failedResources.length === 0;
 
     const { tags, triggers, variables } = resources;
 
@@ -678,8 +574,8 @@ export async function POST(req: NextRequest) {
       variables: variables.length,
     };
 
-    console.info("[HealthCheck] Resources loaded", {
-      mode: isImportMode ? "import" : "gtm",
+    console.info("[HealthCheck] Live GTM resources loaded", {
+      mode: "live",
       accountId,
       containerId,
       workspaceId,
@@ -706,23 +602,18 @@ export async function POST(req: NextRequest) {
 
     const warnings: string[] = [];
 
-    // Report failed resource requests instead of silently treating
-    // them as a clean container.
-    for (const type of Object.keys(
-      resourceErrors
-    ) as ResourceType[]) {
+    // Report resource-fetch failures.
+    for (const type of RESOURCE_TYPES) {
       const message = resourceErrors[type];
 
       if (!message) continue;
 
-      const resultId = `HC_SYS_FETCH_${type.toUpperCase()}`;
-
       results.push(
         makeSystemResult(
-          resultId,
+          `HC_SYS_FETCH_${type.toUpperCase()}`,
           `Could not load GTM ${type}`,
-          `HealthCheck could not retrieve ${type} from the selected workspace. ${message}`,
-          "Check your Google authentication, selected account/container/workspace, endpoint response, and required GTM permissions. Run the audit again after the request succeeds."
+          `HealthCheck could not retrieve ${type} from the selected live workspace. ${message}`,
+          "Check your Google authentication, selected account/container/workspace, GTM API endpoint, and required permissions. Fix the fetch error and run HealthCheck again."
         )
       );
 
@@ -731,7 +622,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Report partial or truncated pagination separately.
+    // Report partial or truncated pagination.
     for (const type of completeness.partialResources) {
       const resourceInfo = completeness.resources[type];
 
@@ -740,7 +631,7 @@ export async function POST(req: NextRequest) {
         : "";
 
       const truncationMessage = resourceInfo.truncated
-        ? " The pagination limit or time limit was reached before all pages were loaded."
+        ? " The pagination or time limit was reached before all pages were loaded."
         : "";
 
       results.push(
@@ -757,22 +648,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const failedResourceTypes = Object.keys(
-      resourceErrors
-    );
-
-    if (
-      !isImportMode &&
-      failedResourceTypes.length === 0 &&
+    const allResourcesEmpty =
       counts.tags === 0 &&
       counts.triggers === 0 &&
-      counts.variables === 0
+      counts.variables === 0;
+
+    // An entirely empty live workspace should never receive a clean score.
+    if (
+      allResourcesEmpty &&
+      completeness.failedResources.length === 0
     ) {
       results.push(
         makeSystemResult(
           "HC_SYS_EMPTY",
           "No GTM resources were loaded",
-          "The selected workspace returned zero tags, triggers, and variables. A meaningful audit cannot be completed with an entirely empty resource set.",
+          "The selected live workspace returned zero tags, triggers, and variables. A meaningful audit cannot be completed with an entirely empty resource set.",
           "Confirm the selected account, container, and workspace. Verify that the GTM API endpoints return the expected resource arrays."
         )
       );
@@ -829,14 +719,10 @@ export async function POST(req: NextRequest) {
       ).length,
     };
 
+    // A score is final only when every live resource list is complete
+    // and the workspace returned actual resources.
     const scoreReliable =
-      completeness.complete &&
-      !(
-        !isImportMode &&
-        counts.tags === 0 &&
-        counts.triggers === 0 &&
-        counts.variables === 0
-      );
+      completeness.complete && !allResourcesEmpty;
 
     const scoreLabel = scoreReliable
       ? "Final score"
@@ -855,8 +741,8 @@ export async function POST(req: NextRequest) {
       warnings,
     };
 
-    console.info("[HealthCheck] Completed", {
-      mode: isImportMode ? "import" : "gtm",
+    console.info("[HealthCheck] Live scan completed", {
+      mode: "live",
       accountId,
       containerId,
       workspaceId,
@@ -871,21 +757,28 @@ export async function POST(req: NextRequest) {
       warnings,
     });
 
-    return NextResponse.json({
-      success: true,
-      mode: isImportMode ? "import" : "gtm",
-      healthReport,
-      score,
-      scoreReliable,
-      scoreLabel,
-      passedCount,
-      failedCount,
-      counts,
-      severityCounts,
-      dataCompleteness: completeness,
-      warnings,
-      results,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        mode: "live",
+        healthReport,
+        score,
+        scoreReliable,
+        scoreLabel,
+        passedCount,
+        failedCount,
+        counts,
+        severityCounts,
+        dataCompleteness: completeness,
+        warnings,
+        results,
+      },
+      {
+        headers: {
+          "Cache-Control": "no-store, no-cache, must-revalidate",
+        },
+      }
+    );
   } catch (error) {
     console.error("[HealthCheck API Error]", error);
 
@@ -899,7 +792,7 @@ export async function POST(req: NextRequest) {
         success: false,
         error: message,
         details:
-          "HealthCheck failed while loading GTM resources or executing health-check rules.",
+          "HealthCheck failed while loading live GTM resources or executing health-check rules.",
       },
       { status: 500 }
     );

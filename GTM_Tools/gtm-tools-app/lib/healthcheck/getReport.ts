@@ -10,7 +10,7 @@ import {
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 
 export const maxDuration = 60;
-
+ 
 type GtmRecord = Record<string, unknown>;
 type ImportedGtmData = {
   tags: GtmRecord[];

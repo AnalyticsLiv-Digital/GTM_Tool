@@ -746,4 +746,4 @@ export const healthCheckRules = [
   }),
 ];
 
-export default healthCheckRules;
+export default healthCheckRules; 

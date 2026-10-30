@@ -198,7 +198,7 @@ export default function HealthCheckPage() {
         "Select an account, container, and workspace before running the audit."
       );
       return;
-    }
+    } 
 
     try {
       setLoading(true);
