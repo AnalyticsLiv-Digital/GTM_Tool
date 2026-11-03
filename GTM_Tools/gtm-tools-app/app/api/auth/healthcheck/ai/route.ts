@@ -1,858 +1,344 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
-import { runHealthCheck } from "@/lib/healthcheck/engine";
-import { getValidGoogleAccessToken } from "@/lib/googleAuth";
-import { gtmList } from "@/lib/gtm/list";
-import { classifyAnthropicError } from "@/lib/anthropicError";
+import { POST as runHealthCheck } from "../route";
+import {
+  classifyAnthropicError,
+  FALLBACK_CODES,
+  type AnthropicFailure,
+} from "@/lib/anthropicError";
+import { ClaudeNotConfiguredError, getClaude } from "@/lib/claudeClient";
+import { rateLimit, clientIp } from "@/lib/rateLimit";
 
-type GtmRecord = Record<string, unknown>;
-
-type ClaudeErrorShape = {
-  status?: number;
-  message?: string;
-  name?: string;
-  type?: string;
-  requestId?: string;
-  request_id?: string;
-  error?: {
-    type?: string;
-    message?: string;
-  };
-  headers?: Record<string, string | string[] | undefined>;
+type RequestBody = {
+  accountId?: unknown;
+  containerId?: unknown;
+  workspaceId?: unknown;
 };
 
-function affectedItem(x: unknown): { name: string } {
-  if (typeof x === "string") return { name: x };
-  if (x && typeof x === "object" && "name" in x && typeof (x as { name: unknown }).name === "string") {
-    return { name: (x as { name: string }).name };
-  }
-<<<<<<< HEAD
+type HealthCheckReport = {
+  score: number;
+  results: Array<Record<string, any>>;
+  [key: string]: unknown;
+};
 
-  if (
-    x &&
-    typeof x === "object" &&
-    "name" in x &&
-    typeof (x as { name: unknown }).name === "string"
-  ) {
-    return {
-      name: (x as { name: string }).name,
-    };
-  }
+type HealthCheckResponse = {
+  success?: boolean;
+  error?: string;
+  healthReport?: HealthCheckReport;
+  report?: HealthCheckReport;
+};
 
-=======
->>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
-  try {
-    return { name: JSON.stringify(x) };
-  } catch {
-    return { name: "Unknown item" };
-  }
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
+/* ---------- helpers ---------- */
+
+const namesOf = (list: any[] | undefined, limit?: number): string[] => {
+  const names = (list ?? []).map((x: any) => x?.name ?? x?.id).filter(Boolean) as string[];
+  return typeof limit === "number" ? names.slice(0, limit) : names;
+};
+
+const gradeOf = (score: number) => (score >= 80 ? "A" : score >= 50 ? "B" : "C");
+
+type Finding = {
+  id: string;
+  title: string;
+  severity: string;
+  description: string;
+  recommendation: string;
+  totalAffected: number;
+  liveAffected: number | null; // tags only: affected tags that are not paused
+  pausedAffected: number | null;
+  tags: string[];
+  triggers: string[];
+  variables: string[];
+  notListed: number;
+};
+
+const NAME_LIMIT = 40;
+
+/** Everything the AI (and the local report) needs, derived only from the scan results. */
+function buildReportFacts(report: HealthCheckReport) {
+  const results = report.results;
+  const counts = ((report as any).counts ?? {}) as { tags?: number; triggers?: number; variables?: number };
+
+  // Paused tags come from the "Paused Tags Found" rule, so live/paused splits need no raw container.
+  const pausedList = namesOf(results.find((r) => r.id === "HC_LR_002")?.affectedTags);
+  const paused = new Set(pausedList.map((n) => n.trim().toLowerCase()));
+
+  const findings: Finding[] = results
+    .filter((r) => !r.passed)
+    .map((r) => {
+      const tags = namesOf(r.affectedTags);
+      const triggers = namesOf(r.affectedTriggers);
+      const variables = namesOf(r.affectedVariables);
+      const total = tags.length + triggers.length + variables.length;
+      const pausedAffected = tags.length ? tags.filter((n) => paused.has(n.trim().toLowerCase())).length : null;
+      const listed = Math.min(tags.length, NAME_LIMIT) + Math.min(triggers.length, NAME_LIMIT) + Math.min(variables.length, NAME_LIMIT);
+      return {
+        id: String(r.id),
+        title: String(r.title),
+        severity: String(r.severity),
+        description: String(r.description ?? ""),
+        recommendation: String(r.recommendation ?? ""),
+        totalAffected: total,
+        liveAffected: pausedAffected === null ? null : tags.length - pausedAffected,
+        pausedAffected,
+        tags: tags.slice(0, NAME_LIMIT),
+        triggers: triggers.slice(0, NAME_LIMIT),
+        variables: variables.slice(0, NAME_LIMIT),
+        notListed: total - listed,
+      };
+    });
+
+  const passed = results
+    .filter((r) => r.passed)
+    .map((r) => {
+      const c = (r.passedCounts ?? {}) as { tags?: number; triggers?: number; variables?: number };
+      return { title: String(r.title), checked: { tags: c.tags ?? 0, triggers: c.triggers ?? 0, variables: c.variables ?? 0 } };
+    });
+
+  const totalTags = counts.tags ?? 0;
+
+  return {
+    summary: {
+      score: report.score,
+      grade: gradeOf(report.score),
+      rulesTotal: results.length,
+      rulesPassed: passed.length,
+      rulesFailed: findings.length,
+      scanned: { tags: counts.tags ?? 0, triggers: counts.triggers ?? 0, variables: counts.variables ?? 0 },
+      tags: totalTags ? { live: totalTags - pausedList.length, paused: pausedList.length } : null,
+    },
+    findings,
+    passed,
+    pausedTagNames: pausedList.slice(0, 40),
+  };
 }
 
-function extractErrorDetails(error: unknown): {
-  message: string;
-  errorType: string;
-  status?: number;
-  requestId?: string;
-} {
-  const fallback = {
-    message: "Unknown Claude API error.",
-    errorType: "unknown_error",
-    status: undefined as number | undefined,
-    requestId: undefined as string | undefined,
+/** Free, no-AI report in the same layout as the AI report (used when Claude is unavailable). */
+function buildLocalAudit(report: HealthCheckReport): string {
+  const { summary, findings, passed } = buildReportFacts(report);
+
+  const block = (f: Finding) => {
+    const names = [...f.tags, ...f.triggers, ...f.variables];
+    const sample = names.slice(0, 10).join(", ");
+    const more = f.totalAffected > 10 ? ` (+${f.totalAffected - 10} more)` : "";
+    const split =
+      f.pausedAffected !== null && f.pausedAffected > 0 ? `, ${f.liveAffected} live and ${f.pausedAffected} paused` : "";
+    return `### ${f.title} (${f.totalAffected} item${f.totalAffected === 1 ? "" : "s"}${split})
+${f.recommendation || f.description}${sample ? ` Affected: ${sample}${more}.` : ""}`;
   };
 
-  if (error instanceof Error) {
-    fallback.message = error.message;
-    fallback.errorType = error.name || "Error";
+  const section = (title: string, sev: string[]) => {
+    const list = findings.filter((f) => sev.includes(f.severity));
+    return `## ${title} (${list.length})\n${list.length ? list.map(block).join("\n\n") : "- None found"}`;
+  };
+
+  const high = findings.filter((f) => f.severity === "HIGH").length;
+
+  return `## Summary
+- **Score:** ${summary.score}% (grade ${summary.grade}), ${summary.rulesPassed} of ${summary.rulesTotal} rules passed and ${summary.rulesFailed} failed
+- **Scanned:** ${summary.scanned.tags} tags, ${summary.scanned.triggers} triggers, ${summary.scanned.variables} variables${
+    summary.tags ? `\n- **Tags:** ${summary.tags.live} live, ${summary.tags.paused} paused` : ""
   }
 
-  if (!error || typeof error !== "object") {
-    if (typeof error === "string" && error.trim()) {
-      fallback.message = error;
-    }
+${section("High severity", ["HIGH"])}
 
-    return fallback;
-  }
+${section("Medium severity", ["MEDIUM"])}
 
-  const value = error as ClaudeErrorShape;
+${section("Low severity", ["LOW"])}
 
-  if (typeof value.status === "number") {
-    fallback.status = value.status;
-  }
+## What passed
+${passed.slice(0, 15).map((p) => `- ${p.title}`).join("\n") || "- Nothing passed yet"}
 
-  if (typeof value.name === "string" && value.name.trim()) {
-    fallback.errorType = value.name;
-  }
+## Suggested fix order
+- ${high > 0 ? "Fix the high severity issues first, they can break tracking." : "No high severity issues, start with the warnings."}
+- Then work through the medium severity items, then clean up paused and unused items.
+- Re-run the health check and validate in Preview Mode before publishing.
 
-  if (typeof value.message === "string" && value.message.trim()) {
-    fallback.message = value.message;
-  }
-
-  if (
-    typeof value.error?.message === "string" &&
-    value.error.message.trim()
-  ) {
-    fallback.message = value.error.message;
-  }
-
-  if (
-    typeof value.error?.type === "string" &&
-    value.error.type.trim()
-  ) {
-    fallback.errorType = value.error.type;
-  }
-
-  if (
-    typeof value.type === "string" &&
-    value.type.trim() &&
-    value.type !== "Error"
-  ) {
-    fallback.errorType = value.type;
-  }
-
-  if (
-    typeof value.requestId === "string" &&
-    value.requestId.trim()
-  ) {
-    fallback.requestId = value.requestId;
-  }
-
-  if (
-    typeof value.request_id === "string" &&
-    value.request_id.trim()
-  ) {
-    fallback.requestId = value.request_id;
-  }
-
-  if (!fallback.requestId && value.headers) {
-    const requestIdHeader =
-      value.headers["request-id"] ??
-      value.headers["x-request-id"];
-
-    if (typeof requestIdHeader === "string") {
-      fallback.requestId = requestIdHeader;
-    }
-
-    if (Array.isArray(requestIdHeader) && requestIdHeader.length > 0) {
-      fallback.requestId = requestIdHeader[0];
-    }
-  }
-
-  return fallback;
+_Generated by the built-in rule engine because AI was unavailable._`;
 }
 
-function buildClaudeUserMessage(details: {
-  message: string;
-  errorType: string;
-  status?: number;
-  requestId?: string;
-}): string {
-  const statusText =
-    typeof details.status === "number"
-      ? `HTTP ${details.status}`
-      : "HTTP status unavailable";
-
-  const requestText =
-    details.requestId
-      ? `Request ID: ${details.requestId}`
-      : "Request ID: unavailable";
-
-  if (
-    details.message.toLowerCase().includes("credit balance") ||
-    details.message.toLowerCase().includes("credit") ||
-    details.message.toLowerCase().includes("billing")
-  ) {
-    return (
-      `Claude API billing/credit error (${statusText}). ` +
-      `${details.message} ` +
-      `${requestText}`
-    );
-  }
-
-  if (
-    details.errorType.toLowerCase().includes("authentication") ||
-    details.status === 401
-  ) {
-    return (
-      `Claude API authentication failed (${statusText}). ` +
-      `${details.message} ` +
-      `${requestText}`
-    );
-  }
-
-  if (details.status === 429) {
-    return (
-      `Claude API rate limit reached (${statusText}). ` +
-      `${details.message} ` +
-      `${requestText}`
-    );
-  }
-
-  if (details.status === 400) {
-    return (
-      `Claude API rejected the request (${statusText}). ` +
-      `${details.message} ` +
-      `${requestText}`
-    );
-  }
-
-  return (
-    `Claude API request failed (${statusText}). ` +
-    `${details.message} ` +
-    `${requestText}`
-  );
-}
+/* ---------- route ---------- */
 
 export async function POST(req: NextRequest) {
+  let healthReport: HealthCheckReport | null = null;
+  const userKey = req.headers.get("x-anthropic-key")?.trim() || undefined;
+
   try {
-    // 1. READ REQUEST
-    const body = await req.json();
-    const { accountId, containerId, workspaceId } = body ?? {};
+    let body: RequestBody;
+    try {
+      body = (await req.json()) as RequestBody;
+    } catch {
+      return NextResponse.json(
+        { success: false, error: "Invalid request body. Expected JSON." },
+        { status: 400 }
+      );
+    }
+
+    const accountId = typeof body.accountId === "string" ? body.accountId.trim() : "";
+    const containerId = typeof body.containerId === "string" ? body.containerId.trim() : "";
+    const workspaceId = typeof body.workspaceId === "string" ? body.workspaceId.trim() : "";
 
     if (!accountId || !containerId || !workspaceId) {
       return NextResponse.json(
-<<<<<<< HEAD
-        {
-          success: false,
-          source: "claude-healthcheck",
-          error: "Missing accountId, containerId, or workspaceId.",
-          errorType: "validation_error",
-        },
-        {
-          status: 400,
-        }
-=======
-        { success: false, error: "Missing accountId, containerId, or workspaceId." },
+        { success: false, error: "Select a GTM account, container, and workspace before running the AI audit." },
         { status: 400 }
->>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
       );
     }
 
-    // 1b. READ USER API KEY (from header, never from a DB)
-    const apiKey = req.headers.get("x-anthropic-key")?.trim();
-    if (!apiKey) {
-      return NextResponse.json(
-        { success: false, code: "no_key", error: "Missing Anthropic API key. Please connect your key." },
-        { status: 401 }
-      );
-    }
-
-    // 2. GOOGLE ACCESS TOKEN
-    const accessToken = await getValidGoogleAccessToken();
-    if (!accessToken) {
-      return NextResponse.json(
-<<<<<<< HEAD
-        {
-          success: false,
-          source: "claude-healthcheck",
-          error: "Missing Google access token.",
-          errorType: "google_auth_error",
-        },
-        {
-          status: 401,
-        }
-=======
-        { success: false, error: "Missing Google access token." },
-        { status: 401 }
->>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
-      );
-    }
-
-    // 3. GTM BASE URL
-    const base =
-      `https://tagmanager.googleapis.com/tagmanager/v2/` +
-      `accounts/${accountId}/containers/${containerId}/workspaces/${workspaceId}`;
-    const opts = { deadlineMs: 8_000 };
-
-<<<<<<< HEAD
-    const base =
-      `https://tagmanager.googleapis.com/tagmanager/v2/` +
-      `accounts/${accountId}/` +
-      `containers/${containerId}/` +
-      `workspaces/${workspaceId}`;
-
-    const opts = {
-      deadlineMs: 8_000,
-    };
-
-    /* =========================================================
-       4. FETCH TAGS / TRIGGERS / VARIABLES
-    ========================================================= */
-
-    const [
-      tagsRes,
-      triggersRes,
-      variablesRes,
-    ] = await Promise.all([
-      gtmList<GtmRecord>({
-        url: `${base}/tags`,
-        accessToken,
-        listKey: "tag",
-        options: opts,
-      }),
-
-      gtmList<GtmRecord>({
-        url: `${base}/triggers`,
-        accessToken,
-        listKey: "trigger",
-        options: opts,
-      }),
-
-      gtmList<GtmRecord>({
-        url: `${base}/variables`,
-        accessToken,
-        listKey: "variable",
-        options: opts,
-      }),
-=======
-    // 4. FETCH TAGS / TRIGGERS / VARIABLES
-    const [tagsRes, triggersRes, variablesRes] = await Promise.all([
-      gtmList<GtmRecord>({ url: `${base}/tags`, accessToken, listKey: "tag", options: opts }),
-      gtmList<GtmRecord>({ url: `${base}/triggers`, accessToken, listKey: "trigger", options: opts }),
-      gtmList<GtmRecord>({ url: `${base}/variables`, accessToken, listKey: "variable", options: opts }),
->>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
-    ]);
-
-    // 5. CHECK GTM FAILURES
-    const hardFailures = [tagsRes, triggersRes, variablesRes].filter(
-      (r) => r.error && r.items.length === 0
-    );
-    if (hardFailures.length > 0) {
-      return NextResponse.json(
-<<<<<<< HEAD
-        {
-          success: false,
-          source: "claude-healthcheck",
-          error: "Failed to fetch GTM data.",
-          errorType: "gtm_api_error",
-          details: hardFailures.map(
-            (result) => result.error
-          ),
-        },
-        {
-          status: 502,
-        }
-=======
-        { success: false, error: "Failed to fetch GTM data.", details: hardFailures.map((r) => r.error) },
-        { status: 502 }
->>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
-      );
-    }
-
-    // 6. DATA
-    const tags = tagsRes.items;
-    const triggers = triggersRes.items;
-    const variables = variablesRes.items;
-
-    // 7. FUNCTIONAL HEALTH CHECK
-    const rawReport = runHealthCheck({ tags, triggers, variables, accountId, containerId, workspaceId });
-
-    // 8. NORMALIZE
-    type ResultRow = {
-      affectedTags?: unknown[];
-      affectedTriggers?: unknown[];
-      affectedVariables?: unknown[];
-      [key: string]: unknown;
-    };
-    const normalizedResults = ((rawReport.results || []) as ResultRow[]).map((result) => ({
-      ...result,
-      affectedTags: (result.affectedTags ?? []).map(affectedItem),
-      affectedTriggers: (result.affectedTriggers ?? []).map(affectedItem),
-      affectedVariables: (result.affectedVariables ?? []).map(affectedItem),
-    }));
-
-    // 9. FULL REPORT
-    const healthReport = {
-      ...rawReport,
-      results: normalizedResults,
-      truncated:
-        Boolean(tagsRes.truncated) || Boolean(triggersRes.truncated) || Boolean(variablesRes.truncated),
-      counts: { tags: tags.length, triggers: triggers.length, variables: variables.length },
-    };
-
-    // 10. RAW CONTAINER FOR CLAUDE
-    const containerExport = { tag: tags, trigger: triggers, variable: variables };
-
-    // 11. PROMPT (unchanged)
-    const prompt = `
-You are an expert Google Tag Manager consultant.
-
-You are auditing a live GTM workspace.
-
-Below is the raw GTM container data containing:
-
-- Tags
-- Triggers
-- Variables
-
-Analyze the actual configuration and identify real tracking,
-configuration, duplication, cleanup, consent, trigger,
-variable, and implementation problems.
-
-Do NOT assume that every item is problematic.
-
-Use your own GTM expertise and inspect the actual data.
-
-IMPORTANT:
-
-- Do not invent tags, triggers, or variables.
-- Only mention items that actually exist in the provided data.
-- If something cannot be determined from the data, say so.
-- Do not assume that every "googtag" is a GA4 tag.
-- Check tag types and parameters carefully.
-- Consider trigger relationships.
-- Consider variable references.
-- Consider paused tags.
-- Consider duplicate or very similar configurations.
-- Consider overly broad triggers.
-- Consider unused assets.
-- Consider legacy implementations.
-- Consider consent configuration when evidence exists.
-- Consider Custom HTML risks.
-- Consider GA4 and Google Ads configuration where applicable.
-
-Return ONLY normal Markdown text.
-
-Do NOT return JSON.
-
-Do NOT wrap the response in a code block.
-
-Use exactly these sections:
-
-## Critical Issues
-## Warnings / Cleanup Opportunities
-## What's Working Well
-## What To Do Next
-
-Keep the response focused and readable.
-The container can contain many assets, so do not unnecessarily
-list every tag, trigger, and variable.
-
-RAW GTM CONTAINER:
-
-${JSON.stringify(containerExport)}
-`;
-
-    // 12. CALL CLAUDE (per-request client using the USER's key)
-    let response;
-    try {
-<<<<<<< HEAD
-      console.log(
-        "Starting Claude HealthCheck request..."
-      );
-
-      console.log(
-        "Claude HealthCheck input counts:",
-        {
-          tags: tags.length,
-          triggers: triggers.length,
-          variables: variables.length,
-        }
-      );
-=======
-      const client = new Anthropic({ apiKey });
->>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
-
-      response = await client.messages.create({
-        model: "claude-sonnet-5",
-        max_tokens: 20000,
-        system: "You are a senior Google Tag Manager implementation and analytics consultant.",
-        messages: [{ role: "user", content: prompt }],
-      });
-
-      console.log(
-        "Claude HealthCheck request completed."
-      );
-
-      console.log(
-        "Claude request ID:",
-        response._request_id ?? "unavailable"
-      );
-
-      console.log(
-        "Claude stop reason:",
-        response.stop_reason
-      );
-
-      console.log(
-        "Claude content blocks:",
-        response.content?.map(
-          (content) => content.type
-        ) ?? []
-      );
-    } catch (claudeError: unknown) {
-<<<<<<< HEAD
-      console.error(
-        "===================================================="
-      );
-
-      console.error(
-        "CLAUDE HEALTHCHECK FAILED"
-      );
-
-      console.error(
-        "===================================================="
-      );
-
-      console.error(
-        "Raw Claude error:",
-        claudeError
-      );
-
-      const details =
-        extractErrorDetails(claudeError);
-
-      const userMessage =
-        buildClaudeUserMessage(details);
-
-      console.error(
-        "Claude error type:",
-        details.errorType
-      );
-
-      console.error(
-        "Claude error status:",
-        details.status
-      );
-
-      console.error(
-        "Claude error message:",
-        details.message
-      );
-
-      console.error(
-        "Claude request ID:",
-        details.requestId ?? "unavailable"
-      );
-
-      console.error(
-        "===================================================="
-      );
-
-      return NextResponse.json(
-        {
-          success: false,
-          source: "claude-healthcheck",
-          error: userMessage,
-          errorType: details.errorType,
-          status:
-            details.status ?? 502,
-          requestId:
-            details.requestId ?? null,
-
-          claude: {
-            failed: true,
-            message: details.message,
-            type: details.errorType,
-            status:
-              details.status ?? null,
-            requestId:
-              details.requestId ?? null,
+    // Users paying with their own token don't need a limit; the shared server connection does.
+    if (!userKey) {
+      const limit = rateLimit(`ai-audit:${clientIp(req)}`, 5, 60 * 60 * 1000);
+      if (!limit.ok) {
+        return NextResponse.json(
+          {
+            success: false,
+            code: "rate_limit",
+            error: `AI audit limit reached. Try again in ${Math.ceil(limit.retryAfterSec / 60)} minute(s).`,
           },
-
-          counts: {
-            tags: tags.length,
-            triggers: triggers.length,
-            variables: variables.length,
-          },
-        },
-        {
-          status:
-            details.status &&
-              details.status >= 400 &&
-              details.status < 600
-              ? 502
-              : 502,
-        }
-      );
+          { status: 429, headers: { "Retry-After": String(limit.retryAfterSec) } }
+        );
+      }
     }
 
-    /* =========================================================
-       13. VERIFY CLAUDE RESPONSE
-    ========================================================= */
-
-    if (!response) {
-      console.error(
-        "Claude returned no response object."
-      );
-
-      return NextResponse.json(
-        {
-          success: false,
-          source: "claude-healthcheck",
-          error:
-            "Claude returned no response object.",
-          errorType:
-            "empty_response_object",
+    /* 1) Scan the live workspace with your existing HealthCheck route (it also checks the Google login). */
+    const scanResponse = await runHealthCheck(
+      new NextRequest(new URL("/api/auth/healthcheck", req.url), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          cookie: req.headers.get("cookie") ?? "",
+          ...(req.headers.get("authorization") ? { authorization: req.headers.get("authorization") as string } : {}),
         },
-        {
-          status: 502,
-        }
-      );
-    }
-
-    /* =========================================================
-       14. EXTRACT CLAUDE TEXT
-    ========================================================= */
-
-    const textBlocks = response.content
-      .filter(
-        (content) =>
-          content.type === "text"
-      )
-      .map((content) => {
-        if (
-          content.type === "text"
-        ) {
-          return content.text;
-        }
-
-        return "";
+        body: JSON.stringify({ accountId, containerId, workspaceId }),
       })
-      .filter(Boolean);
+    );
 
-    const resultText =
-      textBlocks.join("\n\n").trim();
+    const scanData = (await scanResponse.json().catch(() => null)) as HealthCheckResponse | null;
+    healthReport = scanData?.healthReport ?? scanData?.report ?? null;
 
-    /* =========================================================
-       15. EMPTY RESPONSE CHECK
-    ========================================================= */
-=======
-      const failure = classifyAnthropicError(claudeError);
-      console.error("Claude API request failed:", failure.code, failure.message);
+    if (!scanResponse.ok || scanData?.success === false || !healthReport || !Array.isArray(healthReport.results)) {
+      console.error("[ai-audit] HealthCheck scan failed:", scanResponse.status, scanData?.error);
       return NextResponse.json(
-        { success: false, code: failure.code, error: failure.message },
-        { status: failure.status }
+        {
+          success: false,
+          code: "scan_failed",
+          error: scanData?.error ?? `Could not load the live GTM health report (scan returned ${scanResponse.status}).`,
+        },
+        // Never forward the inner status (a 405/404 here would look like THIS route is missing).
+        { status: scanResponse.status === 401 || scanResponse.status === 403 ? scanResponse.status : 502 }
       );
     }
 
-    // 13. EXTRACT TEXT
+    /* 2) Build the facts for the report from the real rule findings. */
+    const facts = buildReportFacts(healthReport);
+
+    const prompt = `You are writing a Google Tag Manager health check report for a live workspace.
+
+The data below comes from a deterministic rule scan of THIS container. Every number and name is real. Use only this data; do not claim to have inspected anything else.
+
+Write the report in Markdown with EXACTLY this structure (no JSON, no code fences, no tables, use "- " bullets only):
+
+## Summary
+- **Score:** <score>% (grade <grade>), <rulesPassed> of <rulesTotal> rules passed and <rulesFailed> failed
+- **Scanned:** <tags> tags, <triggers> triggers, <variables> variables
+- **Tags:** <live> live, <paused> paused   (only if provided)
+- One short sentence on the overall state of the container.
+
+## High severity (<number of HIGH findings>)
+### <Finding title> (<totalAffected> items, <live> live)   <- add the live/paused split only for tag findings that have paused tags
+<One or two sentences on the impact.> **Affected:** <exact names, comma separated; say "+N more" when notListed > 0>. **Fix:** <specific action>.
+
+## Medium severity (<number>)
+(same format as above)
+
+## Low severity (<number>)
+(same format as above)
+
+## What passed
+- <short bullets of the important checks that passed, e.g. one GA4 config tag, Conversion Linker present, no missing dependencies>
+
+## Suggested fix order
+- <5 or fewer prioritised steps, highest impact first>
+
+Rules:
+- Include EVERY finding, grouped under its severity. If a severity has none, write "- None found".
+- Use the exact tag, trigger and variable names provided. Never invent names or numbers.
+- Distinguish live from paused tags whenever the data gives the split; paused tags matter less than live ones.
+- For consent findings, add one short caveat: Google tags using Consent Mode built-in checks are partly covered, but third-party tags (LinkedIn, Bing, Floodlight and similar) are not.
+- Keep it concise and practical.
+
+REPORT DATA:
+${JSON.stringify(facts)}`;
+
+    /* 3) Ask Claude (user's pasted token first, otherwise the server connection). */
+    const { client, model } = await getClaude({ userApiKey: userKey });
+    const response = await client.messages.create({
+      model,
+      max_tokens: 8000,
+      system:
+        "You are a senior Google Tag Manager implementation and analytics consultant. Be specific, accurate and actionable.",
+      messages: [{ role: "user", content: prompt }],
+    });
+
     const resultText = response.content
-      .filter((c) => c.type === "text")
-      .map((c) => (c.type === "text" ? c.text : ""))
-      .filter(Boolean)
+      .filter((block: any) => block.type === "text")
+      .map((block: any) => block.text)
       .join("\n\n")
       .trim();
->>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
 
-    // 14. EMPTY CHECK
     if (!resultText) {
-<<<<<<< HEAD
-      console.error(
-        "===================================================="
-      );
-
-      console.error(
-        "CLAUDE RETURNED EMPTY TEXT"
-      );
-
-      console.error(
-        "===================================================="
-      );
-
-      console.error(
-        "Claude request ID:",
-        response._request_id ??
-        "unavailable"
-      );
-
-      console.error(
-        "Claude stop reason:",
-        response.stop_reason
-      );
-
-      console.error(
-        "Claude content:",
-        response.content
-      );
-
-      console.error(
-        "===================================================="
-      );
-
-      return NextResponse.json(
-        {
-          success: false,
-          source: "claude-healthcheck",
-          error:
-            "Claude returned an empty response.",
-          errorType:
-            "empty_claude_response",
-          requestId:
-            response._request_id ?? null,
-          stopReason:
-            response.stop_reason ?? null,
-          contentTypes:
-            response.content?.map(
-              (content) =>
-                content.type
-            ) ?? [],
-        },
-        {
-          status: 502,
-        }
-      );
+      return NextResponse.json({
+        success: true,
+        mode: "live",
+        fallback: true,
+        healthReport,
+        resultText: buildLocalAudit(healthReport),
+        truncated: false,
+      });
     }
-
-    /* =========================================================
-       16. TOKEN TRUNCATION
-    ========================================================= */
-
-    const truncated =
-      response.stop_reason ===
-      "max_tokens";
-
-    if (truncated) {
-      console.warn(
-        "Claude AI audit reached max_tokens."
-      );
-    }
-
-    /* =========================================================
-       17. SUCCESS
-    ========================================================= */
-
-    console.log(
-      "===================================================="
-    );
-
-    console.log(
-      "CLAUDE HEALTHCHECK SUCCESS"
-    );
-
-    console.log(
-      "===================================================="
-    );
-
-    console.log(
-      "Claude request ID:",
-      response._request_id ??
-      "unavailable"
-    );
-
-    console.log(
-      "Claude stop reason:",
-      response.stop_reason
-    );
-
-    console.log(
-      "Claude result length:",
-      resultText.length
-    );
-
-    console.log(
-      "===================================================="
-    );
 
     return NextResponse.json({
       success: true,
-      source: "claude-healthcheck",
-
-=======
-      console.error("Claude returned an empty response.", { stopReason: response.stop_reason });
-      return NextResponse.json(
-        { success: false, error: "Claude returned an empty response.", stopReason: response.stop_reason },
-        { status: 502 }
-      );
-    }
-
-    // 15. TRUNCATION
-    const truncated = response.stop_reason === "max_tokens";
-    if (truncated) console.warn("Claude AI audit reached max_tokens.");
-
-    // 16. SUCCESS
-    return NextResponse.json({
-      success: true,
->>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
+      mode: "live",
       healthReport,
       resultText,
-      truncated,
-<<<<<<< HEAD
-
-      requestId:
-        response._request_id ?? null,
-
-      stopReason:
-        response.stop_reason ?? null,
-
-      counts: {
-        tags: tags.length,
-        triggers: triggers.length,
-        variables: variables.length,
-      },
+      truncated: response.stop_reason === "max_tokens",
     });
   } catch (error: unknown) {
-    /* =========================================================
-       18. GENERAL ERROR
-    ========================================================= */
+    const notConfigured = error instanceof ClaudeNotConfiguredError;
+    const failure: AnthropicFailure = notConfigured
+      ? { status: 500, code: "no_key", message: "AI audit is not configured." }
+      : classifyAnthropicError(error);
 
-    console.error(
-      "===================================================="
-    );
+    if (notConfigured) console.error("[claude] Not configured:", (error as Error).message);
 
-    console.error(
-      "CLAUDE HEALTHCHECK ROUTE ERROR"
-    );
+    // The user's own token failed: send the code so the page can reopen the "paste token" popup.
+    if (userKey && ["invalid_key", "quota", "rate_limit"].includes(failure.code)) {
+      return NextResponse.json(
+        { success: false, code: failure.code, error: failure.message },
+        { status: failure.code === "rate_limit" ? 429 : 401 }
+      );
+    }
 
-    console.error(
-      "===================================================="
-    );
-
-    console.error(
-      "Raw error:",
-      error
-    );
-
-    const details =
-      extractErrorDetails(error);
-
-    console.error(
-      "Error type:",
-      details.errorType
-    );
-
-    console.error(
-      "Error status:",
-      details.status
-    );
-
-    console.error(
-      "Error message:",
-      details.message
-    );
-
-    console.error(
-      "Request ID:",
-      details.requestId ??
-      "unavailable"
-    );
-
-    console.error(
-      "===================================================="
-    );
+    // Shared connection unavailable: still give the user the rule-based report.
+    if (healthReport && FALLBACK_CODES.includes(failure.code)) {
+      return NextResponse.json({
+        success: true,
+        mode: "live",
+        fallback: true,
+        healthReport,
+        resultText: buildLocalAudit(healthReport),
+        truncated: false,
+      });
+    }
 
     return NextResponse.json(
-      {
-        success: false,
-        source: "claude-healthcheck",
-        error: details.message,
-        errorType: details.errorType,
-        status:
-          details.status ?? 500,
-        requestId:
-          details.requestId ?? null,
-      },
-      {
-        status: 500,
-      }
+      { success: false, code: failure.code, error: failure.message },
+      { status: failure.status }
     );
-=======
-      counts: { tags: tags.length, triggers: triggers.length, variables: variables.length },
-    });
-  } catch (error: unknown) {
-    console.error("Claude HealthCheck Route Error:", error);
-    const message = error instanceof Error ? error.message : "Unknown server error.";
-    return NextResponse.json({ success: false, error: message }, { status: 500 });
->>>>>>> fb398abbd9b09b942825d19bc2c89b573090ef81
   }
 }

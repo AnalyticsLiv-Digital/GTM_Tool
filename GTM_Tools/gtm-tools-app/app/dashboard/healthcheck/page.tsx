@@ -18,11 +18,12 @@ import {
   Loader2,
   ChevronDown,
   ChevronRight,
+  Upload,
 } from "lucide-react";
 
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { useRef, useState, type ReactNode } from "react";
+import { useRef, useState, type ChangeEvent, type ReactNode } from "react";
 
 import type { HealthCheckResult } from "@/lib/healthcheck/types";
 import { useDashboardStore } from "@/app/store/useDashboardStore";
@@ -41,83 +42,39 @@ type HealthCheckReport = {
 
 type HealthCheckApiResponse = {
   success?: boolean;
-  healthReport?: unknown;
-  report?: unknown;
-  results?: HealthCheckResult[];
+  healthReport?: HealthCheckReport;
+  report?: HealthCheckReport;
   score?: number;
-  scoreReliable?: boolean;
-  scoreLabel?: string;
   passedCount?: number;
   failedCount?: number;
-  counts?: {
-    tags?: number;
-    triggers?: number;
-    variables?: number;
-  };
-  warnings?: string[];
+  counts?: HealthCheckCounts;
+  results?: HealthCheckResult[];
   error?: string;
-  details?: string;
 };
 
 /* =====================================================
    HELPERS
 ===================================================== */
 
-function normalizeHealthReport(
-  data: HealthCheckApiResponse | null | undefined
-): HealthCheckReport | null {
-  if (!data) return null;
-
-  const candidate =
-    data.healthReport ??
-    data.report ??
-    data;
-
-  if (!candidate || typeof candidate !== "object") {
-    return null;
-  }
+function normalizeHealthReport(data: HealthCheckApiResponse | null | undefined): HealthCheckReport | null {
+  const candidate = data?.healthReport ?? data?.report ?? data;
+  if (!candidate || typeof candidate !== "object") return null;
 
   const value = candidate as any;
-
-  // Accept both nested and top-level results.
-  const results = Array.isArray(value.results)
-    ? value.results
-    : Array.isArray(data.results)
-      ? data.results
-      : [];
-
-  if (!Array.isArray(results)) return null;
+  if (!Array.isArray(value.results)) return null;
 
   return {
-    score: Number(value.score ?? data.score ?? 0),
-
-    passedCount: Number(
-      value.passedCount ??
-      data.passedCount ??
-      results.filter((r: any) => r?.passed === true).length
-    ),
-
-    failedCount: Number(
-      value.failedCount ??
-      data.failedCount ??
-      results.filter((r: any) => r?.passed === false).length
-    ),
-
-    counts: value.counts ?? data.counts
+    score: Number(value.score ?? 0),
+    passedCount: Number(value.passedCount ?? value.results.filter((r: any) => r?.passed === true).length),
+    failedCount: Number(value.failedCount ?? value.results.filter((r: any) => r?.passed === false).length),
+    counts: value.counts
       ? {
-        tags: Number(
-          value.counts?.tags ?? data.counts?.tags ?? 0
-        ),
-        triggers: Number(
-          value.counts?.triggers ?? data.counts?.triggers ?? 0
-        ),
-        variables: Number(
-          value.counts?.variables ?? data.counts?.variables ?? 0
-        ),
-      }
+          tags: Number(value.counts.tags ?? 0),
+          triggers: Number(value.counts.triggers ?? 0),
+          variables: Number(value.counts.variables ?? 0),
+        }
       : undefined,
-
-    results,
+    results: value.results,
   };
 }
 
@@ -134,8 +91,19 @@ function affectedItemCount(r: HealthCheckResult): number {
   return allAffected(r).length;
 }
 
+/** Items a rule examined that did NOT fail (shown on passed rows). */
+function passedItems(r?: HealthCheckResult | null): any[] {
+  const any = r as any;
+  return [any?.passedTags, any?.passedTriggers, any?.passedVariables].flatMap((list) => (Array.isArray(list) ? list : []));
+}
+
+function passedTotal(r: HealthCheckResult): number {
+  const c = (r as any)?.passedCounts;
+  return c ? Number(c.tags ?? 0) + Number(c.triggers ?? 0) + Number(c.variables ?? 0) : passedItems(r).length;
+}
+
 function rowHasDetail(r: HealthCheckResult): boolean {
-  return Boolean(r.recommendation || r.description || affectedItemCount(r) > 0);
+  return Boolean(r.recommendation || r.description || affectedItemCount(r) > 0 || passedTotal(r) > 0);
 }
 
 async function fetchReport(ids: { accountId: string; containerId: string; workspaceId: string }): Promise<HealthCheckReport> {
@@ -160,6 +128,74 @@ function getSelectedIds() {
   return { accountId: s.selectedAccountId, containerId: s.selectedContainerId, workspaceId: s.selectedWorkspaceId };
 }
 
+type ImportedContainer = {
+  fileName: string;
+  name: string;
+  accountId: string;
+  containerId: string;
+  workspaceId: string;
+  tags: any[];
+  triggers: any[];
+  variables: any[];
+};
+
+/** Reads a GTM "Export Container" JSON file (or a flat {tags,triggers,variables} object). */
+function parseContainerExport(text: string, fileName: string): ImportedContainer {
+  let root: any;
+  try {
+    root = JSON.parse(text);
+  } catch {
+    throw new Error("That file is not valid JSON.");
+  }
+
+  const cv = root?.containerVersion ?? root;
+  const tags = cv?.tag ?? cv?.tags ?? [];
+  const triggers = cv?.trigger ?? cv?.triggers ?? [];
+  const variables = cv?.variable ?? cv?.variables ?? [];
+
+  if (!Array.isArray(tags) || !Array.isArray(triggers) || !Array.isArray(variables) || tags.length + triggers.length + variables.length === 0) {
+    throw new Error("This file doesn't look like a GTM container export (Admin → Export Container).");
+  }
+
+  // Exports don't contain the workspace, but the file name usually does: GTM-XXXX_workspace215.json
+  const workspaceFromName = fileName.match(/workspace(\d+)/i)?.[1];
+
+  return {
+    fileName,
+    name: cv?.container?.name || cv?.container?.publicId || fileName,
+    accountId: String(cv?.accountId ?? "0"),
+    containerId: String(cv?.containerId ?? "0"),
+    workspaceId: workspaceFromName ?? "0",
+    tags,
+    triggers,
+    variables,
+  };
+}
+
+async function fetchImportedReport(c: ImportedContainer): Promise<HealthCheckReport> {
+  const res = await fetch("/api/auth/healthcheck/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      containerExport: {
+        accountId: c.accountId,
+        containerId: c.containerId,
+        workspaceId: c.workspaceId,
+        tags: c.tags,
+        triggers: c.triggers,
+        variables: c.variables,
+      },
+    }),
+  });
+  const data = (await res.json().catch(() => null)) as HealthCheckApiResponse | null;
+  if (!res.ok || data?.success === false) {
+    throw new Error(data?.error || `Import failed (${res.status}).`);
+  }
+  const normalized = normalizeHealthReport(data);
+  if (!normalized) throw new Error("The import returned an invalid report.");
+  return normalized;
+}
+
 /* =====================================================
    PAGE
 ===================================================== */
@@ -178,107 +214,82 @@ export default function HealthCheckPage() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatSending, setChatSending] = useState(false);
+  const [imported, setImported] = useState<ImportedContainer | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
+
+  /* Run buttons work with a live workspace OR an imported container file. */
+  const canRun = Boolean(store.selectedWorkspaceId) || Boolean(imported);
 
   /* Prevents two chat requests when Enter + click happen together. */
   const chatRequestLock = useRef(false);
 
-  /* ---------- RUN FUNCTIONAL HEALTH CHECK ---------- */
+  /* ---------- IMPORT A CONTAINER JSON ---------- */
 
-  const handleRunHealthCheck = async () => {
+  const handleImportFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = ""; // allow picking the same file again
+    if (!file) return;
+
+    setPageError(null);
     setClaudeError(null);
-
-    const {
-      selectedAccountId: accountId,
-      selectedContainerId: containerId,
-      selectedWorkspaceId: workspaceId,
-    } = useDashboardStore.getState();
-
-    if (!accountId || !containerId || !workspaceId) {
-      setClaudeError(
-        "Select an account, container, and workspace before running the audit."
-      );
-      return;
-    } 
+    setClaudeNotice(null);
 
     try {
       setLoading(true);
+      const container = parseContainerExport(await file.text(), file.name);
+      const nextReport = await fetchImportedReport(container);
 
-      console.log("[HealthCheck] Starting audit", {
-        accountId,
-        containerId,
-        workspaceId,
-      });
-
-      const res = await fetch("/api/auth/healthcheck", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          accountId,
-          containerId,
-          workspaceId,
-        }),
-        cache: "no-store",
-      });
-
-      const responseText = await res.text();
-
-      let data: HealthCheckApiResponse | null = null;
-
-      try {
-        data = responseText
-          ? JSON.parse(responseText)
-          : null;
-      } catch {
-        throw new Error(
-          `HealthCheck returned invalid JSON. HTTP ${res.status}.`
-        );
-      }
-
-      console.log("[HealthCheck] API response:", data);
-
-      if (!res.ok || data?.success === false) {
-        throw new Error(
-          data?.error ||
-          data?.details ||
-          `HealthCheck request failed. HTTP ${res.status}.`
-        );
-      }
-
-      const nextReport = normalizeHealthReport(data);
-
-      if (!nextReport) {
-        console.error(
-          "[HealthCheck] Could not normalize response:",
-          data
-        );
-
-        throw new Error(
-          "The API responded, but no valid results array was found. Check the server response."
-        );
-      }
-
-      console.log("[HealthCheck] Report generated:", {
-        score: nextReport.score,
-        passed: nextReport.passedCount,
-        failed: nextReport.failedCount,
-        totalResults: nextReport.results.length,
-      });
-
+      setImported(container);
       setReport(nextReport);
       setClaudeText(null);
       setClaudeTruncated(false);
       setChatMessages([]);
-      setClaudeError(null);
     } catch (error) {
-      console.error("[HealthCheck] Run failed:", error);
+      console.error("Import Error:", error);
+      setPageError(error instanceof Error ? error.message : "Unable to import this file.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      setClaudeError(
-        error instanceof Error
-          ? error.message
-          : "Something went wrong while running HealthCheck."
-      );
+  const handleUseLiveWorkspace = () => {
+    setImported(null);
+    setReport(null);
+    setClaudeText(null);
+    setClaudeTruncated(false);
+    setChatMessages([]);
+    setPageError(null);
+    setClaudeError(null);
+    setClaudeNotice(null);
+  };
+
+  /* ---------- RUN FUNCTIONAL HEALTH CHECK ---------- */
+
+  const handleRunHealthCheck = async () => {
+    if (loading || !canRun) return;
+
+    setPageError(null);
+    setClaudeError(null);
+    setClaudeNotice(null);
+
+    const ids = imported ? null : getSelectedIds();
+    if (!imported && !ids) {
+      setPageError("Select an account, container, and workspace first.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const normalized = imported ? await fetchImportedReport(imported) : await fetchReport(ids!);
+      setReport(normalized);
+
+      /* A fresh scan means the previous Claude audit may be out of date. */
+      setClaudeText(null);
+      setClaudeTruncated(false);
+      setChatMessages([]);
+    } catch (error) {
+      console.error("Functional HealthCheck Error:", error);
+      setPageError(error instanceof Error ? error.message : "Unable to run HealthCheck.");
     } finally {
       setLoading(false);
     }
@@ -287,13 +298,15 @@ export default function HealthCheckPage() {
   /* ---------- CLAUDE AI AUDIT (no key needed in the browser) ---------- */
 
   const handleClaudeHealthCheck = async () => {
-    if (claudeLoading || !store.selectedWorkspaceId) return;
+    if (claudeLoading || !canRun) return;
 
     setClaudeError(null);
     setClaudeNotice(null);
     setPageError(null);
 
-    const ids = getSelectedIds();
+    const ids = imported
+      ? { accountId: imported.accountId, containerId: imported.containerId, workspaceId: imported.workspaceId }
+      : getSelectedIds();
     if (!ids) {
       setClaudeError("Select an account, container, and workspace before running the audit.");
       return;
@@ -307,7 +320,14 @@ export default function HealthCheckPage() {
       const aiRes = await fetch("/api/auth/healthcheck/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(ids),
+        body: JSON.stringify(
+          imported
+            ? {
+                ...ids,
+                importedContainerData: { tags: imported.tags, triggers: imported.triggers, variables: imported.variables },
+              }
+            : ids
+        ),
       });
 
       const aiData = (await aiRes.json().catch(() => null)) as any;
@@ -324,7 +344,7 @@ export default function HealthCheckPage() {
       if (fresh) {
         setReport(fresh);
       } else if (!report) {
-        setReport(await fetchReport(ids));
+        setReport(imported ? await fetchImportedReport(imported) : await fetchReport(ids));
       }
 
       setClaudeText(text);
@@ -459,6 +479,15 @@ export default function HealthCheckPage() {
 
   return (
     <div>
+      <input
+        ref={importInputRef}
+        type="file"
+        accept=".json,application/json"
+        onChange={handleImportFile}
+        className="hidden"
+        aria-label="Import a GTM container JSON file"
+      />
+
       {/* HERO */}
 
       {!report && (
@@ -483,7 +512,7 @@ export default function HealthCheckPage() {
               <button
                 type="button"
                 onClick={handleRunHealthCheck}
-                disabled={loading || !store.selectedWorkspaceId}
+                disabled={loading || !canRun}
                 className="btn-primary px-5! py-2.5! disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? (
@@ -502,7 +531,7 @@ export default function HealthCheckPage() {
               <button
                 type="button"
                 onClick={handleClaudeHealthCheck}
-                disabled={claudeLoading || !store.selectedWorkspaceId}
+                disabled={claudeLoading || !canRun}
                 className="btn-secondary px-5! py-2.5! disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {claudeLoading ? (
@@ -517,9 +546,19 @@ export default function HealthCheckPage() {
                   </>
                 )}
               </button>
+
+              <button
+                type="button"
+                onClick={() => importInputRef.current?.click()}
+                disabled={loading}
+                className="btn-secondary px-5! py-2.5! disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Upload size={14} />
+                Import container JSON
+              </button>
             </div>
 
-            {!store.selectedWorkspaceId && (
+            {!store.selectedWorkspaceId && !imported && (
               <p className="mt-4 text-[12.5px] text-(--warn)">Select a workspace before running the audit.</p>
             )}
 
@@ -528,17 +567,7 @@ export default function HealthCheckPage() {
             )}
 
             {claudeError && (
-              <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 p-4">
-                <div className="flex items-start gap-2">
-                  <AlertTriangle size={17} className="mt-0.5 shrink-0 text-red-500" />
-                  <div>
-                    <p className="text-sm font-semibold text-red-500">
-                      HealthCheck Error
-                    </p>
-                    <p className="mt-1 text-sm text-fg">{claudeError}</p>
-                  </div>
-                </div>
-              </div>
+              <div className="mt-5 px-4 py-3 rounded-lg border border-(--danger)/25 bg-(--danger)/8 text-(--danger) text-[13px]">{claudeError}</div>
             )}
 
             {claudeNotice && (
@@ -566,6 +595,13 @@ export default function HealthCheckPage() {
                 <p className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-faint mb-2">HealthCheck report</p>
 
                 <h2 className="text-[24px] md:text-[28px] font-semibold text-fg tracking-[-0.02em]">Container audit</h2>
+
+                {imported && (
+                  <p className="mt-1 text-[12.5px] text-muted">
+                    Source: imported file <span className="font-mono text-fg">{imported.fileName}</span>
+                    {imported.name && imported.name !== imported.fileName ? ` · ${imported.name}` : ""}
+                  </p>
+                )}
 
                 <p className="text-[13px] text-muted mt-2 flex items-center gap-3">
                   <span className="inline-flex items-center gap-1.5">
@@ -615,6 +651,17 @@ export default function HealthCheckPage() {
                 {claudeLoading ? <Loader2 size={13} className="animate-spin" /> : <Bot size={13} />}
                 {claudeLoading ? "Analyzing…" : "Claude AI Audit"}
               </button>
+
+              <button type="button" onClick={() => importInputRef.current?.click()} disabled={loading} className="btn-secondary py-2! disabled:opacity-50">
+                <Upload size={13} />
+                Import container JSON
+              </button>
+
+              {imported && (
+                <button type="button" onClick={handleUseLiveWorkspace} className="btn-secondary py-2!">
+                  Use live workspace
+                </button>
+              )}
 
               <button type="button" onClick={handleDownloadPDF} className="btn-primary py-2!">
                 <Download size={13} />
@@ -932,6 +979,13 @@ function FragmentRow({
             <span className="inline-flex items-center justify-center min-w-5.5 px-1.5 py-0.5 rounded-md text-[11.5px] font-mono bg-(--danger)/10 text-(--danger) border border-(--danger)/20">
               {affected}
             </span>
+          ) : passedTotal(r) > 0 ? (
+            <span
+              title="Items checked that passed"
+              className="inline-flex items-center justify-center min-w-5.5 px-1.5 py-0.5 rounded-md text-[11.5px] font-mono bg-accent-soft text-accent border border-accent/25"
+            >
+              ✓ {passedTotal(r)}
+            </span>
           ) : (
             <span className="text-faint text-[12px]">—</span>
           )}
@@ -970,6 +1024,10 @@ function FragmentRow({
             <AffectedList label="Unused Tags" items={(r as any).unusedTags} />
             <AffectedList label="Unused Triggers" items={(r as any).unusedTriggers} />
             <AffectedList label="Unused Variables" items={(r as any).unusedVariables} />
+
+            <AffectedList label="Checked tags — passed" items={(r as any).passedTags} total={(r as any).passedCounts?.tags} tone="pass" />
+            <AffectedList label="Checked triggers — passed" items={(r as any).passedTriggers} total={(r as any).passedCounts?.triggers} tone="pass" />
+            <AffectedList label="Checked variables — passed" items={(r as any).passedVariables} total={(r as any).passedCounts?.variables} tone="pass" />
           </td>
         </tr>
       )}
@@ -1026,8 +1084,9 @@ function ClaudeAuditChatBlock({
             {chatMessages.map((message, index) => (
               <div key={`${index}-${message.role}`} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
                 <div
-                  className={`max-w-[85%] rounded-lg px-3.5 py-2 text-[13px] leading-relaxed ${message.role === "user" ? "bg-emerald-600 text-white whitespace-pre-wrap" : "bg-card-hi border border-line text-fg"
-                    }`}
+                  className={`max-w-[85%] rounded-lg px-3.5 py-2 text-[13px] leading-relaxed ${
+                    message.role === "user" ? "bg-emerald-600 text-white whitespace-pre-wrap" : "bg-card-hi border border-line text-fg"
+                  }`}
                 >
                   {message.role === "assistant" ? renderMarkdownLite(message.content) : message.content}
                 </div>
@@ -1200,15 +1259,37 @@ function SeverityBadge({ severity }: { severity: string }) {
   );
 }
 
-function AffectedList({ label, items }: { label: string; items?: any[] }) {
+function AffectedList({
+  label,
+  items,
+  total,
+  tone = "fail",
+}: {
+  label: string;
+  items?: any[];
+  total?: number;
+  tone?: "fail" | "pass";
+}) {
+  const [showAll, setShowAll] = useState(false);
   if (!items || items.length === 0) return null;
+
+  const LIMIT = 30;
+  const visible = showAll ? items : items.slice(0, LIMIT);
+  const hiddenCount = Math.max((total ?? items.length) - visible.length, 0);
+
+  const chip =
+    tone === "pass"
+      ? "rounded-md border border-accent/25 bg-accent-soft px-3 py-1.5 text-xs font-medium text-accent"
+      : "rounded-md border border-line bg-card px-3 py-1.5 text-xs font-medium text-fg";
 
   return (
     <div className="mt-4">
-      <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">{label}</h4>
+      <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+        {label} <span className="font-mono normal-case text-faint">({total ?? items.length})</span>
+      </h4>
 
       <div className="flex flex-wrap gap-2">
-        {items.map((item: any, index) => {
+        {visible.map((item: any, index) => {
           const content = item?.name || item?.id || "Unnamed";
 
           if (item?.editUrl) {
@@ -1219,7 +1300,7 @@ function AffectedList({ label, items }: { label: string; items?: any[] }) {
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={(e) => e.stopPropagation()}
-                className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-900 hover:bg-blue-50 transition-colors dark:bg-gray-800 dark:border-gray-600 dark:text-white dark:hover:bg-gray-700"
+                className={`${chip} hover:opacity-80 transition-opacity`}
               >
                 {content}
               </a>
@@ -1227,11 +1308,26 @@ function AffectedList({ label, items }: { label: string; items?: any[] }) {
           }
 
           return (
-            <span key={index} className="rounded-md border border-line bg-card px-3 py-1.5 text-xs font-medium text-fg">
+            <span key={index} className={chip}>
               {content}
             </span>
           );
         })}
+
+        {!showAll && items.length > LIMIT && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowAll(true);
+            }}
+            className="rounded-md border border-line px-3 py-1.5 text-xs text-muted hover:text-fg"
+          >
+            Show {items.length - LIMIT} more
+          </button>
+        )}
+
+        {hiddenCount > 0 && showAll && <span className="px-2 py-1.5 text-xs text-faint">+{hiddenCount} not listed</span>}
       </div>
     </div>
   );
