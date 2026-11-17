@@ -73,6 +73,7 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
     setSelectedWorkspaceId("");
     setSelectedWorkspaceName("");
 
+    // reset search boxes whenever modal opens
     setAccountSearch("");
     setContainerSearch("");
     setWorkspaceSearch("");
@@ -89,6 +90,10 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
     setSelectedAccountId(account.accountId);
     setSelectedAccountName(account.name);
 
+    // reset downstream search when account changes
+    setContainerSearch("");
+    setWorkspaceSearch("");
+
     // Hide workspace immediately
     useDashboardStore.getState().setWorkspaces([]);
     setContainerSearch("");
@@ -101,6 +106,7 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
   const handleContainerSelect = async (container: any) => {
     setSelectedWorkspaceId("");
     setSelectedWorkspaceName("");
+    setWorkspaceSearch("");
     setWorkspaceSearch("");
     if (selectedContainerId === container.containerId) {
       await fetchWorkspaces();
@@ -359,7 +365,6 @@ export default function UnifiedSelectionModal({ show, onClose }: Props) {
     </div>
   );
 }
-
 /* ──────────────────────────────────────── helpers */
 
 function Pane({
@@ -368,13 +373,23 @@ function Pane({
   action,
   search,
   children,
+  searchValue,
+  onSearchChange,
+  searchPlaceholder,
+  searchDisabled,
 }: {
   label: string;
   width: string;
   action?: React.ReactNode;
   search?: React.ReactNode;
   children: React.ReactNode;
+  searchValue?: string;
+  onSearchChange?: (value: string) => void;
+  searchPlaceholder?: string;
+  searchDisabled?: boolean;
 }) {
+  const hasSearch = typeof onSearchChange === "function";
+
   return (
     <div className={`${width} flex flex-col border-r border-line last:border-r-0 overflow-hidden`}>
       <div className="px-4 py-2.5 border-b border-line bg-card-hi flex items-center justify-between">

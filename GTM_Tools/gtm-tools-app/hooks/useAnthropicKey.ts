@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { clearApiKey, hasApiKey, loadApiKey, saveApiKey } from "@/lib/apiKeyStore";
 
 export type AnthropicKeyStatus =
   | "unknown"
@@ -10,26 +9,19 @@ export type AnthropicKeyStatus =
   | "connected"
   | "disconnected";
 
+// The key lives in an HttpOnly cookie, so this hook only ever sees its status.
 export function useAnthropicKey() {
   const [status, setStatus] = useState<AnthropicKeyStatus>("unknown");
   const [checking, setChecking] = useState(false);
 
   const verify = useCallback(async (): Promise<boolean> => {
-    const key = await loadApiKey();
-    if (!key) {
-      setStatus("no_key");
-      return false;
-    }
     setChecking(true);
     setStatus("checking");
     try {
-      const res = await fetch("/api/auth/healthcheck/verify", {
-        method: "POST",
-        headers: { "x-anthropic-key": key },
-      });
+      const res = await fetch("/api/auth/healthcheck/verify");
       const data = await res.json();
       const ok = res.ok && data?.connected === true;
-      setStatus(ok ? "connected" : "disconnected");
+      setStatus(ok ? "connected" : data?.code === "no_key" || data?.code === "invalid_key" ? "no_key" : "disconnected");
       return ok;
     } catch {
       setStatus("disconnected");
@@ -40,11 +32,10 @@ export function useAnthropicKey() {
   }, []);
 
   useEffect(() => {
-    if (hasApiKey()) void verify();
-    else setStatus("no_key");
+    void verify();
   }, [verify]);
 
-  // Verify BEFORE saving so a bad key is never stored.
+  // The server verifies BEFORE storing, so a bad key is never saved.
   const connect = useCallback(
     async (key: string): Promise<{ ok: boolean; error?: string }> => {
       const clean = key.trim();
@@ -57,7 +48,6 @@ export function useAnthropicKey() {
         });
         const data = await res.json();
         if (res.ok && data?.connected === true) {
-          await saveApiKey(clean);
           setStatus("connected");
           return { ok: true };
         }
@@ -73,15 +63,13 @@ export function useAnthropicKey() {
     []
   );
 
-  const disconnect = useCallback(() => {
-    clearApiKey();
+  const disconnect = useCallback(async () => {
     setStatus("no_key");
+    await fetch("/api/auth/healthcheck/verify", { method: "DELETE" }).catch(() => null);
   }, []);
 
-  // Mark disconnected without deleting the stored key (e.g. transient rate limit).
-  const markDisconnected = useCallback(() => setStatus("disconnected"), []);
+  // The server rejected the stored key and already cleared the cookie.
+  const markNoKey = useCallback(() => setStatus("no_key"), []);
 
-  const getKey = useCallback(() => loadApiKey(), []);
-
-  return { status, checking, verify, connect, disconnect, markDisconnected, getKey };
+  return { status, checking, verify, connect, disconnect, markNoKey };
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { Sun, Moon } from "lucide-react";
 
 type Theme = "light" | "dark";
@@ -16,17 +16,22 @@ export const themeInitScript = `(function(){try{
 }catch(e){document.documentElement.setAttribute('data-theme','light');}})();`;
 
 function getCurrent(): Theme {
-  if (typeof document === "undefined") return "light";
   const attr = document.documentElement.getAttribute("data-theme");
   return attr === "dark" ? "dark" : "light";
 }
 
-export function useTheme() {
-  const [theme, setThemeState] = useState<Theme | null>(null);
+function subscribe(onChange: () => void) {
+  const observer = new MutationObserver(onChange);
+  observer.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["data-theme"],
+  });
+  return () => observer.disconnect();
+}
 
-  useEffect(() => {
-    setThemeState(getCurrent());
-  }, []);
+export function useTheme() {
+  // null on the server and during hydration, since the theme is only known in the browser
+  const theme = useSyncExternalStore<Theme | null>(subscribe, getCurrent, () => null);
 
   const setTheme = (next: Theme) => {
     document.documentElement.classList.add("theme-changing");
@@ -36,7 +41,6 @@ export function useTheme() {
     } catch {
       /* ignore */
     }
-    setThemeState(next);
     // remove the class after the next paint so transitions resume normally
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {

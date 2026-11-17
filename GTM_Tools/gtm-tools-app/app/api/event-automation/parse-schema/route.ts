@@ -184,18 +184,18 @@ export async function POST(
         file.name
       );
 
-    console.log(
-      "[Event Automation] Excel parsed:",
-      {
-        sheets: parsed.sheets,
-        events:
-          parsed.events.length,
-        commonEvents:
-          parsed.commonEvents.length,
-        uniqueEvents:
-          parsed.uniqueEvents.length,
-      }
-    );
+    // console.log(
+    //   "[Event Automation] Excel parsed:",
+    //   {
+    //     sheets: parsed.sheets,
+    //     events:
+    //       parsed.events.length,
+    //     commonEvents:
+    //       parsed.commonEvents.length,
+    //     uniqueEvents:
+    //       parsed.uniqueEvents.length,
+    //   }
+    // );
 
     // -------------------------------------------------
     // RESPONSE

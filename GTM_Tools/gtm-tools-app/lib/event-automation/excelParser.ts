@@ -1,7 +1,8 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import * as XLSX from "xlsx";
 
-import type {EventSchemaRow,ParsedEventSchema,EventParameter,SelectorType,} from "./types";
+import type {EventSchemaRow,ParsedEventSchema,SelectorType,} from "./types";
+import type { EventSchemaParameter } from "@/components/event-automation/page";
 
 // =====================================================
 // TYPES
@@ -150,8 +151,8 @@ function parseCustomDimensions(
 
 function parseParameters(
   row: Record<string, unknown>
-): EventParameter[] {
-  const parameters: EventParameter[] = [];
+): EventSchemaParameter[] {
+  const parameters: EventSchemaParameter[] = [];
 
   for (const [key, value] of Object.entries(row)) {
     const normalizedKey = normalizeHeader(key);

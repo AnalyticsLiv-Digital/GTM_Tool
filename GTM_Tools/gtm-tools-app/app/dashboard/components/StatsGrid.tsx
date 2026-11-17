@@ -6,6 +6,7 @@ import {
   Tag,
   Zap,
   BarChart2,
+  Database,
   LayoutTemplate,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -49,7 +50,7 @@ export default function StatsGrid(props: StatsGridProps) {
       label: "Tags",
       value: props.tagsCount,
       icon: <Tag size={18} strokeWidth={2} />,
-      accent: "#10b981",
+      accent: "#3b82f6",
       action: () => router.push("/dashboard/tags"),
       disabled: !store.selectedWorkspaceId,
     },
@@ -64,8 +65,8 @@ export default function StatsGrid(props: StatsGridProps) {
     {
       label: "Variables",
       value: props.variablesCount,
-      icon: <BarChart2 size={18} strokeWidth={2} />,
-      accent: "#ef4444",
+      icon: <Database size={18} strokeWidth={2} />,
+      accent: "#10b981",
       action: () => router.push("/dashboard/variables"),
       disabled: !store.selectedWorkspaceId,
     },

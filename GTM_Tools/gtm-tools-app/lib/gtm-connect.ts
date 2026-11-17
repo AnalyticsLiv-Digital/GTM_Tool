@@ -19,9 +19,12 @@ import {
 } from "./gtm-server-templates";
 
 import {
-  parseTemplateParameters,
-  buildTemplateParameters,
+  getTemplateFields,
 } from "./gtm-template-parser";
+
+import {
+  buildTemplateParameters,
+} from "./gtm-template-parameters";
 
 export type ConnectGTMOptions = {
   accessToken: string;
@@ -102,7 +105,7 @@ export async function connectGTM(
    * ======================================
    */
 
-  const triggerResult =
+  const trigger =
     await getOrCreateServerEventTrigger(
       options.accessToken,
 
@@ -114,9 +117,6 @@ export async function connectGTM(
 
       options.eventName
     );
-
-  const trigger =
-    triggerResult.trigger;
 
   if (!trigger.triggerId) {
     throw new Error(
@@ -152,7 +152,7 @@ export async function connectGTM(
    */
 
   const fields =
-    parseTemplateParameters(
+    getTemplateFields(
       template.templateData
     );
 
@@ -177,7 +177,7 @@ export async function connectGTM(
    * ======================================
    */
 
-  const tagResult =
+  const tag =
     await getOrCreateServerTag(
       options.accessToken,
 
@@ -187,18 +187,13 @@ export async function connectGTM(
 
       options.server.workspaceId,
 
-      {
-        name:
-          `Automation - ${template.name} - ${options.eventName}`,
+      `Automation - ${template.name} - ${options.eventName}`,
 
-        type:
-          options.templateTagType,
+      options.templateTagType,
 
-        parameters,
+      parameters,
 
-        triggerId:
-          trigger.triggerId,
-      }
+      trigger.triggerId
     );
 
   return {
@@ -215,14 +210,7 @@ export async function connectGTM(
 
       trigger,
 
-      triggerCreated:
-        triggerResult.created,
-
-      tag:
-        tagResult.tag,
-
-      tagCreated:
-        tagResult.created,
+      tag,
     },
 
     phase3: {

@@ -28,15 +28,12 @@ import {
 
   useDashboardStore,
 
-  type DashboardStore,
-
 } from "../store/useDashboardStore";
 
 import { useDashboardActions } from "@/hooks/useDashboardActions";
 
 import type { GtmWorkspace } from "@/lib/gtm/types";
-import GtmWebServerConnection from "./components/GtmWebServerConnection";
-
+import GtmWebServerConnection, { ConnectPayload } from "./components/GtmWebServerConnection";
 
 
 // ============================================================
@@ -185,9 +182,9 @@ async function readApiResponse(
 
       `API returned HTML or invalid JSON (${response.status}). ` +
 
-        `Check the API route and server logs. Response: ` +
+      `Check the API route and server logs. Response: ` +
 
-        responseText.substring(0, 180)
+      responseText.substring(0, 180)
 
     );
 
@@ -275,21 +272,18 @@ export default function DashboardPage() {
 
   const [serverWorkspaceId, setServerWorkspaceId] = useState("");
 
+  useEffect(() => {
+    setServerContainerId("");
+    setServerWorkspaceId("");
+  }, [store.selectedAccountId]);
 
 
-  const [serverWorkspaces, setServerWorkspaces] = useState<
 
-    ServerWorkspace[]
-
-  >([]);
+  const [serverWorkspaces, setServerWorkspaces] = useState<ServerWorkspace[]>([]);
 
 
 
   const [serverContainerUrl, setServerContainerUrl] = useState("");
-
-  const [eventName, setEventName] = useState("");
-
-
 
   const [loadingWorkspaces, setLoadingWorkspaces] = useState(false);
 
@@ -595,228 +589,103 @@ export default function DashboardPage() {
 
 
 
-  const handleConfigureGtm = async () => {
 
+  const handleConfigureGtm = async (payload: ConnectPayload) => {
     setAutomationError("");
-
     setAutomationResult(null);
 
-
-
     if (!store.selectedAccountId) {
-
       setAutomationError("Please select a GTM account first.");
-
       return;
-
     }
 
-
-
-    if (!store.selectedContainerId) {
-
-      setAutomationError("Please select the Web GTM container.");
-
+    if (!store.selectedContainerId || !store.selectedWorkspaceId) {
+      setAutomationError("Please select the Web GTM container and workspace.");
       return;
-
     }
 
-
-
-    if (!store.selectedWorkspaceId) {
-
-      setAutomationError("Please select the Web GTM workspace.");
-
+    if (!serverContainerId || !serverWorkspaceId) {
+      setAutomationError("Please select the Server GTM container and workspace.");
       return;
-
     }
 
-
-
-    if (!serverContainerId) {
-
-      setAutomationError("Please select the Server GTM container.");
-
-      return;
-
-    }
-
-
-
-    if (!serverWorkspaceId) {
-
-      setAutomationError("Please select the Server GTM workspace.");
-
-      return;
-
-    }
-
-
-
-    if (!serverContainerUrl.trim()) {
-
+    if (!payload.serverContainerUrl.trim()) {
       setAutomationError("Please enter the Server Container URL.");
-
       return;
-
     }
 
-
+    if (payload.selectedPlatforms.length === 0) {
+      setAutomationError("Please select at least one tracking platform.");
+      return;
+    }
 
     try {
+      const parsedUrl = new URL(payload.serverContainerUrl.trim());
 
-      const parsedUrl = new URL(serverContainerUrl.trim());
-
-
-
-      if (parsedUrl.protocol !== "https:") {
-
+      if (
+        parsedUrl.protocol !== "https:" ||
+        parsedUrl.username ||
+        parsedUrl.password ||
+        parsedUrl.search ||
+        parsedUrl.hash
+      ) {
         setAutomationError(
-
-          "Please enter a valid HTTPS Server Container URL."
-
+          "Enter a valid HTTPS Server Container origin without credentials, query parameters or hash."
         );
-
         return;
-
       }
-
-    } catch {
-
-      setAutomationError(
-
-        "Please enter a valid Server Container URL, including https://."
-
-      );
-
-      return;
-
-    }
-
-
-
-    if (!eventName.trim()) {
-
-      setAutomationError("Please enter an event name.");
-
-      return;
-
-    }
-
-
-
-    try {
 
       setAutomationLoading(true);
 
-
-
-      const response = await fetch("/api/gtm/connect", {
-
+      const response = await fetch("/api/auth/gtm/connect", {
         method: "POST",
-
         headers: {
-
           "Content-Type": "application/json",
-
         },
-
         body: JSON.stringify({
-
           accountId: store.selectedAccountId,
-
           webContainerId: store.selectedContainerId,
-
           webWorkspaceId: store.selectedWorkspaceId,
-
           serverContainerId,
-
           serverWorkspaceId,
 
-          serverContainerUrl: serverContainerUrl.trim().replace(/\/+$/, ""),
+          serverContainerUrl: parsedUrl.origin,
 
-          eventNames: [eventName.trim()],
+          selectedPlatforms: payload.selectedPlatforms,
+          platformConfigs: payload.platformConfigs,
 
+          webMeasurementId:
+            payload.platformConfigs.kp_ga4.measurementId.trim(),
+
+          serverMeasurementId: payload.serverMeasurementId.trim(),
         }),
-
       });
-
-
 
       const data = await readApiResponse(response);
 
-
-
       if (!response.ok) {
-
-        const apiError = getApiErrorMessage(
-
-          data,
-
-          "Failed to configure GTM automation"
-
-        );
-
         throw new Error(
-
-          data.partial === true
-
-            ? `${apiError} Web GTM was updated, but Server GTM may be incomplete.`
-
-            : apiError
-
+          getApiErrorMessage(data, "Failed to configure GTM automation")
         );
-
       }
 
-
-
-      if (
-
-        typeof data !== "object" ||
-
-        data === null ||
-
-        typeof data.success !== "boolean"
-
-      ) {
-
-        throw new Error(
-
-          "The API returned an invalid automation result."
-
-        );
-
+      if (typeof data.success !== "boolean") {
+        throw new Error("The API returned an invalid automation result.");
       }
-
-
 
       setAutomationResult(data as AutomationResult);
-
     } catch (error) {
-
       console.error("GTM automation error:", error);
 
-
-
       setAutomationError(
-
         error instanceof Error
-
           ? error.message
-
           : "Failed to configure GTM automation"
-
       );
-
     } finally {
-
       setAutomationLoading(false);
-
     }
-
   };
-
 
 
   // ==========================================================
@@ -857,8 +726,9 @@ export default function DashboardPage() {
 
   if (!user) return null;
 
-
-
+  const serverContainers = store.containers.filter((container) =>
+    container.usageContext?.includes("server")
+  );
   // ==========================================================
 
   // DASHBOARD UI
@@ -964,46 +834,118 @@ export default function DashboardPage() {
 
 
         {/* GTM AUTOMATION */}
+        <section className="mt-10 rounded-xl border border-line bg-card p-5 md:p-6">
+          <div className="mb-8">
+            <h2 className="text-lg font-semibold text-fg">
+              Web GTM to Server GTM
+            </h2>
+            <p className="mt-1 max-w-2xl text-sm text-muted">
+              Route your Web Google Tag through Server GTM and configure the
+              selected server-side tracking platforms.
+            </p>
+          </div>
 
+          <div className="mb-8">
+            <h3 className="mb-4 text-sm font-semibold text-fg">1. Web GTM</h3>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-2 block text-xs font-medium text-muted">
+                  Web Container
+                </label>
+                <div className="rounded-lg border border-line bg-card-hi px-3 py-2.5 text-sm text-fg">
+                  {store.selectedContainerName ||
+                    store.selectedContainerId ||
+                    "No Web Container selected"}
+                </div>
+              </div>
+              <div>
+                <label className="mb-2 block text-xs font-medium text-muted">
+                  Web Workspace
+                </label>
+                <div className="rounded-lg border border-line bg-card-hi px-3 py-2.5 text-sm text-fg">
+                  {store.selectedWorkspaceName ||
+                    store.selectedWorkspaceId ||
+                    "No Web Workspace selected"}
+                </div>
+              </div>
+            </div>
+          </div>
 
+          <div>
+            <h3 className="mb-4 text-sm font-semibold text-fg">2. Server GTM</h3>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <SelectField
+                label="Server Container"
+                value={serverContainerId}
+                onChange={(value) => {
+                  setServerContainerId(value);
+                  setServerWorkspaceId("");
+                }}
+                options={serverContainers.map((container) => ({
+                  value: container.containerId,
+                  label: container.name || container.containerId,
+                }))}
+                placeholder="Select Server Container"
+              />
+              <SelectField
+                label="Server Workspace"
+                value={serverWorkspaceId}
+                onChange={setServerWorkspaceId}
+                options={serverWorkspaces.map((workspace) => ({
+                  value: workspace.workspaceId,
+                  label: workspace.name || workspace.workspaceId,
+                }))}
+                placeholder={
+                  loadingWorkspaces
+                    ? "Loading workspaces..."
+                    : "Select Server Workspace"
+                }
+                disabled={!serverContainerId || loadingWorkspaces}
+              />
+            </div>
 
-        <div className="mt-10">
+            {serverContainers.length === 0 && (
+              <p className="mt-2 text-xs text-muted">
+                No Server GTM containers are available in the selected account.
+              </p>
+            )}
 
-          <GtmAutomationSection
+            <div className="mt-4">
+              <GtmWebServerConnection
+                accountId={store.selectedAccountId}
+                webContainerId={store.selectedContainerId}
+                webWorkspaceId={store.selectedWorkspaceId}
+                serverContainerId={serverContainerId}
+                serverWorkspaceId={serverWorkspaceId}
+                serverContainerUrl={serverContainerUrl}
+                onServerContainerUrlChange={setServerContainerUrl}
+                onConnect={handleConfigureGtm}
+                loading={automationLoading}
+              />
+            </div>
 
-            store={store}
+          </div>
 
-            serverContainerId={serverContainerId}
+          {automationResult && (
+            <p
+              role="status"
+              className={`mt-4 text-sm ${
+                automationResult.success ? "text-green-600" : "text-yellow-700"
+              }`}
+            >
+              {automationResult.message ||
+                (automationResult.success
+                  ? "GTM automation completed successfully."
+                  : "GTM automation completed with issues.")}
+            </p>
+          )}
 
-            setServerContainerId={setServerContainerId}
-
-            serverWorkspaceId={serverWorkspaceId}
-
-            setServerWorkspaceId={setServerWorkspaceId}
-
-            serverWorkspaces={serverWorkspaces}
-
-            serverContainerUrl={serverContainerUrl}
-
-            setServerContainerUrl={setServerContainerUrl}
-
-            eventName={eventName}
-
-            setEventName={setEventName}
-
-            loadingWorkspaces={loadingWorkspaces}
-
-            automationLoading={automationLoading}
-
-            error={automationError}
-
-            result={automationResult}
-
-            onConfigure={handleConfigureGtm}
-
-          />
-
-        </div>
+          {automationError && (
+            <p role="alert" className="mt-3 text-sm text-red-500">
+              {automationError}
+            </p>
+          )}
+        </section>
 
 
 
@@ -1049,568 +991,40 @@ export default function DashboardPage() {
 
 }
 
-
-
-// ============================================================
-
-// GTM AUTOMATION SECTION
-
-// ============================================================
-
-
-
-function GtmAutomationSection({
-
-  store,
-
-  serverContainerId,
-
-  setServerContainerId,
-
-  serverWorkspaceId,
-
-  setServerWorkspaceId,
-
-  serverWorkspaces,
-
-  serverContainerUrl,
-
-  setServerContainerUrl,
-
-  eventName,
-
-  setEventName,
-
-  loadingWorkspaces,
-
-  automationLoading,
-
-  error,
-
-  result,
-
-  onConfigure,
-
-}: {
-
-  store: DashboardStore;
-
-
-
-  serverContainerId: string;
-
-  setServerContainerId: (value: string) => void;
-
-
-
-  serverWorkspaceId: string;
-
-  setServerWorkspaceId: (value: string) => void;
-
-
-
-  serverWorkspaces: ServerWorkspace[];
-
-
-
-  serverContainerUrl: string;
-
-  setServerContainerUrl: (value: string) => void;
-
-
-
-  eventName: string;
-
-  setEventName: (value: string) => void;
-
-
-
-  loadingWorkspaces: boolean;
-
-
-
-  automationLoading: boolean;
-
-  error: string;
-
-  result: AutomationResult | null;
-
-
-
-  onConfigure: () => void;
-
-}) {
-
-  const serverContainers = store.containers.filter((container) =>
-
-    container.usageContext?.includes("server")
-
-  );
-
-
-
-  const eventOptions = [
-
-    "page_view",
-
-    "view_item",
-
-    "add_to_cart",
-
-    "begin_checkout",
-
-    "purchase",
-
-    "generate_lead",
-
-    "sign_up",
-
-    "login",
-
-    "form_submit",
-
-    "contact",
-
-  ];
-
-
-
-  return (
-
-    <section className="rounded-2xl border border-line bg-card p-6 md:p-8">
-
-      {/* HEADER */}
-
-
-
-      <div className="mb-7">
-
-        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
-
-          <div>
-
-            <h2 className="text-xl font-semibold text-fg">
-
-              GTM Automation
-
-            </h2>
-
-
-
-            <p className="text-sm text-muted mt-1 max-w-2xl">
-
-              Route your Web Google Tag through Server GTM and create the matching server-side event tag.
-
-            </p>
-
-          </div>
-
-
-
-          <span className="inline-flex w-fit items-center rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-[11px] font-medium text-primary">
-
-            Automation
-
-          </span>
-
-        </div>
-
-      </div>
-
-
-
-      {/* STEP 1 — WEB GTM */}
-
-
-
-      <div className="mb-8">
-
-        <h3 className="text-sm font-semibold text-fg mb-4">
-
-          1. Web GTM
-
-        </h3>
-
-
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-          <div>
-
-            <label className="block text-xs font-medium text-muted mb-2">
-
-              Web Container
-
-            </label>
-
-
-
-            <div className="rounded-lg border border-line bg-card-hi px-3 py-2.5 text-sm text-fg">
-
-              {store.selectedContainerName ||
-
-                store.selectedContainerId ||
-
-                "No Web Container selected"}
-
-            </div>
-
-          </div>
-
-
-
-          <div>
-
-            <label className="block text-xs font-medium text-muted mb-2">
-
-              Web Workspace
-
-            </label>
-
-
-
-            <div className="rounded-lg border border-line bg-card-hi px-3 py-2.5 text-sm text-fg">
-
-              {store.selectedWorkspaceName ||
-
-                store.selectedWorkspaceId ||
-
-                "No Web Workspace selected"}
-
-            </div>
-
-          </div>
-
-        </div>
-
-      </div>
-
-
-
-      {/* STEP 2 — SERVER GTM */}
-
-
-
-      <div className="mb-8">
-
-        <h3 className="text-sm font-semibold text-fg mb-4">
-
-          2. Server GTM
-
-        </h3>
-
-
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-          <SelectField
-
-            label="Server Container"
-
-            value={serverContainerId}
-
-            onChange={(value) => {
-
-              setServerContainerId(value);
-
-              setServerWorkspaceId("");
-
-            }}
-
-            options={serverContainers.map((container) => ({
-
-              value: container.containerId,
-
-              label: container.name || container.containerId,
-
-            }))}
-
-            placeholder="Select Server Container"
-
-          />
-
-
-
-          <SelectField
-
-            label="Server Workspace"
-
-            value={serverWorkspaceId}
-
-            onChange={setServerWorkspaceId}
-
-            options={serverWorkspaces.map((workspace) => ({
-
-              value: workspace.workspaceId,
-
-              label: workspace.name || workspace.workspaceId,
-
-            }))}
-
-            placeholder={
-
-              loadingWorkspaces
-
-                ? "Loading workspaces..."
-
-                : "Select Server Workspace"
-
-            }
-
-            disabled={!serverContainerId || loadingWorkspaces}
-
-          />
-
-        </div>
-
-
-
-        {serverContainers.length === 0 && (
-
-          <p className="mt-2 text-xs text-muted">
-
-            No Server GTM containers are available in the selected account.
-
-          </p>
-
-        )}
-
-
-
-        <div className="mt-4">
-          <GtmWebServerConnection
-            accountId={store.selectedAccountId}
-            webContainerId={store.selectedContainerId}
-            webWorkspaceId={store.selectedWorkspaceId}
-            serverContainerId={serverContainerId}
-            serverContainerUrl={serverContainerUrl}
-            onServerContainerUrlChange={setServerContainerUrl}
-            onConnect={onConfigure}
-            loading={automationLoading}
-          />
-        </div>
-
-
-
-        <div className="mt-4">
-
-          <SelectField
-
-            label="Event Name"
-
-            value={eventName}
-
-            onChange={setEventName}
-
-            options={eventOptions.map((event) => ({
-
-              value: event,
-
-              label: event,
-
-            }))}
-
-            placeholder="Select Event Name"
-
-          />
-
-        </div>
-
-      </div>
-
-
-
-      {/* AUTOMATION ERROR */}
-
-
-
-      {error && (
-
-        <div className="mb-5 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-500">
-
-          {error}
-
-        </div>
-
-      )}
-
-
-
-      {/* SUCCESS RESULT */}
-
-
-
-      {result?.success && (
-
-        <div className="mb-6 rounded-xl border border-green-500/20 bg-green-500/10 p-5">
-
-          <h3 className="font-semibold text-green-600 mb-3">
-
-            GTM Automation Complete
-
-          </h3>
-
-
-
-          <div className="space-y-2 text-sm text-green-700">
-
-            <ResultItem text="Web GTM → Server GTM connection configured" />
-
-            <ResultItem text="Server event trigger configured" />
-
-            <ResultItem text="Server-side GA4 event tag configured" />
-
-            <ResultItem text="Event trigger attached to the server-side tag" />
-
-
-
-            <div className="pt-2 font-medium">
-
-              ○ Changes have not been published.
-
-            </div>
-
-          </div>
-
-
-
-          {result.message && (
-
-            <p className="mt-3 text-sm text-green-700">
-
-              {result.message}
-
-            </p>
-
-          )}
-
-        </div>
-
-      )}
-    </section>
-
-  );
-
-}
-
-
-
-// ============================================================
-
-// SELECT FIELD
-
-// ============================================================
-
-
-
 function SelectField({
-
   label,
-
   value,
-
   onChange,
-
   options,
-
   placeholder,
-
   disabled = false,
-
 }: {
-
   label: string;
-
   value: string;
-
   onChange: (value: string) => void;
-
-  options: {
-
-    value: string;
-
-    label: string;
-
-  }[];
-
+  options: { value: string; label: string }[];
   placeholder: string;
-
   disabled?: boolean;
-
 }) {
-
   return (
-
     <div>
-
-      <label className="block text-xs font-medium text-muted mb-2">
-
-        {label}
-
-      </label>
-
-
-
+      <label className="mb-2 block text-xs font-medium text-muted">{label}</label>
       <select
-
         value={value}
-
         onChange={(event) => onChange(event.target.value)}
-
         disabled={disabled}
-
         className="w-full rounded-lg border border-line bg-card-hi px-3 py-2.5 text-sm text-fg outline-none focus:border-primary disabled:opacity-50"
-
       >
-
         <option value="">{placeholder}</option>
-
-
-
         {options.map((option) => (
-
           <option key={option.value} value={option.value}>
-
             {option.label}
-
           </option>
-
         ))}
-
       </select>
-
     </div>
-
   );
-
 }
-
-
-
-// ============================================================
-
-// RESULT ITEM
-
-// ============================================================
-
-
-
-function ResultItem({ text }: { text: string }) {
-
-  return (
-
-    <div className="flex items-center gap-2">
-
-      <span>✓</span>
-
-      <span>{text}</span>
-
-    </div>
-
-  );
-
-}
-
 
 
 // ============================================================

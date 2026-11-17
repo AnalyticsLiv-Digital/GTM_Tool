@@ -70,7 +70,27 @@ export interface EventSchemaRow {
 
   confidence?: number;
 
+  tagName?: string;
+
+  triggerName?: string;
+
   [key: string]: unknown;
+}
+
+// ============================================================
+// DETECTED SELECTOR
+// ============================================================
+
+export interface DetectedSelector {
+  type: SelectorType;
+
+  value: string;
+
+  selector: string;
+
+  source?: string;
+
+  confidence?: number;
 }
 
 // ============================================================
@@ -344,7 +364,7 @@ export interface GeneratedGA4Variable {
 
   type: string;
 
-  parameter?: string;
+  parameter?: GeneratedGTMParameter[];
 
   value?: string;
 
@@ -411,4 +431,26 @@ export interface GeneratedGA4Tag {
   parameters?: Record<string, string>;
 
   [key: string]: unknown;
+}
+
+// ============================================================
+// GENERATED AUTOMATION
+// ============================================================
+
+export interface GeneratedAutomation {
+  ga4Events: EventSchemaRow[];
+
+  dataLayerEvents: EventSchemaRow[];
+
+  variables: GeneratedGA4Variable[];
+
+  triggers: GeneratedGA4Trigger[];
+
+  tags: GeneratedGA4Tag[];
+
+  events: EventSchemaRow[];
+
+  commonEvents: EventSchemaRow[];
+
+  uniqueEvents: EventSchemaRow[];
 }

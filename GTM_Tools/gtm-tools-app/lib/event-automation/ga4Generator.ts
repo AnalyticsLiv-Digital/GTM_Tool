@@ -703,6 +703,9 @@ function generateTag(
     type:
       "gaawe",
 
+    eventName:
+      event.eventName,
+
     parameter: [
       {
         key:

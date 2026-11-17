@@ -96,8 +96,8 @@ export function ApiKeyModal({
         </div>
 
         <p className="text-[13px] text-muted leading-relaxed mb-4">
-          Your key is encrypted and stored only in this browser. It's never saved to any database or
-          shared — it's used only to run your own audits.
+          Your key is verified first, then kept encrypted in a secure cookie in this browser. It&apos;s
+          never saved to any database — our server uses it only to run your own audits.
         </p>
 
         {notice && (
@@ -158,9 +158,8 @@ export function ApiKeyModal({
         </div>
 
         <p className="mt-4 text-[11.5px] text-faint leading-relaxed">
-          Get a key at console.anthropic.com → API Keys. Client-side encryption keeps it out of
-          plaintext, but can't fully protect it from scripts running in your own browser — only paste
-          keys on sites you trust.
+          Get a key at console.anthropic.com → API Keys. Audits run on this key, so usage is billed to
+          your Anthropic account.
         </p>
       </div>
     </div>

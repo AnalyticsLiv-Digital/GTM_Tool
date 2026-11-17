@@ -93,7 +93,8 @@ export function Modal({
       ref={dialogRef}
       aria-labelledby={title ? titleId : undefined}
       aria-describedby={description ? descId : undefined}
-      className={`p-0 rounded-xl shadow-lg border border-edge bg-card text-fg backdrop:bg-black/55 backdrop:backdrop-blur-sm w-full ${sizeClass[size]}`}
+      className={`fixed inset-0 m-auto max-h-[90vh] overflow-y-auto p-0 rounded-xl shadow-lg border border-edge bg-card text-fg backdrop:bg-black/55 backdrop:backdrop-blur-sm w-full ${sizeClass[size]}`}
+      style={{ width: "calc(100vw - 2rem)" }}
     >
       <div className="flex flex-col">
         {(title || description) && (

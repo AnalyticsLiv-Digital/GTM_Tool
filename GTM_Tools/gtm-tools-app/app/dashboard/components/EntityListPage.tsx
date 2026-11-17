@@ -231,7 +231,7 @@ export function EntityListPage<T>({
                 placeholder={searchPlaceholder}
                 value={searchText}
                 onChange={(e) => setSearchText(e.target.value)}
-                className="w-full bg-card pl-10 pr-4 py-2.5 text-[13.5px] border border-line rounded-xl text-fg placeholder:text-muted"
+                className="w-full bg-card pl-10! pr-4! py-2.5! text-[13.5px] border border-line rounded-xl text-fg placeholder:text-muted"
                 aria-label={searchPlaceholder}
               />
             </div>
@@ -534,7 +534,7 @@ export function EntityListPage<T>({
 //                 placeholder={searchPlaceholder}
 //                 value={searchText}
 //                 onChange={(e) => setSearchText(e.target.value)}
-//                 className="w-full bg-card pl-10 pr-4 py-2.5 text-[13.5px] border border-line rounded-xl text-fg placeholder:text-muted"
+//                 className="w-full bg-card pl-10! pr-4! py-2.5! text-[13.5px] border border-line rounded-xl text-fg placeholder:text-muted"
 //                 aria-label={searchPlaceholder}
 //               />
 //             </div>

@@ -18,19 +18,35 @@ import {
   Loader2,
   ChevronDown,
   ChevronRight,
-  Upload,
 } from "lucide-react";
 
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import {
+  Fragment,
+  useEffect,
+  useRef,
+  useState,
+  type FocusEvent as ReactFocusEvent,
+  type MouseEvent as ReactMouseEvent,
+  type ReactNode,
+} from "react";
+import { createPortal } from "react-dom";
 
 import type { HealthCheckResult } from "@/lib/healthcheck/types";
 import { useDashboardStore } from "@/app/store/useDashboardStore";
+import { ApiKeyModal, ConnectionBadge } from "@/app/dashboard/components/ApiKeyModal";
+import { useAnthropicKey } from "@/hooks/useAnthropicKey";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
 type HealthCheckCounts = { tags: number; triggers: number; variables: number };
+type GtmResourceType = "tags" | "triggers" | "variables";
+type GtmSelection = {
+  accountId?: string | null;
+  containerId?: string | null;
+  workspaceId?: string | null;
+};
 
 type HealthCheckReport = {
   score: number;
@@ -42,39 +58,83 @@ type HealthCheckReport = {
 
 type HealthCheckApiResponse = {
   success?: boolean;
-  healthReport?: HealthCheckReport;
-  report?: HealthCheckReport;
+  healthReport?: unknown;
+  report?: unknown;
+  results?: HealthCheckResult[];
   score?: number;
+  scoreReliable?: boolean;
+  scoreLabel?: string;
   passedCount?: number;
   failedCount?: number;
-  counts?: HealthCheckCounts;
-  results?: HealthCheckResult[];
+  counts?: {
+    tags?: number;
+    triggers?: number;
+    variables?: number;
+  };
+  warnings?: string[];
   error?: string;
+  details?: string;
 };
 
 /* =====================================================
    HELPERS
 ===================================================== */
 
-function normalizeHealthReport(data: HealthCheckApiResponse | null | undefined): HealthCheckReport | null {
-  const candidate = data?.healthReport ?? data?.report ?? data;
-  if (!candidate || typeof candidate !== "object") return null;
+function normalizeHealthReport(
+  data: HealthCheckApiResponse | null | undefined
+): HealthCheckReport | null {
+  if (!data) return null;
+
+  const candidate =
+    data.healthReport ??
+    data.report ??
+    data;
+
+  if (!candidate || typeof candidate !== "object") {
+    return null;
+  }
 
   const value = candidate as any;
-  if (!Array.isArray(value.results)) return null;
+
+  // Accept both nested and top-level results.
+  const results = Array.isArray(value.results)
+    ? value.results
+    : Array.isArray(data.results)
+      ? data.results
+      : [];
+
+  if (!Array.isArray(results)) return null;
 
   return {
-    score: Number(value.score ?? 0),
-    passedCount: Number(value.passedCount ?? value.results.filter((r: any) => r?.passed === true).length),
-    failedCount: Number(value.failedCount ?? value.results.filter((r: any) => r?.passed === false).length),
-    counts: value.counts
+    score: Number(value.score ?? data.score ?? 0),
+
+    passedCount: Number(
+      value.passedCount ??
+      data.passedCount ??
+      results.filter((r: any) => r?.passed === true).length
+    ),
+
+    failedCount: Number(
+      value.failedCount ??
+      data.failedCount ??
+      results.filter((r: any) => r?.passed === false).length
+    ),
+
+    counts: value.counts ?? data.counts
       ? {
-          tags: Number(value.counts.tags ?? 0),
-          triggers: Number(value.counts.triggers ?? 0),
-          variables: Number(value.counts.variables ?? 0),
-        }
+        tags: Number(
+          value.counts?.tags ?? data.counts?.tags ?? 0
+        ),
+        triggers: Number(
+          value.counts?.triggers ?? data.counts?.triggers ?? 0
+        ),
+        variables: Number(
+          value.counts?.variables ?? data.counts?.variables ?? 0
+        ),
+      }
       : undefined,
-    results: value.results,
+
+    results,
   };
 }
 
@@ -87,24 +147,46 @@ function allAffected(r?: HealthCheckResult | null): any[] {
   );
 }
 
-function affectedItemCount(r: HealthCheckResult): number {
-  return allAffected(r).length;
+function getRuleAffectedAssets(
+  result: HealthCheckResult
+): { item: any; resourceType: GtmResourceType; id: string | null }[] {
+  const data = result as any;
+  const combine = (...lists: (any[] | undefined)[]) =>
+    lists.flatMap((list) => (Array.isArray(list) ? list : []));
+  const groups: { items: any[]; resourceType: GtmResourceType }[] = [
+    { items: combine(data.affectedTags, data.unusedTags, data.pausedTags), resourceType: "tags" },
+    { items: combine(data.affectedTriggers, data.unusedTriggers), resourceType: "triggers" },
+    { items: combine(data.affectedVariables, data.unusedVariables), resourceType: "variables" },
+  ];
+
+  const seen = new Set<string>();
+  return groups.flatMap(({ items, resourceType }) =>
+    items.map((item) => {
+      const id = getGtmResourceId(item, resourceType);
+      return { item, resourceType, id };
+    }).filter(({ item, id }) => {
+      const key = `${resourceType}:${id ?? itemName(item)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+  );
 }
 
-/** Items a rule examined that did NOT fail (shown on passed rows). */
-function passedItems(r?: HealthCheckResult | null): any[] {
-  const any = r as any;
-  return [any?.passedTags, any?.passedTriggers, any?.passedVariables].flatMap((list) => (Array.isArray(list) ? list : []));
+function affectedItemCount(result: HealthCheckResult): number {
+  return allAffected(result).length;
 }
 
-function passedTotal(r: HealthCheckResult): number {
-  const c = (r as any)?.passedCounts;
-  return c ? Number(c.tags ?? 0) + Number(c.triggers ?? 0) + Number(c.variables ?? 0) : passedItems(r).length;
+function rowHasDetail(result: HealthCheckResult): boolean {
+  return Boolean(
+    result.recommendation ||
+    result.description ||
+    affectedItemCount(result) > 0
+  );
 }
 
-function rowHasDetail(r: HealthCheckResult): boolean {
-  return Boolean(r.recommendation || r.description || affectedItemCount(r) > 0 || passedTotal(r) > 0);
-}
+
+
 
 async function fetchReport(ids: { accountId: string; containerId: string; workspaceId: string }): Promise<HealthCheckReport> {
   const res = await fetch("/api/auth/healthcheck", {
@@ -128,72 +210,78 @@ function getSelectedIds() {
   return { accountId: s.selectedAccountId, containerId: s.selectedContainerId, workspaceId: s.selectedWorkspaceId };
 }
 
-type ImportedContainer = {
-  fileName: string;
-  name: string;
+/* =====================================================
+   HEALTHCHECK REPORT STORAGE
+===================================================== */
+
+function getHealthCheckStorageKey({
+  accountId,
+  containerId,
+  workspaceId,
+}: {
   accountId: string;
   containerId: string;
   workspaceId: string;
-  tags: any[];
-  triggers: any[];
-  variables: any[];
-};
-
-/** Reads a GTM "Export Container" JSON file (or a flat {tags,triggers,variables} object). */
-function parseContainerExport(text: string, fileName: string): ImportedContainer {
-  let root: any;
-  try {
-    root = JSON.parse(text);
-  } catch {
-    throw new Error("That file is not valid JSON.");
-  }
-
-  const cv = root?.containerVersion ?? root;
-  const tags = cv?.tag ?? cv?.tags ?? [];
-  const triggers = cv?.trigger ?? cv?.triggers ?? [];
-  const variables = cv?.variable ?? cv?.variables ?? [];
-
-  if (!Array.isArray(tags) || !Array.isArray(triggers) || !Array.isArray(variables) || tags.length + triggers.length + variables.length === 0) {
-    throw new Error("This file doesn't look like a GTM container export (Admin → Export Container).");
-  }
-
-  // Exports don't contain the workspace, but the file name usually does: GTM-XXXX_workspace215.json
-  const workspaceFromName = fileName.match(/workspace(\d+)/i)?.[1];
-
-  return {
-    fileName,
-    name: cv?.container?.name || cv?.container?.publicId || fileName,
-    accountId: String(cv?.accountId ?? "0"),
-    containerId: String(cv?.containerId ?? "0"),
-    workspaceId: workspaceFromName ?? "0",
-    tags,
-    triggers,
-    variables,
-  };
+}) {
+  return `gtm-healthcheck-${accountId}-${containerId}-${workspaceId}`;
 }
 
-async function fetchImportedReport(c: ImportedContainer): Promise<HealthCheckReport> {
-  const res = await fetch("/api/auth/healthcheck/import", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      containerExport: {
-        accountId: c.accountId,
-        containerId: c.containerId,
-        workspaceId: c.workspaceId,
-        tags: c.tags,
-        triggers: c.triggers,
-        variables: c.variables,
-      },
-    }),
-  });
-  const data = (await res.json().catch(() => null)) as HealthCheckApiResponse | null;
-  if (!res.ok || data?.success === false) {
-    throw new Error(data?.error || `Import failed (${res.status}).`);
+function saveHealthCheckReport(
+  ids: {
+    accountId: string;
+    containerId: string;
+    workspaceId: string;
+  },
+  report: HealthCheckReport
+) {
+  try {
+    const storageKey = getHealthCheckStorageKey(ids);
+
+    localStorage.setItem(
+      storageKey,
+      JSON.stringify({
+        report,
+        savedAt: new Date().toISOString(),
+      })
+    );
+
+    console.log("[HealthCheck] Report saved successfully.");
+    return true;
+  } catch (error) {
+    console.error("[HealthCheck] Failed to save report:", error);
+    return false;
   }
-  const normalized = normalizeHealthReport(data);
-  if (!normalized) throw new Error("The import returned an invalid report.");
-  return normalized;
+}
+
+function loadHealthCheckReport(
+  ids: {
+    accountId: string;
+    containerId: string;
+    workspaceId: string;
+  }
+): HealthCheckReport | null {
+  try {
+    const storageKey = getHealthCheckStorageKey(ids);
+    const saved = localStorage.getItem(storageKey);
+
+    if (!saved) return null;
+
+    const parsed = JSON.parse(saved);
+
+    const restoredReport = normalizeHealthReport({
+      healthReport: parsed.report,
+    });
+
+    if (!restoredReport) {
+      localStorage.removeItem(storageKey);
+      return null;
+    }
+
+    return restoredReport;
+  } catch (error) {
+    console.error("[HealthCheck] Failed to load saved report:", error);
+    return null;
+  }
 }
 
 /* =====================================================
@@ -214,99 +302,218 @@ export default function HealthCheckPage() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatSending, setChatSending] = useState(false);
-  const [imported, setImported] = useState<ImportedContainer | null>(null);
-  const importInputRef = useRef<HTMLInputElement>(null);
+  const [keyModalOpen, setKeyModalOpen] = useState(false);
+  const [keyNotice, setKeyNotice] = useState<string | null>(null);
 
-  /* Run buttons work with a live workspace OR an imported container file. */
-  const canRun = Boolean(store.selectedWorkspaceId) || Boolean(imported);
+  const anthropicKey = useAnthropicKey();
+
+  /* =====================================================
+     RESTORE SAVED HEALTHCHECK REPORT
+  ===================================================== */
+
+  useEffect(() => {
+    const accountId = store.selectedAccountId;
+    const containerId = store.selectedContainerId;
+    const workspaceId = store.selectedWorkspaceId;
+
+    if (!accountId || !containerId || !workspaceId) {
+      setReport(null);
+      return;
+    }
+
+    const savedReport = loadHealthCheckReport({
+      accountId,
+      containerId,
+      workspaceId,
+    });
+
+    setReport(savedReport);
+
+    // Clear previous Claude output when changing workspaces.
+    setClaudeText(null);
+    setClaudeTruncated(false);
+    setChatMessages([]);
+    setClaudeError(null);
+  }, [
+    store.selectedAccountId,
+    store.selectedContainerId,
+    store.selectedWorkspaceId,
+  ]);
 
   /* Prevents two chat requests when Enter + click happen together. */
   const chatRequestLock = useRef(false);
 
-  /* ---------- IMPORT A CONTAINER JSON ---------- */
+  /* Set when the key modal was opened by the audit button, so a successful connect carries on. */
+  const auditAfterConnect = useRef(false);
 
-  const handleImportFile = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    event.target.value = ""; // allow picking the same file again
-    if (!file) return;
-
-    setPageError(null);
-    setClaudeError(null);
-    setClaudeNotice(null);
-
-    try {
-      setLoading(true);
-      const container = parseContainerExport(await file.text(), file.name);
-      const nextReport = await fetchImportedReport(container);
-
-      setImported(container);
-      setReport(nextReport);
-      setClaudeText(null);
-      setClaudeTruncated(false);
-      setChatMessages([]);
-    } catch (error) {
-      console.error("Import Error:", error);
-      setPageError(error instanceof Error ? error.message : "Unable to import this file.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleUseLiveWorkspace = () => {
-    setImported(null);
-    setReport(null);
-    setClaudeText(null);
-    setClaudeTruncated(false);
-    setChatMessages([]);
-    setPageError(null);
-    setClaudeError(null);
-    setClaudeNotice(null);
-  };
+  /* ---------- RUN FUNCTIONAL HEALTH CHECK ---------- */
 
   /* ---------- RUN FUNCTIONAL HEALTH CHECK ---------- */
 
   const handleRunHealthCheck = async () => {
-    if (loading || !canRun) return;
-
-    setPageError(null);
     setClaudeError(null);
-    setClaudeNotice(null);
 
-    const ids = imported ? null : getSelectedIds();
-    if (!imported && !ids) {
-      setPageError("Select an account, container, and workspace first.");
+    const {
+      selectedAccountId: accountId,
+      selectedContainerId: containerId,
+      selectedWorkspaceId: workspaceId,
+    } = useDashboardStore.getState();
+
+    if (!accountId || !containerId || !workspaceId) {
+      setClaudeError(
+        "Select an account, container, and workspace before running the audit."
+      );
       return;
     }
 
     try {
       setLoading(true);
-      const normalized = imported ? await fetchImportedReport(imported) : await fetchReport(ids!);
-      setReport(normalized);
 
-      /* A fresh scan means the previous Claude audit may be out of date. */
+      console.log("[HealthCheck] Starting audit", {
+        accountId,
+        containerId,
+        workspaceId,
+      });
+
+      const res = await fetch("/api/auth/healthcheck", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          accountId,
+          containerId,
+          workspaceId,
+        }),
+        cache: "no-store",
+      });
+
+      const responseText = await res.text();
+
+      let data: HealthCheckApiResponse | null = null;
+
+      try {
+        data = responseText
+          ? JSON.parse(responseText)
+          : null;
+      } catch {
+        throw new Error(
+          `HealthCheck returned invalid JSON. HTTP ${res.status}.`
+        );
+      }
+
+      console.log("[HealthCheck] API response:", data);
+
+      if (!res.ok || data?.success === false) {
+        throw new Error(
+          data?.error ||
+          data?.details ||
+          `HealthCheck request failed. HTTP ${res.status}.`
+        );
+      }
+
+      const nextReport = normalizeHealthReport(data);
+
+      if (!nextReport) {
+        console.error(
+          "[HealthCheck] Could not normalize response:",
+          data
+        );
+
+        throw new Error(
+          "The API responded, but no valid results array was found. Check the server response."
+        );
+      }
+
+      console.log("[HealthCheck] Report generated:", {
+        score: nextReport.score,
+        passed: nextReport.passedCount,
+        failed: nextReport.failedCount,
+        totalResults: nextReport.results.length,
+      });
+
+      // Save the report for this account, container, and workspace.
+      const saved = saveHealthCheckReport(
+        {
+          accountId,
+          containerId,
+          workspaceId,
+        },
+        nextReport
+      );
+
+      if (!saved) {
+        console.warn(
+          "[HealthCheck] Report displayed but browser storage failed."
+        );
+      }
+
+      // Update the existing UI.
+      setReport(nextReport);
       setClaudeText(null);
       setClaudeTruncated(false);
       setChatMessages([]);
+      setClaudeError(null);
+
     } catch (error) {
-      console.error("Functional HealthCheck Error:", error);
-      setPageError(error instanceof Error ? error.message : "Unable to run HealthCheck.");
+      console.error("[HealthCheck] Run failed:", error);
+
+      setClaudeError(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong while running HealthCheck."
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  /* ---------- CLAUDE AI AUDIT (no key needed in the browser) ---------- */
+  /* ---------- ANTHROPIC KEY ---------- */
+
+  const openKeyModal = (notice: string, resumeAudit: boolean) => {
+    auditAfterConnect.current = resumeAudit;
+    setKeyNotice(notice);
+    setKeyModalOpen(true);
+  };
+
+  const closeKeyModal = () => {
+    auditAfterConnect.current = false;
+    setKeyNotice(null);
+    setKeyModalOpen(false);
+  };
+
+  const handleConnectKey = async (key: string) => {
+    const result = await anthropicKey.connect(key);
+
+    if (result.ok && auditAfterConnect.current) {
+      auditAfterConnect.current = false;
+      void runClaudeAudit();
+    }
+
+    return result;
+  };
+
+  /* ---------- CLAUDE AI AUDIT (the key travels in an HttpOnly cookie) ---------- */
 
   const handleClaudeHealthCheck = async () => {
-    if (claudeLoading || !canRun) return;
+    if (claudeLoading || !store.selectedWorkspaceId) return;
 
+    const ready = anthropicKey.status === "connected" || (await anthropicKey.verify());
+
+    if (!ready) {
+      openKeyModal("Connect your Anthropic API key to run the Claude AI Audit.", true);
+      return;
+    }
+
+    await runClaudeAudit();
+  };
+
+  const runClaudeAudit = async () => {
     setClaudeError(null);
     setClaudeNotice(null);
     setPageError(null);
 
-    const ids = imported
-      ? { accountId: imported.accountId, containerId: imported.containerId, workspaceId: imported.workspaceId }
-      : getSelectedIds();
+    const ids = getSelectedIds();
     if (!ids) {
       setClaudeError("Select an account, container, and workspace before running the audit.");
       return;
@@ -320,17 +527,22 @@ export default function HealthCheckPage() {
       const aiRes = await fetch("/api/auth/healthcheck/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          imported
-            ? {
-                ...ids,
-                importedContainerData: { tags: imported.tags, triggers: imported.triggers, variables: imported.variables },
-              }
-            : ids
-        ),
+        body: JSON.stringify(ids),
       });
 
       const aiData = (await aiRes.json().catch(() => null)) as any;
+
+      /* Key missing or no longer valid: ask for a new one, then resume this audit. */
+      if (aiData?.code === "no_key" || aiData?.code === "invalid_key") {
+        anthropicKey.markNoKey();
+        openKeyModal(
+          aiData.code === "invalid_key"
+            ? "Your saved API key is no longer valid. Enter a new key to run the audit."
+            : "Connect your Anthropic API key to run the Claude AI Audit.",
+          true
+        );
+        return;
+      }
 
       if (!aiRes.ok || !aiData?.success) {
         throw new Error(aiData?.error || `AI audit failed (${aiRes.status}).`);
@@ -339,12 +551,18 @@ export default function HealthCheckPage() {
       const text = String(aiData.resultText ?? "").trim();
       if (!text) throw new Error("Claude returned an empty audit response.");
 
-      /* Show the exact same scan Claude analysed, so the table and the AI text always match. */
-      const fresh = normalizeHealthReport({ healthReport: aiData.healthReport });
+      const fresh = normalizeHealthReport({
+        healthReport: aiData.healthReport,
+      });
+
       if (fresh) {
+        saveHealthCheckReport(ids, fresh);
         setReport(fresh);
       } else if (!report) {
-        setReport(imported ? await fetchImportedReport(imported) : await fetchReport(ids));
+        const fetchedReport = await fetchReport(ids);
+
+        saveHealthCheckReport(ids, fetchedReport);
+        setReport(fetchedReport);
       }
 
       setClaudeText(text);
@@ -383,6 +601,11 @@ export default function HealthCheckPage() {
 
       const data = await res.json().catch(() => null);
 
+      if (data?.code === "no_key" || data?.code === "invalid_key") {
+        anthropicKey.markNoKey();
+        openKeyModal("Your API key is no longer connected. Enter a key, then send your message again.", false);
+      }
+
       if (!res.ok || !data?.success) {
         throw new Error(data?.error || `Chat request failed (${res.status}).`);
       }
@@ -406,6 +629,46 @@ export default function HealthCheckPage() {
     }
   };
 
+  const handleFixWithAI = async (rule: HealthCheckResult): Promise<string> => {
+    if (!report) throw new Error("Run the health check before requesting an AI fix.");
+
+    const prompt = [
+      "Suggest a safe, specific way to fix this GTM health-check rule.",
+      "Do not make or claim to make changes to the GTM container.",
+      `Rule: ${rule.title}`,
+      `Description: ${rule.description}`,
+      `Rule recommendation: ${rule.recommendation || "None provided."}`,
+      `Affected items: ${allAffected(rule).map(itemName).join(", ") || "None listed."}`,
+    ].join("\n");
+
+    const res = await fetch("/api/auth/healthcheck/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        healthReport: report,
+        claudeText,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+    const data = await res.json().catch(() => null);
+
+    if (data?.code === "no_key" || data?.code === "invalid_key") {
+      anthropicKey.markNoKey();
+      openKeyModal(
+        "Your API key is no longer connected. Enter a key, then try the AI fix again.",
+        false
+      );
+    }
+
+    if (!res.ok || !data?.success) {
+      throw new Error(data?.error || `AI fix request failed (${res.status}).`);
+    }
+
+    const suggestion = typeof data.reply === "string" ? data.reply.trim() : "";
+    if (!suggestion) throw new Error("Claude returned an empty fix suggestion.");
+    return suggestion;
+  };
+
   /* ---------- FAILED / PASSED ---------- */
 
   const failedChecks = report?.results?.filter((r) => !r.passed) ?? [];
@@ -421,7 +684,11 @@ export default function HealthCheckPage() {
     const doc = new jsPDF();
 
     doc.setFontSize(18);
-    doc.text("GTM HealthCheck Report", 14, 18);
+    doc.text(
+      "GTM HealthCheck Report",
+      14,
+      18
+    );
 
     doc.setFontSize(12);
     doc.text(`Score: ${report.score}%`, 14, 30);
@@ -465,7 +732,9 @@ export default function HealthCheckPage() {
       });
     }
 
-    doc.save("GTM_HealthCheck_Report.pdf");
+    doc.save(
+      "GTM_HealthCheck_Report.pdf"
+    );
   };
 
   /* ---------- GRADE ---------- */
@@ -479,13 +748,14 @@ export default function HealthCheckPage() {
 
   return (
     <div>
-      <input
-        ref={importInputRef}
-        type="file"
-        accept=".json,application/json"
-        onChange={handleImportFile}
-        className="hidden"
-        aria-label="Import a GTM container JSON file"
+      <ApiKeyModal
+        open={keyModalOpen}
+        notice={keyNotice}
+        checking={anthropicKey.checking}
+        hasKey={anthropicKey.status === "connected" || anthropicKey.status === "disconnected"}
+        onConnect={handleConnectKey}
+        onRemove={() => void anthropicKey.disconnect()}
+        onClose={closeKeyModal}
       />
 
       {/* HERO */}
@@ -512,7 +782,7 @@ export default function HealthCheckPage() {
               <button
                 type="button"
                 onClick={handleRunHealthCheck}
-                disabled={loading || !canRun}
+                disabled={loading || !store.selectedWorkspaceId}
                 className="btn-primary px-5! py-2.5! disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {loading ? (
@@ -531,7 +801,7 @@ export default function HealthCheckPage() {
               <button
                 type="button"
                 onClick={handleClaudeHealthCheck}
-                disabled={claudeLoading || !canRun}
+                disabled={claudeLoading || !store.selectedWorkspaceId}
                 className="btn-secondary px-5! py-2.5! disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {claudeLoading ? (
@@ -547,18 +817,10 @@ export default function HealthCheckPage() {
                 )}
               </button>
 
-              <button
-                type="button"
-                onClick={() => importInputRef.current?.click()}
-                disabled={loading}
-                className="btn-secondary px-5! py-2.5! disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Upload size={14} />
-                Import container JSON
-              </button>
+              <ConnectionBadge status={anthropicKey.status} onManage={() => openKeyModal("", false)} />
             </div>
 
-            {!store.selectedWorkspaceId && !imported && (
+            {!store.selectedWorkspaceId && (
               <p className="mt-4 text-[12.5px] text-(--warn)">Select a workspace before running the audit.</p>
             )}
 
@@ -566,8 +828,24 @@ export default function HealthCheckPage() {
               <div className="mt-5 px-4 py-3 rounded-lg border border-(--danger)/25 bg-(--danger)/8 text-(--danger) text-[13px]">{pageError}</div>
             )}
 
+            {pageError && (
+              <div className="mt-5 px-4 py-3 rounded-lg border border-(--danger)/25 bg-(--danger)/8 text-(--danger) text-[13px]">
+                {pageError}
+              </div>
+            )}
+
             {claudeError && (
-              <div className="mt-5 px-4 py-3 rounded-lg border border-(--danger)/25 bg-(--danger)/8 text-(--danger) text-[13px]">{claudeError}</div>
+              <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 p-4">
+                <div className="flex items-start gap-2">
+                  <AlertTriangle size={17} className="mt-0.5 shrink-0 text-red-500" />
+                  <div>
+                    <p className="text-sm font-semibold text-red-500">
+                      HealthCheck Error
+                    </p>
+                    <p className="mt-1 text-sm text-fg">{claudeError}</p>
+                  </div>
+                </div>
+              </div>
             )}
 
             {claudeNotice && (
@@ -595,13 +873,6 @@ export default function HealthCheckPage() {
                 <p className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-faint mb-2">HealthCheck report</p>
 
                 <h2 className="text-[24px] md:text-[28px] font-semibold text-fg tracking-[-0.02em]">Container audit</h2>
-
-                {imported && (
-                  <p className="mt-1 text-[12.5px] text-muted">
-                    Source: imported file <span className="font-mono text-fg">{imported.fileName}</span>
-                    {imported.name && imported.name !== imported.fileName ? ` · ${imported.name}` : ""}
-                  </p>
-                )}
 
                 <p className="text-[13px] text-muted mt-2 flex items-center gap-3">
                   <span className="inline-flex items-center gap-1.5">
@@ -652,21 +923,12 @@ export default function HealthCheckPage() {
                 {claudeLoading ? "Analyzing…" : "Claude AI Audit"}
               </button>
 
-              <button type="button" onClick={() => importInputRef.current?.click()} disabled={loading} className="btn-secondary py-2! disabled:opacity-50">
-                <Upload size={13} />
-                Import container JSON
-              </button>
-
-              {imported && (
-                <button type="button" onClick={handleUseLiveWorkspace} className="btn-secondary py-2!">
-                  Use live workspace
-                </button>
-              )}
-
               <button type="button" onClick={handleDownloadPDF} className="btn-primary py-2!">
                 <Download size={13} />
                 Download PDF
               </button>
+
+              <ConnectionBadge status={anthropicKey.status} onManage={() => openKeyModal("", false)} />
             </div>
 
             {pageError && <p className="mt-3 text-[12.5px] text-(--danger)">{pageError}</p>}
@@ -677,17 +939,28 @@ export default function HealthCheckPage() {
           {/* BODY */}
 
           <div className="p-6 md:p-7">
-            {/* ALWAYS-VISIBLE FINDINGS SUMMARY (real data from the rules) */}
-
-            <FindingsSummary report={report} />
+            <CompactHealthCheckSummary
+              report={report}
+              selection={{
+                accountId: store.selectedAccountId,
+                containerId: store.selectedContainerId,
+                workspaceId: store.selectedWorkspaceId,
+              }}
+              onDeleted={handleRunHealthCheck}
+              onFixWithAI={handleFixWithAI}
+            />
 
             {/* CLAUDE AUDIT */}
 
             {claudeText && (
               <ClaudeAuditChatBlock
                 claudeText={claudeText}
-                claudeTruncated={claudeTruncated}
-                chatMessages={chatMessages}
+                claudeTruncated={
+                  claudeTruncated
+                }
+                chatMessages={
+                  chatMessages
+                }
                 chatInput={chatInput}
                 setChatInput={setChatInput}
                 chatSending={chatSending}
@@ -695,9 +968,18 @@ export default function HealthCheckPage() {
               />
             )}
 
-            {/* TABLE VIEW */}
-
-            <HealthCheckTable results={report.results} passedCount={report.passedCount} failedCount={report.failedCount} />
+            <HealthCheckTable
+              results={report.results}
+              passedCount={report.passedCount}
+              failedCount={report.failedCount}
+              selection={{
+                accountId: store.selectedAccountId,
+                containerId: store.selectedContainerId,
+                workspaceId: store.selectedWorkspaceId,
+              }}
+              onDeleted={handleRunHealthCheck}
+              onFixWithAI={handleFixWithAI}
+            />
 
             {/* NOTE */}
 
@@ -752,110 +1034,540 @@ export default function HealthCheckPage() {
 }
 
 /* =====================================================
-   FINDINGS SUMMARY
-   Shows the real result of the cleanup rules (paused tags,
-   unused items, ...) so nothing depends on the AI text.
+   HEALTHCHECK RULES
 ===================================================== */
 
-const SUMMARY_ROWS: { id: string; label: string }[] = [
-  { id: "HC_LR_002", label: "Paused tags" },
-  { id: "HC_LR_001", label: "Unused tags (no trigger)" },
-  { id: "HC_LR_007", label: "Paused triggers" },
-  { id: "HC_LR_006", label: "Unused triggers" },
-  { id: "HC_LR_003", label: "Unused variables" },
-  { id: "HC_HR_007", label: "Tags with missing triggers" },
-  { id: "HC_HR_008", label: "Missing variable references" },
-  { id: "HC_LR_008", label: "Test / debug tags" },
-  { id: "HC_LR_009", label: "Generic tag names" },
-  { id: "HC_LR_010", label: "Duplicate names" },
-];
+const itemName = (item: any): string =>
+  item?.name || item?.id || "Unnamed";
 
-function FindingsSummary({ report }: { report: HealthCheckReport }) {
-  const counts = report.counts ?? { tags: 0, triggers: 0, variables: 0 };
+function RuleTitleWithTooltip({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  const tooltip = description || title;
+  const [tooltipPosition, setTooltipPosition] = useState<{
+    left: number;
+    top: number;
+  } | null>(null);
 
-  const rows = SUMMARY_ROWS.map((row) => {
-    const result = report.results.find((r) => r.id === row.id);
-    const items = allAffected(result);
-    return { ...row, found: Boolean(result), items };
-  });
+  const showTooltip = (
+    event: ReactMouseEvent<HTMLButtonElement> | ReactFocusEvent<HTMLButtonElement>
+  ) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setTooltipPosition({
+      left: Math.max(8, Math.min(rect.left, window.innerWidth - 340)),
+      top: Math.min(rect.bottom + 8, window.innerHeight - 120),
+    });
+  };
 
   return (
-    <div className="mb-8 rounded-xl border border-line bg-card-hi overflow-hidden">
+    <span className="inline-flex items-center gap-1.5">
+      <span>{title}</span>
+      <button
+        type="button"
+        aria-label={`Rule details: ${tooltip}`}
+        onMouseEnter={showTooltip}
+        onMouseLeave={() => setTooltipPosition(null)}
+        onFocus={showTooltip}
+        onBlur={() => setTooltipPosition(null)}
+        className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-line text-[10px] font-medium leading-none text-muted hover:text-fg"
+      >
+        ?
+      </button>
+      {tooltipPosition &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <span
+            role="tooltip"
+            className="pointer-events-none fixed z-100 w-80 max-h-[50vh] overflow-y-auto whitespace-normal wrap-break-word rounded-md border border-line bg-card p-3 text-left text-[13px] leading-5 text-fg shadow-xl"
+            style={{
+              left: tooltipPosition.left,
+              top: tooltipPosition.top,
+            }}
+          >
+            {tooltip}
+          </span>,
+          document.body
+        )}
+    </span>
+  );
+}
+
+function CompactHealthCheckSummary({
+  report,
+  selection,
+  onDeleted,
+  onFixWithAI,
+}: {
+  report: HealthCheckReport;
+  selection: GtmSelection;
+  onDeleted: () => Promise<void>;
+  onFixWithAI: (rule: HealthCheckResult) => Promise<string>;
+}) {
+  const [expandedRules, setExpandedRules] = useState<Set<string>>(
+    () => new Set()
+  );
+  const [fixRule, setFixRule] = useState<HealthCheckResult | null>(null);
+  const [deleteRule, setDeleteRule] = useState<HealthCheckResult | null>(null);
+  const counts = report.counts ?? { tags: 0, triggers: 0, variables: 0 };
+  const scanned = [
+    { label: "Tags", value: counts.tags },
+    { label: "Triggers", value: counts.triggers },
+    { label: "Variables", value: counts.variables },
+  ];
+
+  return (
+    <div className="mb-8 overflow-hidden rounded-xl border border-line bg-card-hi">
       <div className="grid grid-cols-3 border-b border-line">
-        {[
-          { label: "Tags", value: counts.tags },
-          { label: "Triggers", value: counts.triggers },
-          { label: "Variables", value: counts.variables },
-        ].map((box, index) => (
+        {scanned.map((box, index) => (
           <div key={box.label} className={`px-4 py-3 ${index > 0 ? "border-l border-line" : ""}`}>
-            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-faint">{box.label} scanned</p>
-            <p className="text-[22px] font-semibold text-fg leading-tight mt-1">{box.value}</p>
+            <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-faint">
+              {box.label} scanned
+            </p>
+            <p className="mt-1 text-[22px] font-semibold leading-tight text-fg">
+              {box.value}
+            </p>
           </div>
         ))}
       </div>
 
-      <table className="w-full text-left">
-        <tbody>
-          {rows.map((row, index) => (
-            <tr key={row.id} className={index > 0 ? "border-t border-line" : ""}>
-              <td className="px-4 py-2.5 text-[13px] text-fg align-top w-56">{row.label}</td>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-175 text-left">
+          <tbody>
+            {report.results.map((rule, index) => {
+              const items = allAffected(rule);
+              const assets = getRuleAffectedAssets(rule);
+              const expanded = expandedRules.has(rule.id);
 
-              <td className="px-4 py-2.5 align-top w-24">
-                {!row.found ? (
-                  <span className="text-faint text-[12px]">not run</span>
-                ) : row.items.length > 0 ? (
-                  <span className="inline-flex items-center justify-center min-w-5.5 px-1.5 py-0.5 rounded-md text-[11.5px] font-mono bg-(--danger)/10 text-(--danger) border border-(--danger)/20">
-                    {row.items.length}
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 text-accent text-[12px]">
-                    <CheckCircle size={12} />
-                    None
-                  </span>
-                )}
-              </td>
-
-              <td className="px-4 py-2.5 text-[12px] text-muted align-top">
-                {row.items.length > 0 && (
-                  <>
-                    {row.items
-                      .slice(0, 6)
-                      .map((item: any) => item?.name || item?.id || "Unnamed")
-                      .join(", ")}
-                    {row.items.length > 6 && <span className="text-faint"> +{row.items.length - 6} more</span>}
-                  </>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+              return (
+                <tr key={rule.id} className={index > 0 ? "border-t border-line" : ""}>
+                  <td className="w-[30%] px-4 py-2.5 align-top text-[13px] text-fg">
+                    <RuleTitleWithTooltip
+                      title={rule.title}
+                      description={rule.description}
+                    />
+                  </td>
+                  <td className="w-40 whitespace-nowrap px-4 py-2.5 align-top">
+                    {!rule.passed && items.length > 0 ? (
+                      <span className="inline-flex min-w-5 items-center justify-center rounded-md border border-(--danger)/20 bg-(--danger)/10 px-1.5 py-0.5 font-mono text-[11.5px] text-(--danger)">
+                        {items.length}
+                      </span>
+                    ) : rule.passed ? (
+                      <span className="inline-flex items-center gap-1 text-[12px] text-accent">
+                        <CheckCircle size={13} />
+                        No Issue Found
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-md border border-(--danger)/20 bg-(--danger)/10 px-1.5 py-0.5 text-[11.5px] text-(--danger)">
+                        Review
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5 align-top text-[12px] text-muted">
+                    {items.length > 0 && (
+                      <>
+                        {items
+                          .slice(0, expanded ? items.length : 6)
+                          .map(itemName)
+                          .join(", ")}
+                        {items.length > 6 && (
+                          <>
+                            {", "}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedRules((previous) => {
+                                  const next = new Set(previous);
+                                  if (expanded) next.delete(rule.id);
+                                  else next.add(rule.id);
+                                  return next;
+                                })
+                              }
+                              className="text-accent hover:underline"
+                              aria-expanded={expanded}
+                            >
+                              {expanded ? "Show less" : `+${items.length - 6} more`}
+                            </button>
+                          </>
+                        )}
+                      </>
+                    )}
+                  </td>
+                  <td className="w-28 px-4 py-2.5 text-right align-top">
+                    {!rule.passed && rule.recommendation && (
+                      <button
+                        type="button"
+                        onClick={() => setFixRule(rule)}
+                        className="btn-secondary inline-flex whitespace-nowrap px-3! py-1.5! text-[11.5px]"
+                      >
+                        Fix this
+                      </button>
+                    )}
+                    {!rule.passed &&
+                      !rule.recommendation &&
+                      assets.some((asset) => asset.id) && (
+                      <button
+                        type="button"
+                        onClick={() => setDeleteRule(rule)}
+                        className="btn-secondary ml-2 inline-flex whitespace-nowrap border-(--danger)/30 px-3! py-1.5! text-[11.5px] text-(--danger)"
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      {fixRule && (
+        <FixThisModal
+          rule={fixRule}
+          onClose={() => setFixRule(null)}
+          onFixWithAI={onFixWithAI}
+          onDelete={(rule) => {
+            setFixRule(null);
+            setDeleteRule(rule);
+          }}
+        />
+      )}
+      {deleteRule && (
+        <DeleteAffectedItemsModal
+          rule={deleteRule}
+          selection={selection}
+          onClose={() => setDeleteRule(null)}
+          onDeleted={onDeleted}
+        />
+      )}
     </div>
   );
 }
 
-/* =====================================================
-   HEALTHCHECK TABLE
-===================================================== */
+function FixThisModal({
+  rule,
+  onClose,
+  onFixWithAI,
+  onDelete,
+}: {
+  rule: HealthCheckResult;
+  onClose: () => void;
+  onFixWithAI: (rule: HealthCheckResult) => Promise<string>;
+  onDelete: (rule: HealthCheckResult) => void;
+}) {
+  const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
+  const [loadingAI, setLoadingAI] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleAiFix = async () => {
+    setLoadingAI(true);
+    setError(null);
+    try {
+      setAiSuggestion(await onFixWithAI(rule));
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Could not generate an AI fix."
+      );
+    } finally {
+      setLoadingAI(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="healthcheck-fix-title"
+        className="w-full max-w-lg rounded-xl border border-line bg-card p-5 shadow-xl"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2
+              id="healthcheck-fix-title"
+              className="text-[16px] font-semibold text-fg"
+            >
+              Fix this rule
+            </h2>
+            <p className="mt-1 text-[13px] text-muted">{rule.title}</p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="btn-secondary shrink-0 px-3! py-1.5! text-[11.5px]"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-line bg-card-hi p-3 text-[13px] leading-relaxed text-fg">
+          <span className="font-semibold">Fix:</span>{" "}
+          {rule.recommendation || "No specific recommendation is available."}
+        </div>
+
+        <div className="mt-4 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={handleAiFix}
+            disabled={loadingAI}
+            className="btn-primary disabled:opacity-50"
+          >
+            {loadingAI ? "Generating suggestion…" : "Fix with AI"}
+          </button>
+          {getRuleAffectedAssets(rule).some((asset) => asset.id) && (
+            <button
+              type="button"
+              onClick={() => onDelete(rule)}
+              className="btn-secondary border-(--danger)/30 text-(--danger)"
+            >
+              Delete
+            </button>
+          )}
+        </div>
+
+        <p className="mt-2 text-[11.5px] text-muted">
+          AI will suggest a fix; it will not change your GTM container.
+        </p>
+
+        {error && (
+          <p role="alert" className="mt-3 text-[12px] text-(--danger)">
+            {error}
+          </p>
+        )}
+        {aiSuggestion && (
+          <div className="mt-4 rounded-lg border border-accent/20 bg-accent-soft p-3">
+            <p className="mb-1 text-[12px] font-semibold text-fg">
+              AI suggestion
+            </p>
+            <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-muted">
+              {aiSuggestion}
+            </p>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function DeleteAffectedItemsModal({
+  rule,
+  selection,
+  onClose,
+  onDeleted,
+}: {
+  rule: HealthCheckResult;
+  selection: GtmSelection;
+  onClose: () => void;
+  onDeleted: () => Promise<void>;
+}) {
+  const assets = getRuleAffectedAssets(rule);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const selectedAssets = assets.filter(
+    (asset) => asset.id && selected.has(`${asset.resourceType}:${asset.id}`)
+  );
+
+  const handleDelete = async () => {
+    if (selectedAssets.length === 0) return;
+    if (!selection.accountId || !selection.containerId || !selection.workspaceId) {
+      setError("Select an account, container, and workspace before deleting.");
+      return;
+    }
+
+    const confirmation =
+      selectedAssets.length === 1
+        ? `Are you sure you want to delete "${itemName(selectedAssets[0].item)}" from GTM? This cannot be undone.`
+        : `Are you sure you want to delete these ${selectedAssets.length} selected GTM assets? This cannot be undone.`;
+    if (!window.confirm(confirmation)) return;
+
+    setDeleting(true);
+    setError(null);
+    let deletedCount = 0;
+    try {
+      for (const asset of selectedAssets) {
+        const idParam =
+          asset.resourceType === "tags"
+            ? "tagId"
+            : asset.resourceType === "triggers"
+              ? "triggerId"
+              : "variableId";
+        const query = new URLSearchParams({
+          accountId: selection.accountId,
+          containerId: selection.containerId,
+          workspaceId: selection.workspaceId,
+          [idParam]: asset.id!,
+        });
+        const response = await fetch(
+          `/api/auth/gtm/${asset.resourceType}?${query}`,
+          { method: "DELETE" }
+        );
+        const data = await response.json().catch(() => null);
+        if (!response.ok || !data?.success) {
+          throw new Error(
+            data?.error || `Could not delete ${itemName(asset.item)}.`
+          );
+        }
+        deletedCount += 1;
+      }
+
+      await onDeleted();
+      onClose();
+    } catch (deleteError) {
+      if (deletedCount > 0) await onDeleted();
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : "Could not delete the selected GTM assets."
+      );
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget && !deleting) onClose();
+      }}
+    >
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="healthcheck-delete-title"
+        className="w-full max-w-lg rounded-xl border border-line bg-card p-5 shadow-xl"
+      >
+        <h2
+          id="healthcheck-delete-title"
+          className="text-[16px] font-semibold text-fg"
+        >
+          Delete affected GTM assets
+        </h2>
+        <p className="mt-1 text-[13px] text-muted">{rule.title}</p>
+        <p className="mt-3 text-[12px] text-(--danger)">
+          Select the assets to delete. This changes the GTM workspace.
+        </p>
+
+        <div className="mt-4 max-h-64 space-y-2 overflow-y-auto">
+          {assets.map((asset) => {
+            const key = `${asset.resourceType}:${asset.id ?? itemName(asset.item)}`;
+            const checked = selected.has(key);
+
+            return (
+              <label
+                key={key}
+                className="flex items-start gap-2 rounded-md border border-line bg-card-hi p-2.5 text-[12.5px] text-fg"
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  disabled={!asset.id || deleting}
+                  onChange={() =>
+                    setSelected((previous) => {
+                      const next = new Set(previous);
+                      if (checked) next.delete(key);
+                      else next.add(key);
+                      return next;
+                    })
+                  }
+                  className="mt-0.5"
+                />
+                <span className="min-w-0 flex-1 break-all">
+                  {itemName(asset.item)}
+                  {!asset.id && (
+                    <span className="ml-2 text-[11px] text-(--danger)">
+                      GTM ID unavailable
+                    </span>
+                  )}
+                </span>
+                <span className="shrink-0 text-[10px] uppercase text-muted">
+                  {asset.resourceType.slice(0, -1)}
+                </span>
+              </label>
+            );
+          })}
+        </div>
+
+        {error && (
+          <p role="alert" className="mt-3 text-[12px] text-(--danger)">
+            {error}
+          </p>
+        )}
+
+        <div className="mt-5 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={deleting}
+            className="btn-secondary"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={deleting || selectedAssets.length === 0}
+            className="btn-primary bg-(--danger)! disabled:opacity-50"
+          >
+            {deleting ? "Deleting…" : `Delete selected (${selectedAssets.length})`}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
 
 type TableFilter = "all" | "failed" | "passed";
 
-function HealthCheckTable({ results, passedCount, failedCount }: { results: HealthCheckResult[]; passedCount: number; failedCount: number }) {
+function HealthCheckTable({
+  results,
+  passedCount,
+  failedCount,
+  selection,
+  onDeleted,
+  onFixWithAI,
+}: {
+  results: HealthCheckResult[];
+  passedCount: number;
+  failedCount: number;
+  selection: GtmSelection;
+  onDeleted: () => Promise<void>;
+  onFixWithAI: (rule: HealthCheckResult) => Promise<string>;
+}) {
   const [filter, setFilter] = useState<TableFilter>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [fixRule, setFixRule] = useState<HealthCheckResult | null>(null);
+  const [deleteRule, setDeleteRule] = useState<HealthCheckResult | null>(null);
 
-  const filtered = results.filter((r) => {
-    if (filter === "failed") return !r.passed;
-    if (filter === "passed") return r.passed;
+  const filtered = results.filter((result) => {
+    if (filter === "failed") return !result.passed;
+    if (filter === "passed") return result.passed;
     return true;
   });
 
-  const toggleRow = (r: HealthCheckResult) => {
-    if (!rowHasDetail(r)) return;
-    setExpandedId((prev) => (prev === r.id ? null : r.id));
+  const toggleRow = (result: HealthCheckResult) => {
+    if (!rowHasDetail(result)) return;
+    setExpandedId((previous) => (previous === result.id ? null : result.id));
   };
 
-  const tabs: { key: TableFilter; label: string; count: number; tone: "neutral" | "danger" | "accent" }[] = [
+  const tabs: {
+    key: TableFilter;
+    label: string;
+    count: number;
+    tone: "neutral" | "danger" | "accent";
+  }[] = [
     { key: "all", label: "All", count: results.length, tone: "neutral" },
     { key: "failed", label: "Failed", count: failedCount, tone: "danger" },
     { key: "passed", label: "Passed", count: passedCount, tone: "accent" },
@@ -863,63 +1575,83 @@ function HealthCheckTable({ results, passedCount, failedCount }: { results: Heal
 
   return (
     <div>
-      {/* FILTER TABS */}
-
-      <div className="flex flex-wrap items-center gap-2 mb-4">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
         {tabs.map((tab) => {
           const active = filter === tab.key;
-
-          const base = "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12.5px] font-medium border transition-colors";
-
+          const base =
+            "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12.5px] font-medium transition-colors";
           const activeClass =
             tab.tone === "danger"
-              ? "bg-(--danger)/10 border-(--danger)/30 text-(--danger)"
+              ? "border-(--danger)/30 bg-(--danger)/10 text-(--danger)"
               : tab.tone === "accent"
-                ? "bg-accent-soft border-accent/30 text-accent"
-                : "bg-card-hi border-edge text-fg";
-
-          const idleClass = "bg-card border-line text-muted hover:text-fg hover:border-edge";
+                ? "border-accent/30 bg-accent-soft text-accent"
+                : "border-edge bg-card-hi text-fg";
+          const idleClass =
+            "border-line bg-card text-muted hover:border-edge hover:text-fg";
 
           return (
-            <button key={tab.key} type="button" onClick={() => setFilter(tab.key)} className={`${base} ${active ? activeClass : idleClass}`}>
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setFilter(tab.key)}
+              className={`${base} ${active ? activeClass : idleClass}`}
+            >
               {tab.label}
-              <span className="font-mono text-[11px] opacity-70">{tab.count}</span>
+              <span className="font-mono text-[11px] opacity-70">
+                {tab.count}
+              </span>
             </button>
           );
         })}
       </div>
 
-      {/* TABLE */}
-
-      <div className="rounded-xl border border-line overflow-hidden">
+      <div className="overflow-hidden rounded-xl border border-line">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full border-collapse text-left">
             <thead>
-              <tr className="bg-card-hi border-b border-line">
+              <tr className="border-b border-line bg-card-hi">
                 <th className="w-8 px-3 py-2.5" />
-                <th className="px-3 py-2.5 text-[11.5px] font-semibold uppercase tracking-wide text-faint w-23">ID</th>
-                <th className="px-3 py-2.5 text-[11.5px] font-semibold uppercase tracking-wide text-faint">Check</th>
-                <th className="px-3 py-2.5 text-[11.5px] font-semibold uppercase tracking-wide text-faint w-27.5">Severity</th>
-                <th className="px-3 py-2.5 text-[11.5px] font-semibold uppercase tracking-wide text-faint w-23 text-center">Affected</th>
-                <th className="px-3 py-2.5 text-[11.5px] font-semibold uppercase tracking-wide text-faint w-20 text-center">Status</th>
+                <th className="w-23 px-3 py-2.5 text-[11.5px] font-semibold uppercase tracking-wide text-faint">
+                  ID
+                </th>
+                <th className="px-3 py-2.5 text-[11.5px] font-semibold uppercase tracking-wide text-faint">
+                  Check
+                </th>
+                <th className="w-27.5 px-3 py-2.5 text-[11.5px] font-semibold uppercase tracking-wide text-faint">
+                  Severity
+                </th>
+                <th className="w-23 px-3 py-2.5 text-center text-[11.5px] font-semibold uppercase tracking-wide text-faint">
+                  Affected
+                </th>
+                <th className="w-20 px-3 py-2.5 text-center text-[11.5px] font-semibold uppercase tracking-wide text-faint">
+                  Status
+                </th>
+                <th className="w-40 px-3 py-2.5 text-right text-[11.5px] font-semibold uppercase tracking-wide text-faint">
+                  Actions
+                </th>
               </tr>
             </thead>
 
             <tbody>
-              {filtered.map((r) => (
+              {filtered.map((result) => (
                 <FragmentRow
-                  key={r.id}
-                  r={r}
-                  detail={rowHasDetail(r)}
-                  expanded={expandedId === r.id}
-                  affected={affectedItemCount(r)}
-                  onToggle={() => toggleRow(r)}
+                  key={result.id}
+                  result={result}
+                  detail={rowHasDetail(result)}
+                  expanded={expandedId === result.id}
+                  affected={affectedItemCount(result)}
+                  onToggle={() => toggleRow(result)}
+                  onFix={() => setFixRule(result)}
+                  onDelete={() => setDeleteRule(result)}
                 />
               ))}
 
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center text-[13px] text-muted">
+                  <td
+                    colSpan={7}
+                    className="px-4 py-8 text-center text-[13px] text-muted"
+                  >
                     No checks in this view.
                   </td>
                 </tr>
@@ -929,24 +1661,48 @@ function HealthCheckTable({ results, passedCount, failedCount }: { results: Heal
         </div>
       </div>
 
-      <p className="mt-3 text-[12px] text-faint">Tip: click a row to see the fix and affected items.</p>
+      <p className="mt-3 text-[12px] text-faint">
+        Tip: click a row to see the fix and affected items.
+      </p>
+      {fixRule && (
+        <FixThisModal
+          rule={fixRule}
+          onClose={() => setFixRule(null)}
+          onFixWithAI={onFixWithAI}
+          onDelete={(rule) => {
+            setFixRule(null);
+            setDeleteRule(rule);
+          }}
+        />
+      )}
+      {deleteRule && (
+        <DeleteAffectedItemsModal
+          rule={deleteRule}
+          selection={selection}
+          onClose={() => setDeleteRule(null)}
+          onDeleted={onDeleted}
+        />
+      )}
     </div>
   );
 }
 
-/* A single check row + its expandable detail row. */
 function FragmentRow({
-  r,
+  result,
   detail,
   expanded,
   affected,
   onToggle,
+  onFix,
+  onDelete,
 }: {
-  r: HealthCheckResult;
+  result: HealthCheckResult;
   detail: boolean;
   expanded: boolean;
   affected: number;
   onToggle: () => void;
+  onFix: () => void;
+  onDelete: () => void;
 }) {
   return (
     <>
@@ -956,49 +1712,87 @@ function FragmentRow({
       >
         <td className="px-3 py-3 align-top">
           {detail ? (
-            expanded ? <ChevronDown size={14} className="text-muted" /> : <ChevronRight size={14} className="text-faint" />
+            expanded ? (
+              <ChevronDown size={14} className="text-muted" />
+            ) : (
+              <ChevronRight size={14} className="text-faint" />
+            )
           ) : null}
         </td>
 
         <td className="px-3 py-3 align-top">
-          <span className="font-mono text-[11.5px] text-faint">{r.id}</span>
+          <span className="font-mono text-[11.5px] text-faint">
+            {result.id}
+          </span>
         </td>
 
         <td className="px-3 py-3 align-top">
-          <p className="text-[13.5px] font-medium text-fg">{r.title}</p>
-
-          {r.description && <p className="text-[12px] text-muted mt-0.5 leading-relaxed line-clamp-1">{r.description}</p>}
-        </td>
-
-        <td className="px-3 py-3 align-top">
-          <SeverityBadge severity={r.severity} />
-        </td>
-
-        <td className="px-3 py-3 align-top text-center">
-          {affected > 0 ? (
-            <span className="inline-flex items-center justify-center min-w-5.5 px-1.5 py-0.5 rounded-md text-[11.5px] font-mono bg-(--danger)/10 text-(--danger) border border-(--danger)/20">
-              {affected}
-            </span>
-          ) : passedTotal(r) > 0 ? (
-            <span
-              title="Items checked that passed"
-              className="inline-flex items-center justify-center min-w-5.5 px-1.5 py-0.5 rounded-md text-[11.5px] font-mono bg-accent-soft text-accent border border-accent/25"
-            >
-              ✓ {passedTotal(r)}
-            </span>
-          ) : (
-            <span className="text-faint text-[12px]">—</span>
+          <RuleTitleWithTooltip
+            title={result.title}
+            description={result.description}
+          />
+          {result.description && (
+            <p className="mt-0.5 line-clamp-1 text-[12px] leading-relaxed text-muted">
+              {result.description}
+            </p>
           )}
         </td>
 
-        <td className="px-3 py-3 align-top text-center">
-          {r.passed ? (
-            <span className="inline-flex items-center gap-1 text-accent text-[11.5px] font-medium">
+        <td className="px-3 py-3 align-top">
+          <SeverityBadge severity={result.severity} />
+        </td>
+
+        <td className="px-3 py-3 text-center align-top">
+          {affected > 0 ? (
+            <span className="inline-flex min-w-5.5 items-center justify-center rounded-md border border-(--danger)/20 bg-(--danger)/10 px-1.5 py-0.5 font-mono text-[11.5px] text-(--danger)">
+              {affected}
+            </span>
+          ) : (
+            <span className="text-[12px] text-faint">—</span>
+          )}
+        </td>
+        <td className="px-3 py-3 text-right align-top">
+          {!result.passed && (
+            <div className="inline-flex items-center gap-2">
+              {result.recommendation && (
+                <button
+                  type="button"
+                  aria-haspopup="dialog"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onFix();
+                  }}
+                  className="btn-secondary inline-flex whitespace-nowrap px-3! py-1.5! text-[11.5px]"
+                >
+                  Fix this
+                </button>
+              )}
+              {!result.recommendation &&
+                getRuleAffectedAssets(result).some((asset) => asset.id) && (
+                <button
+                  type="button"
+                  aria-haspopup="dialog"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onDelete();
+                  }}
+                  className="btn-secondary inline-flex whitespace-nowrap border-(--danger)/30 px-3! py-1.5! text-[11.5px] text-(--danger)"
+                >
+                  Delete
+                </button>
+              )}
+            </div>
+          )}
+        </td>
+
+        <td className="px-3 py-3 text-center align-top">
+          {result.passed ? (
+            <span className="inline-flex items-center gap-1 text-[11.5px] font-medium text-accent">
               <CheckCircle size={13} />
               Pass
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1 text-(--danger) text-[11.5px] font-medium">
+            <span className="inline-flex items-center gap-1 text-[11.5px] font-medium text-(--danger)">
               <XCircle size={13} />
               Fail
             </span>
@@ -1009,25 +1803,72 @@ function FragmentRow({
       {detail && expanded && (
         <tr className="border-t border-line bg-card-hi">
           <td />
-          <td colSpan={5} className="px-3 pb-5 pt-1 align-top">
-            {r.description && <p className="text-[13px] text-muted leading-relaxed max-w-2xl">{r.description}</p>}
+          <td colSpan={6} className="px-3 pb-5 pt-1 align-top">
+            {result.description && (
+              <p className="max-w-2xl text-[13px] leading-relaxed text-muted">
+                {result.description}
+              </p>
+            )}
 
-            {r.recommendation && (
-              <div className="mt-3 px-3 py-2 rounded-md bg-(--danger)/8 border border-(--danger)/20 text-(--danger) text-[12.5px] max-w-2xl w-fit">
-                <span className="font-semibold">Fix:</span> {r.recommendation}
+            {result.recommendation && (
+              <div className="mt-3 w-fit max-w-2xl rounded-md border border-(--danger)/20 bg-(--danger)/8 px-3 py-2 text-[12.5px] text-(--danger)">
+                <span className="font-semibold">Fix:</span>{" "}
+                {result.recommendation}
               </div>
             )}
 
-            <AffectedList label="Affected Tags" items={r.affectedTags} />
-            <AffectedList label="Affected Triggers" items={r.affectedTriggers} />
-            <AffectedList label="Affected Variables" items={r.affectedVariables} />
-            <AffectedList label="Unused Tags" items={(r as any).unusedTags} />
-            <AffectedList label="Unused Triggers" items={(r as any).unusedTriggers} />
-            <AffectedList label="Unused Variables" items={(r as any).unusedVariables} />
-
-            <AffectedList label="Checked tags — passed" items={(r as any).passedTags} total={(r as any).passedCounts?.tags} tone="pass" />
-            <AffectedList label="Checked triggers — passed" items={(r as any).passedTriggers} total={(r as any).passedCounts?.triggers} tone="pass" />
-            <AffectedList label="Checked variables — passed" items={(r as any).passedVariables} total={(r as any).passedCounts?.variables} tone="pass" />
+            <AffectedList label="Affected Tags" items={result.affectedTags} resourceType={"tags"} selection={{
+              accountId: undefined,
+              containerId: undefined,
+              workspaceId: undefined
+            }} onDeleted={function (): Promise<void> {
+              throw new Error("Function not implemented.");
+            } } />
+            <AffectedList
+              label="Affected Triggers"
+              items={result.affectedTriggers} resourceType={"tags"} selection={{
+                accountId: undefined,
+                containerId: undefined,
+                workspaceId: undefined
+              }} onDeleted={function (): Promise<void> {
+                throw new Error("Function not implemented.");
+              } }            />
+            <AffectedList
+              label="Affected Variables"
+              items={result.affectedVariables} resourceType={"tags"} selection={{
+                accountId: undefined,
+                containerId: undefined,
+                workspaceId: undefined
+              }} onDeleted={function (): Promise<void> {
+                throw new Error("Function not implemented.");
+              } }            />
+            <AffectedList
+              label="Unused Tags"
+              items={(result as any).unusedTags} resourceType={"tags"} selection={{
+                accountId: undefined,
+                containerId: undefined,
+                workspaceId: undefined
+              }} onDeleted={function (): Promise<void> {
+                throw new Error("Function not implemented.");
+              } }            />
+            <AffectedList
+              label="Unused Triggers"
+              items={(result as any).unusedTriggers} resourceType={"tags"} selection={{
+                accountId: undefined,
+                containerId: undefined,
+                workspaceId: undefined
+              }} onDeleted={function (): Promise<void> {
+                throw new Error("Function not implemented.");
+              } }            />
+            <AffectedList
+              label="Unused Variables"
+              items={(result as any).unusedVariables} resourceType={"tags"} selection={{
+                accountId: undefined,
+                containerId: undefined,
+                workspaceId: undefined
+              }} onDeleted={function (): Promise<void> {
+                throw new Error("Function not implemented.");
+              } }            />
           </td>
         </tr>
       )}
@@ -1084,9 +1925,8 @@ function ClaudeAuditChatBlock({
             {chatMessages.map((message, index) => (
               <div key={`${index}-${message.role}`} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
                 <div
-                  className={`max-w-[85%] rounded-lg px-3.5 py-2 text-[13px] leading-relaxed ${
-                    message.role === "user" ? "bg-emerald-600 text-white whitespace-pre-wrap" : "bg-card-hi border border-line text-fg"
-                  }`}
+                  className={`max-w-[85%] rounded-lg px-3.5 py-2 text-[13px] leading-relaxed ${message.role === "user" ? "bg-emerald-600 text-white whitespace-pre-wrap" : "bg-card-hi border border-line text-fg"
+                    }`}
                 >
                   {message.role === "assistant" ? renderMarkdownLite(message.content) : message.content}
                 </div>
@@ -1243,11 +2083,16 @@ function Badge({ icon, label }: { icon: ReactNode; label: string }) {
 }
 
 function SeverityBadge({ severity }: { severity: string }) {
-  const tone = severity === "HIGH" ? "var(--danger)" : severity === "MEDIUM" ? "var(--warn)" : "var(--accent)";
+  const tone =
+    severity === "HIGH"
+      ? "var(--danger)"
+      : severity === "MEDIUM"
+        ? "var(--warn)"
+        : "var(--accent)";
 
   return (
     <span
-      className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold uppercase tracking-[0.12em] border"
+      className="inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-[0.12em]"
       style={{
         background: `color-mix(in srgb, ${tone} 14%, transparent)`,
         color: tone,
@@ -1262,74 +2107,163 @@ function SeverityBadge({ severity }: { severity: string }) {
 function AffectedList({
   label,
   items,
-  total,
-  tone = "fail",
+  resourceType,
+  selection,
+  onDeleted,
 }: {
   label: string;
   items?: any[];
-  total?: number;
-  tone?: "fail" | "pass";
+  resourceType: GtmResourceType;
+  selection: GtmSelection;
+  onDeleted: () => Promise<void>;
 }) {
-  const [showAll, setShowAll] = useState(false);
   if (!items || items.length === 0) return null;
-
-  const LIMIT = 30;
-  const visible = showAll ? items : items.slice(0, LIMIT);
-  const hiddenCount = Math.max((total ?? items.length) - visible.length, 0);
-
-  const chip =
-    tone === "pass"
-      ? "rounded-md border border-accent/25 bg-accent-soft px-3 py-1.5 text-xs font-medium text-accent"
-      : "rounded-md border border-line bg-card px-3 py-1.5 text-xs font-medium text-fg";
 
   return (
     <div className="mt-4">
-      <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
-        {label} <span className="font-mono normal-case text-faint">({total ?? items.length})</span>
+      <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
+        {label}
       </h4>
 
       <div className="flex flex-wrap gap-2">
-        {visible.map((item: any, index) => {
-          const content = item?.name || item?.id || "Unnamed";
-
-          if (item?.editUrl) {
-            return (
+        {items.map((item, index) => (
+          <div
+            key={`${getGtmResourceId(item, resourceType) ?? itemName(item)}-${index}`}
+            className="inline-flex items-center gap-2 rounded-md border border-line bg-card px-3 py-1.5"
+          >
+            {item?.editUrl ? (
               <a
-                key={index}
                 href={item.editUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className={`${chip} hover:opacity-80 transition-opacity`}
+                onClick={(event) => event.stopPropagation()}
+                className="text-xs font-medium text-fg hover:text-accent"
               >
-                {content}
+                {itemName(item)}
               </a>
-            );
-          }
-
-          return (
-            <span key={index} className={chip}>
-              {content}
-            </span>
-          );
-        })}
-
-        {!showAll && items.length > LIMIT && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowAll(true);
-            }}
-            className="rounded-md border border-line px-3 py-1.5 text-xs text-muted hover:text-fg"
-          >
-            Show {items.length - LIMIT} more
-          </button>
-        )}
-
-        {hiddenCount > 0 && showAll && <span className="px-2 py-1.5 text-xs text-faint">+{hiddenCount} not listed</span>}
+            ) : (
+              <span className="text-xs font-medium text-fg">
+                {itemName(item)}
+              </span>
+            )}
+            <DeleteGtmItemButton
+              item={item}
+              resourceType={resourceType}
+              selection={selection}
+              onDeleted={onDeleted}
+            />
+          </div>
+        ))}
       </div>
     </div>
+  );
+}
+
+function getGtmResourceId(
+  item: any,
+  resourceType: GtmResourceType
+): string | null {
+  const idField =
+    resourceType === "tags"
+      ? "tagId"
+      : resourceType === "triggers"
+        ? "triggerId"
+        : "variableId";
+  const candidate = item?.id ?? item?.[idField];
+  if (typeof candidate === "string" && candidate.trim()) return candidate;
+  if (typeof candidate === "number") return String(candidate);
+  if (typeof item?.path === "string") {
+    const pathId = item.path.split("/").pop();
+    return pathId || null;
+  }
+  return null;
+}
+
+function DeleteGtmItemButton({
+  item,
+  resourceType,
+  selection,
+  onDeleted,
+}: {
+  item: any;
+  resourceType: GtmResourceType;
+  selection: GtmSelection;
+  onDeleted: () => Promise<void>;
+}) {
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const itemId = getGtmResourceId(item, resourceType);
+  const hasSelection =
+    Boolean(selection.accountId) &&
+    Boolean(selection.containerId) &&
+    Boolean(selection.workspaceId);
+
+  const handleDelete = async () => {
+    if (!itemId || !selection.accountId || !selection.containerId || !selection.workspaceId) {
+      setError("This GTM item cannot be deleted because its ID or workspace is missing.");
+      return;
+    }
+
+    const name = itemName(item);
+    if (!window.confirm(`Are you sure you want to delete "${name}" from this GTM workspace?`)) {
+      return;
+    }
+
+    const idParam =
+      resourceType === "tags"
+        ? "tagId"
+        : resourceType === "triggers"
+          ? "triggerId"
+          : "variableId";
+    const query = new URLSearchParams({
+      accountId: selection.accountId,
+      containerId: selection.containerId,
+      workspaceId: selection.workspaceId,
+      [idParam]: itemId,
+    });
+
+    setDeleting(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/auth/gtm/${resourceType}?${query}`, {
+        method: "DELETE",
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.success) {
+        throw new Error(data?.error || `Could not delete ${name}.`);
+      }
+      await onDeleted();
+    } catch (deleteError) {
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : `Could not delete ${name}.`
+      );
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <span className="inline-flex items-center gap-2">
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          void handleDelete();
+        }}
+        disabled={deleting || !itemId || !hasSelection}
+        title={!itemId ? "GTM item ID is unavailable" : "Delete this GTM item"}
+        className="text-[11px] font-medium text-(--danger) hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {deleting ? "Deleting…" : "Delete"}
+      </button>
+      {error && (
+        <span role="alert" className="text-[11px] text-(--danger)">
+          {error}
+        </span>
+      )}
+    </span>
   );
 }
 
