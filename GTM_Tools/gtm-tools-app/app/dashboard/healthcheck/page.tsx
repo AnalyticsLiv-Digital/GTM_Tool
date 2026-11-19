@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import {
@@ -33,7 +32,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
-import type { HealthCheckResult } from "@/lib/healthcheck/types";
+import type { AffectedItem, HealthCheckResult } from "@/lib/healthcheck/types";
 import { useDashboardStore } from "@/app/store/useDashboardStore";
 import { ApiKeyModal, ConnectionBadge } from "@/app/dashboard/components/ApiKeyModal";
 import { useAnthropicKey } from "@/hooks/useAnthropicKey";
@@ -47,6 +46,21 @@ type GtmSelection = {
   containerId?: string | null;
   workspaceId?: string | null;
 };
+type GtmAffectedItem = AffectedItem & {
+  path?: string;
+  tagId?: string | number;
+  triggerId?: string | number;
+  variableId?: string | number;
+};
+type HealthCheckAsset = {
+  item: GtmAffectedItem;
+  resourceType: GtmResourceType;
+  id: string | null;
+};
+type HealthCheckFixHandler = (
+  rule: HealthCheckResult,
+  selectedAssets?: HealthCheckAsset[]
+) => Promise<string>;
 
 type HealthCheckReport = {
   score: number;
@@ -76,9 +90,36 @@ type HealthCheckApiResponse = {
   details?: string;
 };
 
+type HealthCheckAiResponse = {
+  success?: boolean;
+  code?: string;
+  error?: string;
+  resultText?: string;
+  healthReport?: unknown;
+  truncated?: boolean;
+  fallback?: boolean;
+};
+
 /* =====================================================
    HELPERS
 ===================================================== */
+
+function parseHealthCheckAiResponse(value: unknown): HealthCheckAiResponse | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  const data = value as Record<string, unknown>;
+  return {
+    success: typeof data.success === "boolean" ? data.success : undefined,
+    code: typeof data.code === "string" ? data.code : undefined,
+    error: typeof data.error === "string" ? data.error : undefined,
+    resultText:
+      typeof data.resultText === "string" ? data.resultText : undefined,
+    healthReport: data.healthReport,
+    truncated: typeof data.truncated === "boolean" ? data.truncated : undefined,
+  };
+}
 
 function normalizeHealthReport(
   data: HealthCheckApiResponse | null | undefined
@@ -94,7 +135,7 @@ function normalizeHealthReport(
     return null;
   }
 
-  const value = candidate as any;
+  const value = candidate as Partial<HealthCheckApiResponse> & Partial<HealthCheckReport>;
 
   // Accept both nested and top-level results.
   const results = Array.isArray(value.results)
@@ -111,13 +152,13 @@ function normalizeHealthReport(
     passedCount: Number(
       value.passedCount ??
       data.passedCount ??
-      results.filter((r: any) => r?.passed === true).length
+      results.filter((r: HealthCheckResult) => r?.passed === true).length
     ),
 
     failedCount: Number(
       value.failedCount ??
       data.failedCount ??
-      results.filter((r: any) => r?.passed === false).length
+      results.filter((r:  HealthCheckResult) => r?.passed === false).length
     ),
 
     counts: value.counts ?? data.counts
@@ -139,24 +180,44 @@ function normalizeHealthReport(
 }
 
 /** Every affected / unused item attached to one check. */
-function allAffected(r?: HealthCheckResult | null): any[] {
+function allAffected(r?: HealthCheckResult | null): AffectedItem[] {
   if (!r) return [];
-  const any = r as any;
-  return [any.affectedTags, any.affectedTriggers, any.affectedVariables, any.unusedTags, any.unusedTriggers, any.unusedVariables].flatMap((list) =>
-    Array.isArray(list) ? list : []
-  );
+  return [
+    ...(r.affectedTags ?? []),
+    ...(r.affectedTriggers ?? []),
+    ...(r.affectedVariables ?? []),
+    ...(r.unusedTags ?? []),
+    ...(r.unusedTriggers ?? []),
+    ...(r.unusedVariables ?? []),
+  ];
 }
 
 function getRuleAffectedAssets(
   result: HealthCheckResult
-): { item: any; resourceType: GtmResourceType; id: string | null }[] {
-  const data = result as any;
-  const combine = (...lists: (any[] | undefined)[]) =>
-    lists.flatMap((list) => (Array.isArray(list) ? list : []));
-  const groups: { items: any[]; resourceType: GtmResourceType }[] = [
-    { items: combine(data.affectedTags, data.unusedTags, data.pausedTags), resourceType: "tags" },
-    { items: combine(data.affectedTriggers, data.unusedTriggers), resourceType: "triggers" },
-    { items: combine(data.affectedVariables, data.unusedVariables), resourceType: "variables" },
+): HealthCheckAsset[] {
+  const groups: { items: GtmAffectedItem[]; resourceType: GtmResourceType }[] = [
+    {
+      items: [
+        ...(result.affectedTags ?? []),
+        ...(result.unusedTags ?? []),
+        ...(result.pausedTags ?? []),
+      ],
+      resourceType: "tags",
+    },
+    {
+      items: [
+        ...(result.affectedTriggers ?? []),
+        ...(result.unusedTriggers ?? []),
+      ],
+      resourceType: "triggers",
+    },
+    {
+      items: [
+        ...(result.affectedVariables ?? []),
+        ...(result.unusedVariables ?? []),
+      ],
+      resourceType: "variables",
+    },
   ];
 
   const seen = new Set<string>();
@@ -530,7 +591,9 @@ export default function HealthCheckPage() {
         body: JSON.stringify(ids),
       });
 
-      const aiData = (await aiRes.json().catch(() => null)) as any;
+      const aiData = parseHealthCheckAiResponse(
+        await aiRes.json().catch(() => null)
+      );
 
       /* Key missing or no longer valid: ask for a new one, then resume this audit. */
       if (aiData?.code === "no_key" || aiData?.code === "invalid_key") {
@@ -629,17 +692,115 @@ export default function HealthCheckPage() {
     }
   };
 
-  const handleFixWithAI = async (rule: HealthCheckResult): Promise<string> => {
+  const handleFixWithAI = async (
+    rule: HealthCheckResult,
+    selectedAssets?: HealthCheckAsset[]
+  ): Promise<string> => {
     if (!report) throw new Error("Run the health check before requesting an AI fix.");
 
-    const prompt = [
-      "Suggest a safe, specific way to fix this GTM health-check rule.",
-      "Do not make or claim to make changes to the GTM container.",
-      `Rule: ${rule.title}`,
-      `Description: ${rule.description}`,
-      `Rule recommendation: ${rule.recommendation || "None provided."}`,
-      `Affected items: ${allAffected(rule).map(itemName).join(", ") || "None listed."}`,
-    ].join("\n");
+    const isCustomHtmlTryCatchRule = rule.id === "HC_HR_005";
+    let prompt: string;
+
+    if (isCustomHtmlTryCatchRule) {
+      const selectedTags = (selectedAssets ?? []).filter(
+        (asset) => asset.resourceType === "tags"
+      );
+      if (selectedTags.length === 0) {
+        throw new Error("Select at least one affected Custom HTML tag first.");
+      }
+
+      const { selectedAccountId, selectedContainerId, selectedWorkspaceId } =
+        useDashboardStore.getState();
+      if (!selectedAccountId || !selectedContainerId || !selectedWorkspaceId) {
+        throw new Error("Select an account, container, and workspace first.");
+      }
+
+      const query = new URLSearchParams({
+        accountId: selectedAccountId,
+        containerId: selectedContainerId,
+        workspaceId: selectedWorkspaceId,
+      });
+      const tagsResponse = await fetch(`/api/auth/gtm/tags?${query}`);
+      const tagsData = (await tagsResponse.json().catch(() => null)) as
+        | { tag?: unknown; error?: string }
+        | null;
+      if (!tagsResponse.ok || !Array.isArray(tagsData?.tag)) {
+        throw new Error(
+          tagsData?.error || "Could not load Custom HTML from this GTM workspace."
+        );
+      }
+
+      const workspaceTags = tagsData.tag.filter(
+        (tag): tag is GtmAffectedItem & {
+          type?: unknown;
+          parameter?: unknown;
+        } =>
+          typeof tag === "object" &&
+          tag !== null &&
+          !Array.isArray(tag) &&
+          "name" in tag &&
+          typeof tag.name === "string"
+      );
+      const htmlSources = selectedTags.map((asset) => {
+        const matchedTag = workspaceTags.find((tag) => {
+          if (tag.type !== "html") return false;
+          const tagId = getGtmResourceId(tag, "tags");
+          return asset.id
+            ? tagId === asset.id
+            : tag.name === itemName(asset.item);
+        });
+        if (!matchedTag) {
+          throw new Error(
+            `Could not find the selected Custom HTML tag "${itemName(asset.item)}" in the current workspace.`
+          );
+        }
+
+        const parameters = Array.isArray(matchedTag.parameter)
+          ? matchedTag.parameter
+          : [];
+        const htmlParameter = parameters.find(
+          (parameter) =>
+            typeof parameter === "object" &&
+            parameter !== null &&
+            "key" in parameter &&
+            parameter.key === "html"
+        );
+        const html =
+          typeof htmlParameter === "object" &&
+          htmlParameter !== null &&
+          "value" in htmlParameter &&
+          typeof htmlParameter.value === "string"
+            ? htmlParameter.value
+            : "";
+        if (!html.trim()) {
+          throw new Error(
+            `The selected tag "${itemName(asset.item)}" has no Custom HTML code.`
+          );
+        }
+        return { name: itemName(asset.item), html };
+      });
+
+      prompt = [
+        "Fix the selected Google Tag Manager Custom HTML code by adding safe, appropriate try/catch handling.",
+        "Return the complete corrected HTML for each selected tag, not a diff or general instructions.",
+        "Preserve the tag's existing behavior, markup, selectors, URLs, event names, and GTM variables. Do not invent missing business logic.",
+        "Wrap executable JavaScript in try/catch without swallowing errors silently; log caught errors with console.error.",
+        "Label each output with its exact tag name and provide one fenced html code block per tag. Do not make or claim to make changes to GTM.",
+        ...htmlSources.map(
+          ({ name, html }, index) =>
+            `Selected tag ${index + 1}: ${name}\nCurrent HTML:\n${html}`
+        ),
+      ].join("\n\n");
+    } else {
+      prompt = [
+        "Suggest a safe, specific way to fix this GTM health-check rule.",
+        "Do not make or claim to make changes to the GTM container.",
+        `Rule: ${rule.title}`,
+        `Description: ${rule.description}`,
+        `Rule recommendation: ${rule.recommendation || "None provided."}`,
+        `Affected items: ${allAffected(rule).map(itemName).join(", ") || "None listed."}`,
+      ].join("\n");
+    }
 
     const res = await fetch("/api/auth/healthcheck/chat", {
       method: "POST",
@@ -647,6 +808,9 @@ export default function HealthCheckPage() {
       body: JSON.stringify({
         healthReport: report,
         claudeText,
+        responseMode: isCustomHtmlTryCatchRule
+          ? "custom_html_try_catch"
+          : undefined,
         messages: [{ role: "user", content: prompt }],
       }),
     });
@@ -679,7 +843,8 @@ export default function HealthCheckPage() {
   const handleDownloadPDF = () => {
     if (!report) return;
 
-    const names = (list?: any[]) => (list ?? []).map((x: any) => x?.name).filter(Boolean).join(", ") || "-";
+    const names = (list?: AffectedItem[]) =>
+      list?.map((item) => item.name).filter(Boolean).join(", ") || "-";
 
     const doc = new jsPDF();
 
@@ -715,7 +880,9 @@ export default function HealthCheckPage() {
         headStyles: { fontSize: 10 },
       });
 
-      currentY = ((doc as any).lastAutoTable?.finalY || currentY) + 12;
+      currentY =
+        ((doc as jsPDF & { lastAutoTable?: { finalY: number } }).lastAutoTable
+          ?.finalY || currentY) + 12;
     }
 
     if (passedChecks.length > 0) {
@@ -1037,7 +1204,7 @@ export default function HealthCheckPage() {
    HEALTHCHECK RULES
 ===================================================== */
 
-const itemName = (item: any): string =>
+const itemName = (item: AffectedItem): string =>
   item?.name || item?.id || "Unnamed";
 
 function RuleTitleWithTooltip({
@@ -1105,7 +1272,7 @@ function CompactHealthCheckSummary({
   report: HealthCheckReport;
   selection: GtmSelection;
   onDeleted: () => Promise<void>;
-  onFixWithAI: (rule: HealthCheckResult) => Promise<string>;
+  onFixWithAI: HealthCheckFixHandler;
 }) {
   const [expandedRules, setExpandedRules] = useState<Set<string>>(
     () => new Set()
@@ -1229,10 +1396,8 @@ function CompactHealthCheckSummary({
           rule={fixRule}
           onClose={() => setFixRule(null)}
           onFixWithAI={onFixWithAI}
-          onDelete={(rule) => {
-            setFixRule(null);
-            setDeleteRule(rule);
-          }}
+          selection={selection}
+          onDeleted={onDeleted}
         />
       )}
       {deleteRule && (
@@ -1251,22 +1416,25 @@ function FixThisModal({
   rule,
   onClose,
   onFixWithAI,
-  onDelete,
+  selection,
+  onDeleted,
 }: {
   rule: HealthCheckResult;
   onClose: () => void;
-  onFixWithAI: (rule: HealthCheckResult) => Promise<string>;
-  onDelete: (rule: HealthCheckResult) => void;
+  onFixWithAI: HealthCheckFixHandler;
+  selection: GtmSelection;
+  onDeleted: () => Promise<void>;
 }) {
   const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
   const [loadingAI, setLoadingAI] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const hasAffectedAssets = getRuleAffectedAssets(rule).length > 0;
 
-  const handleAiFix = async () => {
+  const handleAiFix = async (selectedAssets?: HealthCheckAsset[]) => {
     setLoadingAI(true);
     setError(null);
     try {
-      setAiSuggestion(await onFixWithAI(rule));
+      setAiSuggestion(await onFixWithAI(rule, selectedAssets));
     } catch (requestError) {
       setError(
         requestError instanceof Error
@@ -1277,6 +1445,25 @@ function FixThisModal({
       setLoadingAI(false);
     }
   };
+
+  const fixWithAIButton = (selectedAssets?: HealthCheckAsset[]) => (
+    <button
+      type="button"
+      onClick={() => void handleAiFix(selectedAssets)}
+      disabled={
+        loadingAI ||
+        (rule.id === "HC_HR_005" &&
+          !selectedAssets?.some((asset) => asset.resourceType === "tags"))
+      }
+      className="btn-primary disabled:opacity-50"
+    >
+      {loadingAI
+        ? "Generating suggestion…"
+        : rule.id === "HC_HR_005"
+          ? "Fix selected HTML with AI"
+          : "Fix with AI"}
+    </button>
+  );
 
   return (
     <div
@@ -1289,7 +1476,7 @@ function FixThisModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="healthcheck-fix-title"
-        className="w-full max-w-lg rounded-xl border border-line bg-card p-5 shadow-xl"
+        className="max-h-[calc(100vh-2rem)] w-full max-w-2xl overflow-y-auto rounded-xl border border-line bg-card p-5 shadow-xl"
       >
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -1315,28 +1502,25 @@ function FixThisModal({
           {rule.recommendation || "No specific recommendation is available."}
         </div>
 
-        <div className="mt-4 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleAiFix}
-            disabled={loadingAI}
-            className="btn-primary disabled:opacity-50"
-          >
-            {loadingAI ? "Generating suggestion…" : "Fix with AI"}
-          </button>
-          {getRuleAffectedAssets(rule).some((asset) => asset.id) && (
-            <button
-              type="button"
-              onClick={() => onDelete(rule)}
-              className="btn-secondary border-(--danger)/30 text-(--danger)"
-            >
-              Delete
-            </button>
-          )}
-        </div>
+        {hasAffectedAssets ? (
+          <DeleteAffectedItemsModal
+            rule={rule}
+            selection={selection}
+            onClose={onClose}
+            onDeleted={onDeleted}
+            footerAction={(selectedAssets) =>
+              fixWithAIButton(selectedAssets)
+            }
+            embedded
+          />
+        ) : (
+          <div className="mt-4 flex justify-end">{fixWithAIButton()}</div>
+        )}
 
         <p className="mt-2 text-[11.5px] text-muted">
-          AI will suggest a fix; it will not change your GTM container.
+          {rule.id === "HC_HR_005"
+            ? "Selected Custom HTML code will be sent to AI to generate a try/catch-safe version. GTM will not be changed."
+            : "AI will suggest a fix; it will not change your GTM container."}
         </p>
 
         {error && (
@@ -1364,11 +1548,15 @@ function DeleteAffectedItemsModal({
   selection,
   onClose,
   onDeleted,
+  embedded = false,
+  footerAction,
 }: {
   rule: HealthCheckResult;
   selection: GtmSelection;
   onClose: () => void;
   onDeleted: () => Promise<void>;
+  embedded?: boolean;
+  footerAction?: (selectedAssets: HealthCheckAsset[]) => ReactNode;
 }) {
   const assets = getRuleAffectedAssets(rule);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
@@ -1376,7 +1564,7 @@ function DeleteAffectedItemsModal({
   const [error, setError] = useState<string | null>(null);
 
   const selectedAssets = assets.filter(
-    (asset) => asset.id && selected.has(`${asset.resourceType}:${asset.id}`)
+    (asset) => selected.has(`${asset.resourceType}:${asset.id ?? itemName(asset.item)}`)
   );
 
   const handleDelete = async () => {
@@ -1386,17 +1574,91 @@ function DeleteAffectedItemsModal({
       return;
     }
 
-    const confirmation =
-      selectedAssets.length === 1
-        ? `Are you sure you want to delete "${itemName(selectedAssets[0].item)}" from GTM? This cannot be undone.`
-        : `Are you sure you want to delete these ${selectedAssets.length} selected GTM assets? This cannot be undone.`;
-    if (!window.confirm(confirmation)) return;
-
     setDeleting(true);
     setError(null);
     let deletedCount = 0;
     try {
+      const inventoryByType = new Map<GtmResourceType, Record<string, unknown>[]>();
+      const getInventory = async (resourceType: GtmResourceType) => {
+        const cached = inventoryByType.get(resourceType);
+        if (cached) return cached;
+
+        const query = new URLSearchParams({
+          accountId: selection.accountId!,
+          containerId: selection.containerId!,
+          workspaceId: selection.workspaceId!,
+        });
+        const response = await fetch(
+          `/api/auth/gtm/${resourceType}?${query}`
+        );
+        const data = (await response.json().catch(() => null)) as
+          | Record<string, unknown>
+          | null;
+        if (!response.ok || !data) {
+          throw new Error(
+            typeof data?.error === "string"
+              ? data.error
+              : `Could not load ${resourceType} from the selected GTM workspace.`
+          );
+        }
+
+        const listKey =
+          resourceType === "tags"
+            ? "tag"
+            : resourceType === "triggers"
+              ? "trigger"
+              : "variable";
+        const inventory = data[listKey];
+        if (!Array.isArray(inventory)) {
+          throw new Error(`The GTM ${resourceType} list response was invalid.`);
+        }
+        const records = inventory.filter(
+          (item): item is Record<string, unknown> =>
+            typeof item === "object" && item !== null && !Array.isArray(item)
+        );
+        inventoryByType.set(resourceType, records);
+        return records;
+      };
+
+      const resolvedAssets: {
+        item: GtmAffectedItem;
+        resourceType: GtmResourceType;
+        id: string;
+      }[] = [];
+
       for (const asset of selectedAssets) {
+        let id = asset.id;
+        if (!id) {
+          const idField =
+            asset.resourceType === "tags"
+              ? "tagId"
+              : asset.resourceType === "triggers"
+                ? "triggerId"
+                : "variableId";
+          const matches = (await getInventory(asset.resourceType)).filter(
+            (record) => record.name === itemName(asset.item)
+          );
+          const ids = matches
+            .map((record) => record[idField])
+            .filter(
+              (candidate): candidate is string | number =>
+                typeof candidate === "string" || typeof candidate === "number"
+            )
+            .map(String);
+          if (ids.length !== 1 || !ids[0]) {
+            throw new Error(
+              ids.length > 1
+                ? `More than one ${asset.resourceType.slice(0, -1)} is named "${itemName(asset.item)}".`
+                : `Could not find "${itemName(asset.item)}" in the selected GTM workspace.`
+            );
+          }
+          id = ids[0];
+        }
+
+        resolvedAssets.push({ item: asset.item, resourceType: asset.resourceType, id });
+      }
+
+      for (const asset of resolvedAssets) {
         const idParam =
           asset.resourceType === "tags"
             ? "tagId"
@@ -1407,7 +1669,7 @@ function DeleteAffectedItemsModal({
           accountId: selection.accountId,
           containerId: selection.containerId,
           workspaceId: selection.workspaceId,
-          [idParam]: asset.id!,
+          [idParam]: asset.id,
         });
         const response = await fetch(
           `/api/auth/gtm/${asset.resourceType}?${query}`,
@@ -1415,8 +1677,15 @@ function DeleteAffectedItemsModal({
         );
         const data = await response.json().catch(() => null);
         if (!response.ok || !data?.success) {
+          const details =
+            data?.details?.error?.message ||
+            data?.details?.error_description ||
+            data?.details?.message ||
+            (typeof data?.details === "string" ? data.details : null);
           throw new Error(
-            data?.error || `Could not delete ${itemName(asset.item)}.`
+            details
+              ? `${data?.error || `Could not delete ${itemName(asset.item)}.`} ${details}`
+              : data?.error || `Could not delete ${itemName(asset.item)}.`
           );
         }
         deletedCount += 1;
@@ -1436,6 +1705,103 @@ function DeleteAffectedItemsModal({
     }
   };
 
+  const assetSelection = (
+    <>
+      {!embedded && (
+        <p className="mt-3 text-[12px] text-(--danger)">
+          Select the assets to delete. This changes the GTM workspace.
+        </p>
+      )}
+
+      <div className={`${embedded ? "mt-3" : "mt-4"} grid grid-cols-1 gap-2 sm:grid-cols-2`}>
+        {assets.map((asset) => {
+          const key = `${asset.resourceType}:${asset.id ?? itemName(asset.item)}`;
+          const checked = selected.has(key);
+
+          return (
+            <label
+              key={key}
+              className="flex items-start gap-2 rounded-md border border-line bg-card-hi p-2.5 text-[12.5px] text-fg"
+            >
+              <input
+                type="checkbox"
+                checked={checked}
+                disabled={deleting}
+                onChange={() =>
+                  setSelected((previous) => {
+                    const next = new Set(previous);
+                    if (checked) next.delete(key);
+                    else next.add(key);
+                    return next;
+                  })
+                }
+                className="mt-0.5"
+              />
+              <span className="min-w-0 flex-1 break-all">
+                {itemName(asset.item)}
+              </span>
+              <span className="shrink-0 text-[10px] uppercase text-muted">
+                {asset.resourceType.slice(0, -1)}
+              </span>
+            </label>
+          );
+        })}
+      </div>
+
+      {selectedAssets.some(
+        (asset) => asset.resourceType === "variables"
+      ) && (
+        <p className="mt-3 text-[12px] text-(--warn)" role="status">
+          Deleting a variable may affect attached tags or triggers. Review affected items before continuing.
+        </p>
+      )}
+      {selectedAssets.some(
+        (asset) => asset.resourceType === "triggers"
+      ) && (
+        <p className="mt-3 text-[12px] text-(--warn)" role="status">
+          Deleting a trigger may affect attached tags. Review affected items before continuing.
+        </p>
+      )}
+
+      {error && (
+        <p role="alert" className="mt-3 text-[12px] text-(--danger)">
+          {error}
+        </p>
+      )}
+
+      <div className="mt-5 flex justify-end gap-2">
+        {embedded && footerAction?.(selectedAssets)}
+        {!embedded && (
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={deleting}
+            className="btn-secondary"
+          >
+            Cancel
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={handleDelete}
+          disabled={deleting || selectedAssets.length === 0}
+          className="btn-primary bg-(--danger)! disabled:opacity-50"
+        >
+          {deleting ? "Deleting…" : `Delete selected (${selectedAssets.length})`}
+        </button>
+      </div>
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <div className="mt-4 border-t border-line pt-4">
+        <h3 className="text-[13px] font-semibold text-fg">Affected items</h3>
+        {assetSelection}
+      </div>
+    );
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
@@ -1447,7 +1813,7 @@ function DeleteAffectedItemsModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="healthcheck-delete-title"
-        className="w-full max-w-lg rounded-xl border border-line bg-card p-5 shadow-xl"
+        className="max-h-[calc(100vh-2rem)] w-full max-w-2xl overflow-y-auto rounded-xl border border-line bg-card p-5 shadow-xl"
       >
         <h2
           id="healthcheck-delete-title"
@@ -1456,74 +1822,7 @@ function DeleteAffectedItemsModal({
           Delete affected GTM assets
         </h2>
         <p className="mt-1 text-[13px] text-muted">{rule.title}</p>
-        <p className="mt-3 text-[12px] text-(--danger)">
-          Select the assets to delete. This changes the GTM workspace.
-        </p>
-
-        <div className="mt-4 max-h-64 space-y-2 overflow-y-auto">
-          {assets.map((asset) => {
-            const key = `${asset.resourceType}:${asset.id ?? itemName(asset.item)}`;
-            const checked = selected.has(key);
-
-            return (
-              <label
-                key={key}
-                className="flex items-start gap-2 rounded-md border border-line bg-card-hi p-2.5 text-[12.5px] text-fg"
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  disabled={!asset.id || deleting}
-                  onChange={() =>
-                    setSelected((previous) => {
-                      const next = new Set(previous);
-                      if (checked) next.delete(key);
-                      else next.add(key);
-                      return next;
-                    })
-                  }
-                  className="mt-0.5"
-                />
-                <span className="min-w-0 flex-1 break-all">
-                  {itemName(asset.item)}
-                  {!asset.id && (
-                    <span className="ml-2 text-[11px] text-(--danger)">
-                      GTM ID unavailable
-                    </span>
-                  )}
-                </span>
-                <span className="shrink-0 text-[10px] uppercase text-muted">
-                  {asset.resourceType.slice(0, -1)}
-                </span>
-              </label>
-            );
-          })}
-        </div>
-
-        {error && (
-          <p role="alert" className="mt-3 text-[12px] text-(--danger)">
-            {error}
-          </p>
-        )}
-
-        <div className="mt-5 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={deleting}
-            className="btn-secondary"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleDelete}
-            disabled={deleting || selectedAssets.length === 0}
-            className="btn-primary bg-(--danger)! disabled:opacity-50"
-          >
-            {deleting ? "Deleting…" : `Delete selected (${selectedAssets.length})`}
-          </button>
-        </div>
+        {assetSelection}
       </section>
     </div>
   );
@@ -1544,7 +1843,7 @@ function HealthCheckTable({
   failedCount: number;
   selection: GtmSelection;
   onDeleted: () => Promise<void>;
-  onFixWithAI: (rule: HealthCheckResult) => Promise<string>;
+  onFixWithAI: HealthCheckFixHandler;
 }) {
   const [filter, setFilter] = useState<TableFilter>("all");
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -1669,10 +1968,8 @@ function HealthCheckTable({
           rule={fixRule}
           onClose={() => setFixRule(null)}
           onFixWithAI={onFixWithAI}
-          onDelete={(rule) => {
-            setFixRule(null);
-            setDeleteRule(rule);
-          }}
+          selection={selection}
+          onDeleted={onDeleted}
         />
       )}
       {deleteRule && (
@@ -1844,7 +2141,7 @@ function FragmentRow({
               } }            />
             <AffectedList
               label="Unused Tags"
-              items={(result as any).unusedTags} resourceType={"tags"} selection={{
+              items={result.unusedTags} resourceType={"tags"} selection={{
                 accountId: undefined,
                 containerId: undefined,
                 workspaceId: undefined
@@ -1853,7 +2150,7 @@ function FragmentRow({
               } }            />
             <AffectedList
               label="Unused Triggers"
-              items={(result as any).unusedTriggers} resourceType={"tags"} selection={{
+              items={result.unusedTriggers} resourceType={"tags"} selection={{
                 accountId: undefined,
                 containerId: undefined,
                 workspaceId: undefined
@@ -1862,7 +2159,7 @@ function FragmentRow({
               } }            />
             <AffectedList
               label="Unused Variables"
-              items={(result as any).unusedVariables} resourceType={"tags"} selection={{
+              items={result.unusedVariables} resourceType={"tags"} selection={{
                 accountId: undefined,
                 containerId: undefined,
                 workspaceId: undefined
@@ -2112,7 +2409,7 @@ function AffectedList({
   onDeleted,
 }: {
   label: string;
-  items?: any[];
+  items?: GtmAffectedItem[];
   resourceType: GtmResourceType;
   selection: GtmSelection;
   onDeleted: () => Promise<void>;
@@ -2160,7 +2457,7 @@ function AffectedList({
 }
 
 function getGtmResourceId(
-  item: any,
+  item: GtmAffectedItem,
   resourceType: GtmResourceType
 ): string | null {
   const idField =
@@ -2185,7 +2482,7 @@ function DeleteGtmItemButton({
   selection,
   onDeleted,
 }: {
-  item: any;
+  item: GtmAffectedItem;
   resourceType: GtmResourceType;
   selection: GtmSelection;
   onDeleted: () => Promise<void>;

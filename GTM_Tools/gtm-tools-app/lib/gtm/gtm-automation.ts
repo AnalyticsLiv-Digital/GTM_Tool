@@ -1,3 +1,4 @@
+
 type GTMParameter = {
   type: string;
   key?: string;
@@ -134,6 +135,7 @@ function mergeParameters(
   overrides: GTMParameter[]
 ): GTMParameter[] {
   const overrideKeys = new Set(overrides.map((parameter) => parameter.key));
+
   return [
     ...base.filter(
       (parameter) =>
@@ -153,20 +155,25 @@ function errorMessage(error: unknown) {
  */
 function validateWebMeasurementId(value: string) {
   const measurementId = value.trim();
+
   if (measurementId.length > 10) {
     throw new Error("Web Measurement ID cannot exceed 10 characters.");
   }
+
   return measurementId;
 }
 
 function validateServerMeasurementId(value: string) {
   const measurementId = value.trim();
+
   if (!measurementId) {
     throw new Error("Server Measurement ID is required when GA4 is selected.");
   }
+
   if (measurementId.length > 10) {
     throw new Error("Server Measurement ID cannot exceed 10 characters.");
   }
+
   return measurementId;
 }
 
@@ -182,12 +189,15 @@ async function listAll<T>(
     const query = pageToken
       ? `?pageToken=${encodeURIComponent(pageToken)}`
       : "";
+
     const result = await gtmRequest<
       Record<string, unknown> & { nextPageToken?: string }
     >(token, `${path}${query}`);
+
     const page = result[field];
 
     if (Array.isArray(page)) items.push(...(page as T[]));
+
     pageToken = result.nextPageToken;
   } while (pageToken);
 
@@ -231,6 +241,7 @@ async function saveTag(
 
 export async function debugListServerTags(token: string, ids: Ids) {
   const tags = await listTags(token, ids);
+
   return tags.map((tag) => ({
     tagId: tag.tagId,
     name: tag.name,
@@ -255,6 +266,7 @@ async function listTemplates(token: string, ids: Ids) {
 
 export async function debugListServerTemplates(token: string, ids: Ids) {
   const templates = await listTemplates(token, ids);
+
   return templates.map((item) => ({
     templateId: item.templateId,
     name: item.name,
@@ -282,8 +294,6 @@ const PLATFORM_PARAMETER_NAMES: Record<string, string> = {
   tiktok: "tiktok",
 };
 
-const TRACKING_PLATFORMS_PARAMETER = "tracking_platforms";
-
 function platformsParameterValue(platforms: string[]) {
   return [
     ...new Set(
@@ -295,8 +305,94 @@ function platformsParameterValue(platforms: string[]) {
 }
 
 /**
+ * Creates the platform-specific configuration rows.
+ *
+ * These rows are added to the Google Tag Configuration Settings variable.
+ * Only selected platforms are included.
+ */
+function getPlatformConfigRows(platforms: string[]): GTMParameter[] {
+  const selected = new Set(
+    platforms
+      .map((platform) => PLATFORM_PARAMETER_NAMES[platform])
+      .filter(Boolean)
+  );
+
+  const rows: GTMParameter[] = [];
+
+  // GA4
+  if (selected.has("ga4")) {
+    rows.push({
+      type: "MAP",
+      map: [
+        template("parameter", "event_id"),
+        template("parameterValue", "{{event_id}}"),
+      ],
+    });
+  }
+
+  // Meta
+  if (selected.has("meta")) {
+    rows.push(
+      {
+        type: "MAP",
+        map: [
+          template("parameter", "x-fb-ck-fbp"),
+          template("parameterValue", "{{cookie-fbp}}"),
+        ],
+      },
+      {
+        type: "MAP",
+        map: [
+          template("parameter", "x-fb-ck-fbc"),
+          template("parameterValue", "{{cookie-fbc}}"),
+        ],
+      }
+    );
+  }
+
+  // LinkedIn
+  if (selected.has("linkedin")) {
+    rows.push({
+      type: "MAP",
+      map: [
+        template("parameter", "li_fat_id"),
+        template("parameterValue", "{{url - li_fat_id}}"),
+      ],
+    });
+  }
+
+  // TikTok
+  if (selected.has("tiktok")) {
+    rows.push(
+      {
+        type: "MAP",
+        map: [
+          template("parameter", "ttclid"),
+          template("parameterValue", "{{url - ttclid}}"),
+        ],
+      },
+      {
+        type: "MAP",
+        map: [
+          template("parameter", "ttp"),
+          template("parameterValue", "{{cookie-ttp}}"),
+        ],
+      }
+    );
+  }
+
+  return rows;
+}
+
+/**
  * Creates/updates the Web GTM Configuration Settings Variable.
- * The selected platforms and server URL are sent together to the Google Tag.
+ *
+ * Includes:
+ * - server_container_url
+ * - GA4 event_id
+ * - Meta fbp/fbc
+ * - LinkedIn li_fat_id
+ * - TikTok ttclid/ttp
  */
 async function getOrCreateServerUrlVariable(
   token: string,
@@ -304,9 +400,22 @@ async function getOrCreateServerUrlVariable(
   serverUrl: string,
   platforms: string[] = []
 ) {
-  const platformsValue = platformsParameterValue(platforms);
   const variables = await listVariables(token, ids);
   const name = "Automation - Server Container URL";
+
+  const configRows: GTMParameter[] = [
+    // Server container URL
+    {
+      type: "MAP",
+      map: [
+        template("parameter", "server_container_url"),
+        template("parameterValue", serverUrl),
+      ],
+    },
+
+    // Platform-specific settings
+    ...getPlatformConfigRows(platforms),
+  ];
 
   const desired: GTMVariable = {
     name,
@@ -315,26 +424,7 @@ async function getOrCreateServerUrlVariable(
       {
         type: "LIST",
         key: "configSettingsTable",
-        list: [
-          {
-            type: "MAP",
-            map: [
-              template("parameter", "server_container_url"),
-              template("parameterValue", serverUrl),
-            ],
-          },
-          ...(platformsValue
-            ? [
-                {
-                  type: "MAP",
-                  map: [
-                    template("parameter", TRACKING_PLATFORMS_PARAMETER),
-                    template("parameterValue", platformsValue),
-                  ],
-                },
-              ]
-            : []),
-        ],
+        list: configRows,
       },
     ],
   };
@@ -375,6 +465,7 @@ async function upsertConstantVariable(
 ) {
   const variables = await listVariables(token, ids);
   const existing = variables.find((item) => item.name === name);
+
   const desired: GTMVariable = {
     name,
     type: "c",
@@ -396,10 +487,14 @@ async function upsertConstantVariable(
     );
   }
 
-  return gtmRequest<GTMVariable>(token, `${parent(ids)}/variables`, {
-    method: "POST",
-    body: desired,
-  });
+  return gtmRequest<GTMVariable>(
+    token,
+    `${parent(ids)}/variables`,
+    {
+      method: "POST",
+      body: desired,
+    }
+  );
 }
 
 /* -------------------------------------------------------------------------- */
@@ -416,6 +511,7 @@ async function listTriggers(token: string, ids: Ids) {
 
 export async function debugListServerTriggers(token: string, ids: Ids) {
   const triggers = await listTriggers(token, ids);
+
   return triggers.map((trigger) => ({
     triggerId: trigger.triggerId,
     name: trigger.name,
@@ -431,6 +527,7 @@ async function getOrCreatePageViewTrigger(
 ) {
   const triggers = await listTriggers(token, ids);
   const name = "Automation - All Pages";
+
   const existing = triggers.find((item) => item.name === name);
 
   if (existing?.triggerId) return existing.triggerId;
@@ -479,6 +576,7 @@ function triggerMatchesClientCondition(
   return Boolean(
     trigger.filter?.some((condition) => {
       const params = condition.parameter || [];
+
       const arg0 = params.find((item) => item.key === "arg0")?.value;
       const arg1 = params.find((item) => item.key === "arg1")?.value;
 
@@ -512,6 +610,7 @@ export async function getOrCreateServerEventTrigger(
   _eventName?: string
 ) {
   void _eventName;
+
   const triggers = await listTriggers(token, ids);
 
   const reference = triggers.find(
@@ -528,6 +627,7 @@ export async function getOrCreateServerEventTrigger(
   );
 
   const customType = reference?.type || "always";
+
   await ensureClientNameBuiltInVariable(token, ids);
 
   const existing = triggers.find(
@@ -610,8 +710,7 @@ export async function getOrCreateServerEventTrigger(
 
 /**
  * Tries a literal Measurement ID first for standard GA4 IDs. For other input,
- * it tries a Constant variable reference first. The GTM tag template can still
- * reject either representation; no ID is silently replaced or omitted.
+ * it tries a Constant variable reference first.
  */
 async function saveTagWithMeasurementId(
   token: string,
@@ -622,6 +721,7 @@ async function saveTagWithMeasurementId(
   build: (measurementRef: string) => GTMTag
 ) {
   const isStandard = /^G-[A-Z0-9]{6,12}$/i.test(measurementId);
+
   const modes: Array<"direct" | "variable"> = isStandard
     ? ["direct", "variable"]
     : ["variable", "direct"];
@@ -639,6 +739,7 @@ async function saveTagWithMeasurementId(
           variableName,
           measurementId
         );
+
         measurementRef = `{{${variable.name}}}`;
       }
 
@@ -652,10 +753,13 @@ async function saveTagWithMeasurementId(
       return { saved, mode };
     } catch (error) {
       const message = errorMessage(error);
+
       errors.push(`${mode}: ${message}`);
 
-      // Do not retry unrelated API errors. Retry only a 400 response.
-      if (!message.includes("(400)") || /duplicate name/i.test(message)) {
+      if (
+        !message.includes("(400)") ||
+        /duplicate name/i.test(message)
+      ) {
         throw error;
       }
     }
@@ -689,6 +793,7 @@ export async function configureWebGtag(
     if (parsedUrl.protocol !== "https:") {
       throw new Error("The Server Container URL must use HTTPS.");
     }
+
     if (parsedUrl.username || parsedUrl.password) {
       throw new Error("The Server Container URL must not contain credentials.");
     }
@@ -706,6 +811,7 @@ export async function configureWebGtag(
   );
 
   const tags = await listTags(token, ids);
+
   const existing = tags.find(
     (tag) =>
       tag.name === "Automation - Google Tag" &&
@@ -749,7 +855,7 @@ export async function configureWebGtag(
 }
 
 /* -------------------------------------------------------------------------- */
-/* Server container: GA4 event tag                                             */
+/* Server container: GA4 event tag                                            */
 /* -------------------------------------------------------------------------- */
 
 export async function configureServerGa4EventTag(
@@ -760,8 +866,10 @@ export async function configureServerGa4EventTag(
   measurementId: string
 ) {
   const cleanMeasurementId = validateServerMeasurementId(measurementId);
+
   const tags = await listTags(token, ids);
   const name = `Automation - GA4 - ${eventName}`;
+
   const existing = tags.find((item) => item.name === name);
 
   try {
@@ -803,7 +911,7 @@ export async function configureServerGa4EventTag(
 }
 
 /* -------------------------------------------------------------------------- */
-/* Server container: Meta, TikTok and LinkedIn platform tags                   */
+/* Server container: Meta, TikTok and LinkedIn platform tags                  */
 /* -------------------------------------------------------------------------- */
 
 export type ServerPlatform = "meta" | "tiktok" | "linkedin";
@@ -863,6 +971,7 @@ export async function ensureServerPlatformTemplate(
   platform: ServerPlatform
 ) {
   const config = PLATFORM_TEMPLATES[platform];
+
   const templates = await listTemplates(token, ids);
   const existing = findPlatformTemplate(templates, platform);
 
@@ -893,6 +1002,7 @@ export async function ensureServerPlatformTemplate(
     }
 
     const afterImport = await listTemplates(token, ids);
+
     if (!findPlatformTemplate(afterImport, platform)) {
       throw new Error(
         "Import call succeeded, but the template was not found afterwards."
@@ -927,12 +1037,14 @@ async function configureServerPlatformTag(
   parameters: GTMParameter[]
 ) {
   const config = PLATFORM_TEMPLATES[platform];
+
   const [templates, tags] = await Promise.all([
     listTemplates(token, ids),
     listTags(token, ids),
   ]);
 
   const platformTemplate = findPlatformTemplate(templates, platform);
+
   if (!platformTemplate?.templateId) {
     throw new Error(
       `The ${config.label} tag template is not installed in the Server GTM container.`
@@ -942,6 +1054,7 @@ async function configureServerPlatformTag(
   const name = `Automation - ${config.label} - ${eventName}`;
 
   let fullTemplate: GTMTemplate | undefined;
+
   try {
     fullTemplate = await gtmRequest<GTMTemplate>(
       token,
@@ -974,18 +1087,14 @@ async function configureServerPlatformTag(
       Boolean(value) && all.indexOf(value) === index
   );
 
-  // First reuse the exact automation tag. This is the normal path on every
-  // subsequent Connect click and prevents duplicate tags for the same event.
   let existing = tags.find((item) => item.name === name);
 
-  // Also recognise tags previously created by older versions of the app or
-  // named manually, e.g. "Meta - page_view" / "LinkedIn - page_view".
-  // Only match tags belonging to this platform's template type.
   if (!existing) {
     const platformEventPattern = new RegExp(
       `${config.label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}.*${eventName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`,
       "i"
     );
+
     existing = tags.find(
       (item) =>
         Boolean(item.tagId) &&
@@ -994,10 +1103,6 @@ async function configureServerPlatformTag(
     );
   }
 
-  // If this workspace already has a tag using the installed template, reuse
-  // that tag as the initial reference instead of creating another one. Once
-  // renamed to the automation name, future runs find it through the exact-name
-  // match above. Do not use an unrelated tag with a different custom type.
   const reference = tags.find(
     (item) =>
       item.name !== name &&
@@ -1018,9 +1123,6 @@ async function configureServerPlatformTag(
     existing = reference;
   }
 
-  // Prefer parameters from the tag being updated. Otherwise, preserve the
-  // installed reference tag's template parameters and override only the keys
-  // supplied by this automation.
   const baseParameters = existing?.parameter || reference?.parameter || [];
   const attemptErrors: string[] = [];
 
@@ -1041,6 +1143,7 @@ async function configureServerPlatformTag(
 
     try {
       const saved = await saveTag(token, ids, existing, desired);
+
       return {
         action: existing ? ("updated" as const) : ("created" as const),
         tagId: saved.tagId,
@@ -1051,11 +1154,13 @@ async function configureServerPlatformTag(
       };
     } catch (error) {
       const message = errorMessage(error);
+
       attemptErrors.push(`type "${tagType}": ${message}`);
 
-      // If updating an existing tag failed because GTM does not recognise its
-      // type, do not silently create a second tag. Report the failure instead.
-      if (existing?.tagId || !/unknown entity type|vendorTemplate\.key/i.test(message)) {
+      if (
+        existing?.tagId ||
+        !/unknown entity type|vendorTemplate\.key/i.test(message)
+      ) {
         throw new Error(
           `Server ${config.label} tag "${name}" could not be saved ` +
           `(template type "${tagType}"). ${message}`
@@ -1087,9 +1192,6 @@ export async function configureServerMetaEventTag(
   const pixelId = config.pixelId?.trim();
   const accessToken = config.accessToken?.trim();
   const testEventCode = config.testEventCode?.trim();
-
-  // Credentials are optional at creation time. Add them later in GTM or
-  // reconnect with values; the tag shell can still be created now.
 
   return configureServerPlatformTag(
     token,
@@ -1124,8 +1226,6 @@ export async function configureServerTikTokEventTag(
   const accessToken = config.accessToken?.trim();
   const testEventCode = config.testEventCode?.trim();
 
-  // Pixel ID and token may be supplied later; keep initial tag creation possible.
-
   return configureServerPlatformTag(
     token,
     ids,
@@ -1159,8 +1259,6 @@ export async function configureServerLinkedInEventTag(
   const accessToken = config.accessToken?.trim();
   const conversionRuleId = config.conversionRuleId?.trim();
 
-  // LinkedIn credentials can be completed after the template tag is created.
-
   return configureServerPlatformTag(
     token,
     ids,
@@ -1170,13 +1268,15 @@ export async function configureServerLinkedInEventTag(
     [
       template("type", "conversion"),
       ...(accessToken ? [template("accessToken", accessToken)] : []),
-      ...(conversionRuleId ? [template("conversionRuleUrn", conversionRuleId)] : []),
+      ...(conversionRuleId
+        ? [template("conversionRuleUrn", conversionRuleId)]
+        : []),
     ]
   );
 }
 
 /* -------------------------------------------------------------------------- */
-/* Server GA4 Client verification                                              */
+/* Server GA4 Client verification                                             */
 /* -------------------------------------------------------------------------- */
 
 export async function verifyServerGa4Client(

@@ -44,11 +44,8 @@ export default function TagModal() {
     setTagCrudLoading,
   } = store;
 
-  const {
-    handleSaveTag,
-    fetchTags,
-    fetchTriggers,
-  } = useDashboardActions();
+  const { handleSaveTag, fetchTags, fetchTriggers } =
+    useDashboardActions();
 
   const inputRef = useRef<HTMLInputElement>(null);
   const measurementInputRef = useRef<HTMLInputElement>(null);
@@ -57,7 +54,7 @@ export default function TagModal() {
   const [selectedPlatforms, setSelectedPlatforms] =
     useState<Platform[]>(["ga4"]);
 
-  // Actual Measurement ID passed to GTM.
+  // Actual Measurement ID sent to GTM.
   const [measurementId, setMeasurementId] = useState("");
 
   // Visible Measurement ID autocomplete input.
@@ -69,7 +66,7 @@ export default function TagModal() {
 
   const [eventName, setEventName] = useState("");
 
-  // Actual GTM trigger ID.
+  // Actual GTM trigger ID sent to GTM.
   const [selectedTriggerId, setSelectedTriggerId] = useState("");
 
   // Visible trigger autocomplete input.
@@ -115,7 +112,7 @@ export default function TagModal() {
     }));
   }, [tags]);
 
-  // Filter only existing GA4 Measurement IDs.
+  // Filter existing GA4 Measurement IDs.
   const filteredMeasurementIds = useMemo(() => {
     const search = measurementSearch.toLowerCase().trim();
 
@@ -139,6 +136,7 @@ export default function TagModal() {
     );
   }, [store.triggers]);
 
+  // Filter triggers as the user types.
   const filteredTriggers = useMemo(() => {
     const search = triggerSearch.toLowerCase().trim();
 
@@ -153,7 +151,7 @@ export default function TagModal() {
     );
   }, [workspaceTriggers, triggerSearch]);
 
-  // Load workspace triggers.
+  // Load workspace triggers when the create modal opens.
   useEffect(() => {
     if (
       !showTagModal ||
@@ -209,7 +207,8 @@ export default function TagModal() {
     setFormError("");
   }
 
-  // Open Measurement ID dropdown when user types "{{".
+  // Measurement ID autocomplete:
+  // Opens when the user types "{{".
   function handleMeasurementInput(value: string, cursor: number) {
     const openPosition = value.lastIndexOf("{{", cursor);
     const closePosition = value.lastIndexOf("}}", cursor);
@@ -247,7 +246,7 @@ export default function TagModal() {
     const start =
       openPosition !== -1 && closePosition < openPosition
         ? openPosition
-        : measurementCursor;
+        : 0;
 
     const token = `{{${item.name}}}`;
 
@@ -258,7 +257,7 @@ export default function TagModal() {
 
     setMeasurementInput(updatedValue);
 
-    // Store the actual ID, not the visible name.
+    // Store the actual Measurement ID, not the visible name.
     setMeasurementId(item.id);
 
     setMeasurementDropdownOpen(false);
@@ -273,22 +272,31 @@ export default function TagModal() {
     });
   }
 
-  // Open trigger dropdown when user types "{{".
+  // Trigger autocomplete:
+  // Supports BOTH normal text and "{{" syntax.
+  //
+  // Examples:
+  // "page"      -> searches matching triggers
+  // "{{page"    -> searches matching triggers
+  // "{{"        -> shows all available triggers
   function handleTriggerInput(value: string, cursor: number) {
     const openPosition = value.lastIndexOf("{{", cursor);
     const closePosition = value.lastIndexOf("}}", cursor);
 
-    if (openPosition === -1 || closePosition > openPosition) {
-      setTriggerDropdownOpen(false);
-      setTriggerSearch("");
-      return;
-    }
+    let search = "";
 
-    const search = value.slice(openPosition + 2, cursor);
+    if (openPosition !== -1 && closePosition < openPosition) {
+      // User is typing inside {{ ... }}
+      search = value.slice(openPosition + 2, cursor);
 
-    if (search.includes("}")) {
-      setTriggerDropdownOpen(false);
-      return;
+      if (search.includes("}")) {
+        setTriggerDropdownOpen(false);
+        setTriggerSearch("");
+        return;
+      }
+    } else {
+      // User is typing normally without {{.
+      search = value.slice(0, cursor);
     }
 
     setTriggerSearch(search);
@@ -296,7 +304,7 @@ export default function TagModal() {
     setTriggerDropdownOpen(true);
   }
 
-  // Insert trigger name and store its actual GTM ID.
+  // Insert trigger name and store its actual GTM ID separately.
   function insertTrigger(trigger: {
     triggerId: string;
     name: string;
@@ -311,10 +319,12 @@ export default function TagModal() {
       triggerCursor
     );
 
+    // If the user typed "{{", replace from that position.
+    // If the user typed normal text, replace the typed search text.
     const start =
       openPosition !== -1 && closePosition < openPosition
         ? openPosition
-        : triggerCursor;
+        : 0;
 
     const token = `{{${trigger.name}}}`;
 
@@ -324,6 +334,8 @@ export default function TagModal() {
       triggerInput.slice(triggerCursor);
 
     setTriggerInput(updatedValue);
+
+    // Store the real GTM trigger ID.
     setSelectedTriggerId(trigger.triggerId);
 
     setTriggerDropdownOpen(false);
@@ -394,7 +406,7 @@ export default function TagModal() {
 
     if (!selectedTriggerId) {
       setFormError(
-        "Select a firing trigger from the dropdown after typing {{."
+        "Select a firing trigger from the dropdown after typing a trigger name or {{."
       );
       return;
     }
@@ -408,7 +420,7 @@ export default function TagModal() {
         parameter: [
           {
             type: "template",
-            key: "measurementId",
+            key: "measurementIdOverride",
             value: finalMeasurementId,
           },
           {
@@ -438,8 +450,9 @@ export default function TagModal() {
 
       if (!response.ok) {
         throw new Error(
-          data?.error ||
-            data?.details?.error?.message ||
+          data?.details?.error?.message ||
+            data?.details?.message ||
+            data?.error ||
             "Failed to create GA4 tag."
         );
       }
@@ -457,7 +470,7 @@ export default function TagModal() {
     }
   }
 
-  // Measurement ID dropdown: only existing GA4 IDs.
+  // Measurement ID dropdown.
   function MeasurementDropdown() {
     if (!measurementDropdownOpen) return null;
 
@@ -692,7 +705,8 @@ export default function TagModal() {
                   </div>
 
                   <p className="text-xs text-muted mt-2">
-                    Type {"{{"} to search existing GA4 Measurement IDs, or enter an ID manually.
+                    Type {"{{"} to search existing GA4 Measurement IDs,
+                    or enter an ID manually.
                   </p>
                 </div>
 
@@ -748,6 +762,24 @@ export default function TagModal() {
                     className="w-full bg-page-soft"
                   />
                 </div>
+
+                <div>
+                  <label
+                    htmlFor="linkedin-event-name"
+                    className="block text-sm font-medium text-fg mb-2"
+                  >
+                    Event Name
+                  </label>
+
+                  <input
+                    id="linkedin-event-name"
+                    type="text"
+                    value={eventName}
+                    onChange={(e) => setEventName(e.target.value)}
+                    placeholder="e.g. Purchase"
+                    className="w-full bg-page-soft"
+                  />
+                </div>
               </div>
             )}
 
@@ -780,6 +812,24 @@ export default function TagModal() {
                       setTiktokPixelId(e.target.value)
                     }
                     placeholder="Enter TikTok Pixel ID"
+                    className="w-full bg-page-soft"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="tiktok-event-name"
+                    className="block text-sm font-medium text-fg mb-2"
+                  >
+                    Event Name
+                  </label>
+
+                  <input
+                    id="tiktok-event-name"
+                    type="text"
+                    value={eventName}
+                    onChange={(e) => setEventName(e.target.value)}
+                    placeholder="e.g. Purchase"
                     className="w-full bg-page-soft"
                   />
                 </div>
@@ -859,8 +909,11 @@ export default function TagModal() {
                       e.target.selectionStart ?? value.length;
 
                     setTriggerInput(value);
+
+                    // Clear the selected ID when the user edits the text.
                     setSelectedTriggerId("");
 
+                    // Opens suggestions for normal text and "{{" syntax.
                     handleTriggerInput(value, cursor);
                   }}
                   onClick={(e) =>
@@ -882,7 +935,7 @@ export default function TagModal() {
                   placeholder={
                     store.triggersLoading
                       ? "Loading triggers..."
-                      : "Type {{ to search triggers"
+                      : "Type trigger name or {{ to search"
                   }
                   className="w-full bg-page-soft"
                 />
@@ -911,7 +964,8 @@ export default function TagModal() {
                 )}
 
               <p className="text-xs text-muted mt-2">
-                Type {"{{"} to search your workspace triggers, then select a trigger.
+                Start typing a trigger name to see matching triggers.
+                You can also type {"{{"} followed by the trigger name.
               </p>
             </div>
 
