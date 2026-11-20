@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 
 export type AnthropicFailureCode =
+  | "no_key"
   | "invalid_key"
   | "rate_limit"
   | "quota"
@@ -8,6 +9,16 @@ export type AnthropicFailureCode =
   | "bad_request"
   | "network"
   | "unknown";
+
+export const FALLBACK_CODES: readonly AnthropicFailureCode[] = [
+  "no_key",
+  "invalid_key",
+  "rate_limit",
+  "quota",
+  "overloaded",
+  "network",
+  "unknown",
+];
 
 export type AnthropicFailure = {
   status: number;

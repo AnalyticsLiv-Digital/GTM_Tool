@@ -21,21 +21,19 @@ import {
 
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { createPortal } from "react-dom";
 import {
-  Fragment,
-  useEffect,
   useRef,
   useState,
-  type FocusEvent as ReactFocusEvent,
-  type MouseEvent as ReactMouseEvent,
   type ReactNode,
+  type MouseEvent as ReactMouseEvent,
+  type FocusEvent as ReactFocusEvent,
 } from "react";
-import { createPortal } from "react-dom";
 
 import type { AffectedItem, HealthCheckResult } from "@/lib/healthcheck/types";
 import { useDashboardStore } from "@/app/store/useDashboardStore";
-import { ApiKeyModal, ConnectionBadge } from "@/app/dashboard/components/ApiKeyModal";
 import { useAnthropicKey } from "@/hooks/useAnthropicKey";
+import { ApiKeyModal, ConnectionBadge } from "@/app/dashboard/components/ApiKeyModal";
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
 
@@ -48,6 +46,8 @@ type GtmSelection = {
 };
 type GtmAffectedItem = AffectedItem & {
   path?: string;
+  detail?: string;
+  editUrl?: string;
   tagId?: string | number;
   triggerId?: string | number;
   variableId?: string | number;
@@ -271,77 +271,18 @@ function getSelectedIds() {
   return { accountId: s.selectedAccountId, containerId: s.selectedContainerId, workspaceId: s.selectedWorkspaceId };
 }
 
-/* =====================================================
-   HEALTHCHECK REPORT STORAGE
-===================================================== */
-
-function getHealthCheckStorageKey({
-  accountId,
-  containerId,
-  workspaceId,
-}: {
-  accountId: string;
-  containerId: string;
-  workspaceId: string;
-}) {
-  return `gtm-healthcheck-${accountId}-${containerId}-${workspaceId}`;
-}
-
-function saveHealthCheckReport(
-  ids: {
-    accountId: string;
-    containerId: string;
-    workspaceId: string;
-  },
-  report: HealthCheckReport
-) {
-  try {
-    const storageKey = getHealthCheckStorageKey(ids);
-
-    localStorage.setItem(
-      storageKey,
-      JSON.stringify({
-        report,
-        savedAt: new Date().toISOString(),
-      })
-    );
-
-    console.log("[HealthCheck] Report saved successfully.");
-    return true;
-  } catch (error) {
-    console.error("[HealthCheck] Failed to save report:", error);
-    return false;
-  }
-}
-
-function loadHealthCheckReport(
-  ids: {
-    accountId: string;
-    containerId: string;
-    workspaceId: string;
-  }
-): HealthCheckReport | null {
-  try {
-    const storageKey = getHealthCheckStorageKey(ids);
-    const saved = localStorage.getItem(storageKey);
-
-    if (!saved) return null;
-
-    const parsed = JSON.parse(saved);
-
-    const restoredReport = normalizeHealthReport({
-      healthReport: parsed.report,
-    });
-
-    if (!restoredReport) {
-      localStorage.removeItem(storageKey);
-      return null;
-    }
-
-    return restoredReport;
-  } catch (error) {
-    console.error("[HealthCheck] Failed to load saved report:", error);
-    return null;
+function keyNoticeFromCode(code?: string, fallback?: string) {
+  switch (code) {
+    case "invalid_key":
+      return "Your API key is invalid or expired. Please enter a new one.";
+    case "quota":
+      return "This key has run out of credits. Add credits in the Anthropic console or enter a different key.";
+    case "rate_limit":
+      return "This key hit its rate limit. Wait a moment or connect a different key.";
+    case "no_key":
+      return "Please connect an Anthropic API key to use the AI audit.";
+    default:
+      return fallback || "Please reconnect your Anthropic API key.";
   }
 }
 
@@ -363,49 +304,22 @@ export default function HealthCheckPage() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatSending, setChatSending] = useState(false);
+
+  /* The user's own Anthropic token: stored encrypted in this browser only, sent with each AI request. */
+  const anthropic = useAnthropicKey();
+  const anthropicCompat = anthropic as typeof anthropic & {
+    getKey?: () => Promise<string | null>;
+    markDisconnected?: () => void;
+  };
   const [keyModalOpen, setKeyModalOpen] = useState(false);
-  const [keyNotice, setKeyNotice] = useState<string | null>(null);
+  const [keyModalNotice, setKeyModalNotice] = useState<string | null>(null);
+  const pendingRunRef = useRef(false); // true while an audit waits for the user to connect a token
+  const hasKey = anthropic.status !== "no_key" && anthropic.status !== "unknown";
 
-  const anthropicKey = useAnthropicKey();
-
-  /* =====================================================
-     RESTORE SAVED HEALTHCHECK REPORT
-  ===================================================== */
-
-  useEffect(() => {
-    const accountId = store.selectedAccountId;
-    const containerId = store.selectedContainerId;
-    const workspaceId = store.selectedWorkspaceId;
-
-    if (!accountId || !containerId || !workspaceId) {
-      setReport(null);
-      return;
-    }
-
-    const savedReport = loadHealthCheckReport({
-      accountId,
-      containerId,
-      workspaceId,
-    });
-
-    setReport(savedReport);
-
-    // Clear previous Claude output when changing workspaces.
-    setClaudeText(null);
-    setClaudeTruncated(false);
-    setChatMessages([]);
-    setClaudeError(null);
-  }, [
-    store.selectedAccountId,
-    store.selectedContainerId,
-    store.selectedWorkspaceId,
-  ]);
+  const canRun = Boolean(store.selectedWorkspaceId);
 
   /* Prevents two chat requests when Enter + click happen together. */
   const chatRequestLock = useRef(false);
-
-  /* Set when the key modal was opened by the audit button, so a successful connect carries on. */
-  const auditAfterConnect = useRef(false);
 
   /* ---------- RUN FUNCTIONAL HEALTH CHECK ---------- */
 
@@ -413,104 +327,20 @@ export default function HealthCheckPage() {
 
   const handleRunHealthCheck = async () => {
     setClaudeError(null);
+    setClaudeNotice(null);
 
-    const {
-      selectedAccountId: accountId,
-      selectedContainerId: containerId,
-      selectedWorkspaceId: workspaceId,
-    } = useDashboardStore.getState();
-
-    if (!accountId || !containerId || !workspaceId) {
-      setClaudeError(
-        "Select an account, container, and workspace before running the audit."
-      );
+    const ids = getSelectedIds();
+    if (!ids) {
+      setPageError("Select an account, container, and workspace first.");
       return;
     }
 
     try {
       setLoading(true);
+      const normalized = await fetchReport(ids);
+      setReport(normalized);
 
-      console.log("[HealthCheck] Starting audit", {
-        accountId,
-        containerId,
-        workspaceId,
-      });
-
-      const res = await fetch("/api/auth/healthcheck", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          accountId,
-          containerId,
-          workspaceId,
-        }),
-        cache: "no-store",
-      });
-
-      const responseText = await res.text();
-
-      let data: HealthCheckApiResponse | null = null;
-
-      try {
-        data = responseText
-          ? JSON.parse(responseText)
-          : null;
-      } catch {
-        throw new Error(
-          `HealthCheck returned invalid JSON. HTTP ${res.status}.`
-        );
-      }
-
-      console.log("[HealthCheck] API response:", data);
-
-      if (!res.ok || data?.success === false) {
-        throw new Error(
-          data?.error ||
-          data?.details ||
-          `HealthCheck request failed. HTTP ${res.status}.`
-        );
-      }
-
-      const nextReport = normalizeHealthReport(data);
-
-      if (!nextReport) {
-        console.error(
-          "[HealthCheck] Could not normalize response:",
-          data
-        );
-
-        throw new Error(
-          "The API responded, but no valid results array was found. Check the server response."
-        );
-      }
-
-      console.log("[HealthCheck] Report generated:", {
-        score: nextReport.score,
-        passed: nextReport.passedCount,
-        failed: nextReport.failedCount,
-        totalResults: nextReport.results.length,
-      });
-
-      // Save the report for this account, container, and workspace.
-      const saved = saveHealthCheckReport(
-        {
-          accountId,
-          containerId,
-          workspaceId,
-        },
-        nextReport
-      );
-
-      if (!saved) {
-        console.warn(
-          "[HealthCheck] Report displayed but browser storage failed."
-        );
-      }
-
-      // Update the existing UI.
-      setReport(nextReport);
+      /* A fresh scan means the previous Claude audit may be out of date. */
       setClaudeText(null);
       setClaudeTruncated(false);
       setChatMessages([]);
@@ -529,40 +359,16 @@ export default function HealthCheckPage() {
     }
   };
 
-  /* ---------- ANTHROPIC KEY ---------- */
-
-  const openKeyModal = (notice: string, resumeAudit: boolean) => {
-    auditAfterConnect.current = resumeAudit;
-    setKeyNotice(notice);
-    setKeyModalOpen(true);
-  };
-
-  const closeKeyModal = () => {
-    auditAfterConnect.current = false;
-    setKeyNotice(null);
-    setKeyModalOpen(false);
-  };
-
-  const handleConnectKey = async (key: string) => {
-    const result = await anthropicKey.connect(key);
-
-    if (result.ok && auditAfterConnect.current) {
-      auditAfterConnect.current = false;
-      void runClaudeAudit();
-    }
-
-    return result;
-  };
-
-  /* ---------- CLAUDE AI AUDIT (the key travels in an HttpOnly cookie) ---------- */
+  /* ---------- CLAUDE AI AUDIT (uses the token the user pasted) ---------- */
 
   const handleClaudeHealthCheck = async () => {
     if (claudeLoading || !store.selectedWorkspaceId) return;
 
-    const ready = anthropicKey.status === "connected" || (await anthropicKey.verify());
+    const ready = anthropic.status === "connected" || (await anthropic.verify());
 
     if (!ready) {
-      openKeyModal("Connect your Anthropic API key to run the Claude AI Audit.", true);
+      setKeyModalNotice("Connect your Anthropic API key to run the Claude AI Audit.");
+      setKeyModalOpen(true);
       return;
     }
 
@@ -580,66 +386,87 @@ export default function HealthCheckPage() {
       return;
     }
 
+    /* 1) Make sure a working token exists; otherwise ask for it and continue afterwards. */
+    let activeKey = await anthropicCompat.getKey?.();
+    if (!activeKey) {
+      pendingRunRef.current = true;
+      setKeyModalNotice(keyNoticeFromCode("no_key"));
+      setKeyModalOpen(true);
+      return;
+    }
+
+    if (anthropic.status !== "connected") {
+      const ok = await anthropic.verify();
+      if (!ok) {
+        pendingRunRef.current = true;
+        setKeyModalNotice("Please connect a valid Anthropic API key to run the AI audit.");
+        setKeyModalOpen(true);
+        return;
+      }
+      activeKey = (await anthropicCompat.getKey?.()) ?? activeKey;
+    }
+
     try {
       setClaudeLoading(true);
       setChatMessages([]);
 
-      /* The audit route scans the live container itself, so no report is required first. */
+      /* 2) Send the IDs (and the report we already have) together with the token. */
       const aiRes = await fetch("/api/auth/healthcheck/ai", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(ids),
+        headers: { "Content-Type": "application/json", "x-anthropic-key": activeKey },
+        body: JSON.stringify({ ...ids, ...(report ? { healthReport: report } : {}) }),
       });
 
-      const aiData = parseHealthCheckAiResponse(
-        await aiRes.json().catch(() => null)
-      );
-
-      /* Key missing or no longer valid: ask for a new one, then resume this audit. */
-      if (aiData?.code === "no_key" || aiData?.code === "invalid_key") {
-        anthropicKey.markNoKey();
-        openKeyModal(
-          aiData.code === "invalid_key"
-            ? "Your saved API key is no longer valid. Enter a new key to run the audit."
-            : "Connect your Anthropic API key to run the Claude AI Audit.",
-          true
-        );
-        return;
-      }
+      const aiData = (await aiRes.json().catch(() => null)) as any;
 
       if (!aiRes.ok || !aiData?.success) {
+        /* Token problems reopen the popup instead of showing a raw error. */
+        if (aiData?.code && ["no_key", "invalid_key", "quota", "rate_limit"].includes(aiData.code)) {
+          if (aiData.code === "invalid_key" || aiData.code === "quota") anthropic.disconnect();
+          else anthropicCompat.markDisconnected?.();
+
+          pendingRunRef.current = false;
+          setKeyModalNotice(keyNoticeFromCode(aiData.code, aiData.error));
+          setKeyModalOpen(true);
+          setClaudeError(keyNoticeFromCode(aiData.code, aiData.error));
+          return;
+        }
         throw new Error(aiData?.error || `AI audit failed (${aiRes.status}).`);
       }
 
       const text = String(aiData.resultText ?? "").trim();
       if (!text) throw new Error("Claude returned an empty audit response.");
 
-      const fresh = normalizeHealthReport({
-        healthReport: aiData.healthReport,
-      });
-
-      if (fresh) {
-        saveHealthCheckReport(ids, fresh);
-        setReport(fresh);
-      } else if (!report) {
-        const fetchedReport = await fetchReport(ids);
-
-        saveHealthCheckReport(ids, fetchedReport);
-        setReport(fetchedReport);
-      }
+      const fresh = normalizeHealthReport({ healthReport: aiData.healthReport });
+      if (fresh) setReport(fresh);
+      else if (!report) setReport(await fetchReport(ids));
 
       setClaudeText(text);
       setClaudeTruncated(Boolean(aiData.truncated));
-
-      if (aiData.fallback) {
-        setClaudeNotice("AI is unavailable right now, so this is the built-in rule-based audit.");
-      }
     } catch (error) {
       console.error("Claude AI Audit Error:", error);
       setClaudeError(error instanceof Error ? error.message : "Unable to run Claude AI Audit.");
     } finally {
       setClaudeLoading(false);
     }
+  };
+
+  /* Called by the popup after the user pastes a token; resumes the audit that was waiting. */
+  const handleConnectKey = async (key: string) => {
+    const res = await anthropic.connect(key);
+    if (res.ok && pendingRunRef.current) {
+      pendingRunRef.current = false;
+      setKeyModalOpen(false);
+      setTimeout(() => {
+        void handleClaudeHealthCheck();
+      }, 0);
+    }
+    return res;
+  };
+
+  const openKeyManager = () => {
+    setKeyModalNotice(null);
+    setKeyModalOpen(true);
   };
 
   /* ---------- CHAT WITH CLAUDE ---------- */
@@ -656,17 +483,26 @@ export default function HealthCheckPage() {
     setChatSending(true);
 
     try {
+      const chatKey = await anthropicCompat.getKey?.();
+      if (!chatKey) {
+        setChatMessages([...nextMessages, { role: "assistant", content: "Please connect your Anthropic API key first." }]);
+        setKeyModalNotice(keyNoticeFromCode("no_key"));
+        setKeyModalOpen(true);
+        return;
+      }
+
       const res = await fetch("/api/auth/healthcheck/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-anthropic-key": chatKey },
         body: JSON.stringify({ healthReport: report, claudeText, messages: nextMessages }),
       });
 
       const data = await res.json().catch(() => null);
 
       if (data?.code === "no_key" || data?.code === "invalid_key") {
-        anthropicKey.markNoKey();
-        openKeyModal("Your API key is no longer connected. Enter a key, then send your message again.", false);
+        anthropic.markNoKey();
+        setKeyModalNotice("Your API key is no longer connected. Enter a key, then send your message again.");
+        setKeyModalOpen(true);
       }
 
       if (!res.ok || !data?.success) {
@@ -817,11 +653,9 @@ export default function HealthCheckPage() {
     const data = await res.json().catch(() => null);
 
     if (data?.code === "no_key" || data?.code === "invalid_key") {
-      anthropicKey.markNoKey();
-      openKeyModal(
-        "Your API key is no longer connected. Enter a key, then try the AI fix again.",
-        false
-      );
+      anthropic.markNoKey();
+      setKeyModalNotice("Your API key is no longer connected. Enter a key, then try the AI fix again.");
+      setKeyModalOpen(true);
     }
 
     if (!res.ok || !data?.success) {
@@ -917,12 +751,12 @@ export default function HealthCheckPage() {
     <div>
       <ApiKeyModal
         open={keyModalOpen}
-        notice={keyNotice}
-        checking={anthropicKey.checking}
-        hasKey={anthropicKey.status === "connected" || anthropicKey.status === "disconnected"}
+        notice={keyModalNotice}
+        checking={anthropic.checking}
+        hasKey={hasKey}
         onConnect={handleConnectKey}
-        onRemove={() => void anthropicKey.disconnect()}
-        onClose={closeKeyModal}
+        onRemove={anthropic.disconnect}
+        onClose={() => setKeyModalOpen(false)}
       />
 
       {/* HERO */}
@@ -983,8 +817,10 @@ export default function HealthCheckPage() {
                   </>
                 )}
               </button>
+            </div>
 
-              <ConnectionBadge status={anthropicKey.status} onManage={() => openKeyModal("", false)} />
+            <div className="mt-4 flex justify-center">
+              <ConnectionBadge status={anthropic.status} onManage={openKeyManager} />
             </div>
 
             {!store.selectedWorkspaceId && (
@@ -1095,7 +931,9 @@ export default function HealthCheckPage() {
                 Download PDF
               </button>
 
-              <ConnectionBadge status={anthropicKey.status} onManage={() => openKeyModal("", false)} />
+              <div className="ml-auto">
+                <ConnectionBadge status={anthropic.status} onManage={openKeyManager} />
+              </div>
             </div>
 
             {pageError && <p className="mt-3 text-[12.5px] text-(--danger)">{pageError}</p>}
@@ -1206,6 +1044,22 @@ export default function HealthCheckPage() {
 
 const itemName = (item: AffectedItem): string =>
   item?.name || item?.id || "Unnamed";
+
+function getGtmResourceId(
+  item: AffectedItem,
+  resourceType: GtmResourceType
+): string | null {
+  if (resourceType === "tags") {
+    const tag = item as GtmAffectedItem;
+    return tag.tagId != null ? String(tag.tagId) : null;
+  }
+  if (resourceType === "triggers") {
+    const trigger = item as GtmAffectedItem;
+    return trigger.triggerId != null ? String(trigger.triggerId) : null;
+  }
+  const variable = item as GtmAffectedItem;
+  return variable.variableId != null ? String(variable.variableId) : null;
+}
 
 function RuleTitleWithTooltip({
   title,
@@ -2114,58 +1968,16 @@ function FragmentRow({
               </div>
             )}
 
-            <AffectedList label="Affected Tags" items={result.affectedTags} resourceType={"tags"} selection={{
-              accountId: undefined,
-              containerId: undefined,
-              workspaceId: undefined
-            }} onDeleted={function (): Promise<void> {
-              throw new Error("Function not implemented.");
-            } } />
-            <AffectedList
-              label="Affected Triggers"
-              items={result.affectedTriggers} resourceType={"tags"} selection={{
-                accountId: undefined,
-                containerId: undefined,
-                workspaceId: undefined
-              }} onDeleted={function (): Promise<void> {
-                throw new Error("Function not implemented.");
-              } }            />
-            <AffectedList
-              label="Affected Variables"
-              items={result.affectedVariables} resourceType={"tags"} selection={{
-                accountId: undefined,
-                containerId: undefined,
-                workspaceId: undefined
-              }} onDeleted={function (): Promise<void> {
-                throw new Error("Function not implemented.");
-              } }            />
-            <AffectedList
-              label="Unused Tags"
-              items={result.unusedTags} resourceType={"tags"} selection={{
-                accountId: undefined,
-                containerId: undefined,
-                workspaceId: undefined
-              }} onDeleted={function (): Promise<void> {
-                throw new Error("Function not implemented.");
-              } }            />
-            <AffectedList
-              label="Unused Triggers"
-              items={result.unusedTriggers} resourceType={"tags"} selection={{
-                accountId: undefined,
-                containerId: undefined,
-                workspaceId: undefined
-              }} onDeleted={function (): Promise<void> {
-                throw new Error("Function not implemented.");
-              } }            />
-            <AffectedList
-              label="Unused Variables"
-              items={result.unusedVariables} resourceType={"tags"} selection={{
-                accountId: undefined,
-                containerId: undefined,
-                workspaceId: undefined
-              }} onDeleted={function (): Promise<void> {
-                throw new Error("Function not implemented.");
-              } }            />
+            <AffectedList label="Affected Tags" items={result.affectedTags} resourceType="tags" />
+            <AffectedList label="Affected Triggers" items={result.affectedTriggers} resourceType="triggers" />
+            <AffectedList label="Affected Variables" items={result.affectedVariables} resourceType="variables" />
+            <AffectedList label="Unused Tags" items={(result as any).unusedTags} resourceType="tags" />
+            <AffectedList label="Unused Triggers" items={(result as any).unusedTriggers} resourceType="triggers" />
+            <AffectedList label="Unused Variables" items={(result as any).unusedVariables} resourceType="variables" />
+
+            <AffectedList label={result.passed ? "Checked tags — passed" : "Other tags checked — no issue"} items={(result as any).passedTags} resourceType="tags" total={(result as any).passedCounts?.tags} tone="pass" />
+            <AffectedList label={result.passed ? "Checked triggers — passed" : "Other triggers checked — no issue"} items={(result as any).passedTriggers} resourceType="triggers" total={(result as any).passedCounts?.triggers} tone="pass" />
+            <AffectedList label={result.passed ? "Checked variables — passed" : "Other variables checked — no issue"} items={(result as any).passedVariables} resourceType="variables" total={(result as any).passedCounts?.variables} tone="pass" />
           </td>
         </tr>
       )}
@@ -2404,163 +2216,73 @@ function SeverityBadge({ severity }: { severity: string }) {
 function AffectedList({
   label,
   items,
-  resourceType,
-  selection,
-  onDeleted,
+  resourceType = "tags",
+  total,
+  tone = "issue",
 }: {
   label: string;
   items?: GtmAffectedItem[];
-  resourceType: GtmResourceType;
-  selection: GtmSelection;
-  onDeleted: () => Promise<void>;
+  resourceType?: GtmResourceType;
+  total?: number;
+  tone?: "issue" | "pass";
 }) {
+  const [showAll, setShowAll] = useState(false);
   if (!items || items.length === 0) return null;
+
+  const LIMIT = 12;
+  const visibleItems = showAll ? items : items.slice(0, LIMIT);
+  const hiddenCount = items.length - visibleItems.length;
+  const chip =
+    tone === "pass"
+      ? "inline-flex items-center rounded-md border border-line bg-card px-2.5 py-1 text-[11.5px] text-fg"
+      : "inline-flex items-center rounded-md border border-(--danger)/20 bg-(--danger)/8 px-2.5 py-1 text-[11.5px] text-fg";
 
   return (
     <div className="mt-4">
       <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-        {label}
+        {label}{typeof total === "number" ? ` (${total})` : ""}
       </h4>
 
       <div className="flex flex-wrap gap-2">
-        {items.map((item, index) => (
-          <div
-            key={`${getGtmResourceId(item, resourceType) ?? itemName(item)}-${index}`}
-            className="inline-flex items-center gap-2 rounded-md border border-line bg-card px-3 py-1.5"
+        {visibleItems.map((item, index) => {
+          const content = itemName(item);
+          const key = `${getGtmResourceId(item, resourceType) ?? content}-${index}`;
+          return item.editUrl ? (
+            <a
+              key={key}
+              href={item.editUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(event) => event.stopPropagation()}
+              className={`${chip} hover:opacity-80 transition-opacity`}
+            >
+              {content}
+              {item.detail && <span className="ml-1.5 font-mono text-[10.5px] opacity-70">→ {item.detail}</span>}
+            </a>
+          ) : (
+            <span key={key} className={chip}>
+              {content}
+              {item.detail && <span className="ml-1.5 font-mono text-[10.5px] opacity-70">→ {item.detail}</span>}
+            </span>
+          );
+        })}
+
+        {!showAll && items.length > LIMIT && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowAll(true);
+            }}
+            className="rounded-md border border-line px-3 py-1.5 text-xs text-muted hover:text-fg"
           >
-            {item?.editUrl ? (
-              <a
-                href={item.editUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(event) => event.stopPropagation()}
-                className="text-xs font-medium text-fg hover:text-accent"
-              >
-                {itemName(item)}
-              </a>
-            ) : (
-              <span className="text-xs font-medium text-fg">
-                {itemName(item)}
-              </span>
-            )}
-            <DeleteGtmItemButton
-              item={item}
-              resourceType={resourceType}
-              selection={selection}
-              onDeleted={onDeleted}
-            />
-          </div>
-        ))}
+            Show {items.length - LIMIT} more
+          </button>
+        )}
+
+        {hiddenCount > 0 && showAll && <span className="px-2 py-1.5 text-xs text-faint">+{hiddenCount} not listed</span>}
       </div>
     </div>
-  );
-}
-
-function getGtmResourceId(
-  item: GtmAffectedItem,
-  resourceType: GtmResourceType
-): string | null {
-  const idField =
-    resourceType === "tags"
-      ? "tagId"
-      : resourceType === "triggers"
-        ? "triggerId"
-        : "variableId";
-  const candidate = item?.id ?? item?.[idField];
-  if (typeof candidate === "string" && candidate.trim()) return candidate;
-  if (typeof candidate === "number") return String(candidate);
-  if (typeof item?.path === "string") {
-    const pathId = item.path.split("/").pop();
-    return pathId || null;
-  }
-  return null;
-}
-
-function DeleteGtmItemButton({
-  item,
-  resourceType,
-  selection,
-  onDeleted,
-}: {
-  item: GtmAffectedItem;
-  resourceType: GtmResourceType;
-  selection: GtmSelection;
-  onDeleted: () => Promise<void>;
-}) {
-  const [deleting, setDeleting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const itemId = getGtmResourceId(item, resourceType);
-  const hasSelection =
-    Boolean(selection.accountId) &&
-    Boolean(selection.containerId) &&
-    Boolean(selection.workspaceId);
-
-  const handleDelete = async () => {
-    if (!itemId || !selection.accountId || !selection.containerId || !selection.workspaceId) {
-      setError("This GTM item cannot be deleted because its ID or workspace is missing.");
-      return;
-    }
-
-    const name = itemName(item);
-    if (!window.confirm(`Are you sure you want to delete "${name}" from this GTM workspace?`)) {
-      return;
-    }
-
-    const idParam =
-      resourceType === "tags"
-        ? "tagId"
-        : resourceType === "triggers"
-          ? "triggerId"
-          : "variableId";
-    const query = new URLSearchParams({
-      accountId: selection.accountId,
-      containerId: selection.containerId,
-      workspaceId: selection.workspaceId,
-      [idParam]: itemId,
-    });
-
-    setDeleting(true);
-    setError(null);
-    try {
-      const response = await fetch(`/api/auth/gtm/${resourceType}?${query}`, {
-        method: "DELETE",
-      });
-      const data = await response.json().catch(() => null);
-      if (!response.ok || !data?.success) {
-        throw new Error(data?.error || `Could not delete ${name}.`);
-      }
-      await onDeleted();
-    } catch (deleteError) {
-      setError(
-        deleteError instanceof Error
-          ? deleteError.message
-          : `Could not delete ${name}.`
-      );
-    } finally {
-      setDeleting(false);
-    }
-  };
-
-  return (
-    <span className="inline-flex items-center gap-2">
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          void handleDelete();
-        }}
-        disabled={deleting || !itemId || !hasSelection}
-        title={!itemId ? "GTM item ID is unavailable" : "Delete this GTM item"}
-        className="text-[11px] font-medium text-(--danger) hover:underline disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {deleting ? "Deleting…" : "Delete"}
-      </button>
-      {error && (
-        <span role="alert" className="text-[11px] text-(--danger)">
-          {error}
-        </span>
-      )}
-    </span>
   );
 }
 

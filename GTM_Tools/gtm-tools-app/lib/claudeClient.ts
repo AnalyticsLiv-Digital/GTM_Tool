@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 
 /**
  * One place that decides HOW the server talks to Claude.
- * Users never paste or see a key.
+ * User-provided keys are passed only on the server from an encrypted HttpOnly cookie.
  *
  * Mode A - Google Cloud (Vertex AI), no Anthropic API key:
  *   CLAUDE_PROVIDER=vertex
@@ -29,9 +29,21 @@ export class ClaudeNotConfiguredError extends Error {
   }
 }
 
-export async function getClaude(): Promise<ClaudeConnection> {
-  const provider = process.env.CLAUDE_PROVIDER?.trim().toLowerCase();
+export async function getClaude(
+  options: { userApiKey?: string } = {}
+): Promise<ClaudeConnection> {
   const model = process.env.CLAUDE_MODEL?.trim();
+  const userApiKey = options.userApiKey?.trim();
+
+  if (userApiKey) {
+    return {
+      client: new Anthropic({ apiKey: userApiKey }),
+      model: model || "claude-haiku-5-5",
+      mode: "api-key",
+    };
+  }
+
+  const provider = process.env.CLAUDE_PROVIDER?.trim().toLowerCase();
 
   if (provider === "vertex") {
     const projectId = process.env.GOOGLE_CLOUD_PROJECT?.trim();

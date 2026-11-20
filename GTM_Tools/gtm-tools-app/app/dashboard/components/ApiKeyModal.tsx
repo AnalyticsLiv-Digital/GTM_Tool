@@ -96,8 +96,9 @@ export function ApiKeyModal({
         </div>
 
         <p className="text-[13px] text-muted leading-relaxed mb-4">
-          Your key is verified first, then kept encrypted in a secure cookie in this browser. It&apos;s
-          never saved to any database — our server uses it only to run your own audits.
+          Your key is verified first, then kept in an encrypted, HttpOnly cookie in this browser. It
+          is never saved to the database or localStorage. You can use a Claude account that is
+          different from your Google/GTM account.
         </p>
 
         {notice && (

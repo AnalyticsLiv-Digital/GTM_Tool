@@ -22,8 +22,8 @@ export async function POST(req: NextRequest) {
   const cfg = getMcpConfig();
   if (!cfg) return fail("server_error", "The connector is not configured.", 503);
 
-  const limit = rateLimit(`mcp-token:${clientIp(req)}`, 30, 60_000);
-  if (!limit.ok) return fail("slow_down", "Too many requests.", 429);
+  const allowed = rateLimit(`mcp-token:${clientIp(req)}`, 30, 60_000);
+  if (!allowed) return fail("slow_down", "Too many requests.", 429);
 
   const form = new URLSearchParams(await req.text());
 
