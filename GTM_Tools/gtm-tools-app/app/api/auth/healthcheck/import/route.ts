@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { OfficeParser } from "officeparser";
-import pdfParse from "pdf-parse";
+import pdf from "pdf-parse/lib/pdf-parse.js";
 import * as XLSX from "xlsx";
 
 export const runtime = "nodejs";
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
       }).join("\n\n");
 
     } else if (extension === "pdf") {
-      const parsed = await pdfParse(Buffer.from(await file.arrayBuffer()));
+      const parsed = await pdf(Buffer.from(await file.arrayBuffer()));
       text = parsed.text;
       
     } else if (extension === "pptx") {

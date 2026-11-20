@@ -5,13 +5,10 @@ import { classifyAnthropicError } from "@/lib/anthropicError";
 import { clearAnthropicKeyCookie, readAnthropicKey } from "@/lib/anthropicKeyCookie";
 import { getValidGoogleAccessToken } from "@/lib/googleAuth";
 import { gtmList } from "@/lib/gtm/list";
-import {
-  classifyAnthropicError,
-} from "@/lib/anthropicError";
 import { rateLimit, clientIp } from "@/lib/rateLimit";
 
 export const maxDuration = 60;
- 
+
 type GtmRecord = Record<string, unknown>;
 type ImportedGtmData = {
   tags: GtmRecord[];
@@ -93,9 +90,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: `Chat limit reached. Try again in ${Math.ceil(limit.retryAfterSec / 60)} minute(s).`,
+          error: "Chat limit reached. Try again in an hour.",
         },
-        { status: 429, headers: { "Retry-After": String(limit.retryAfterSec) } }
+        { status: 429, headers: { "Retry-After": "3600" } }
       );
     }
 
@@ -109,6 +106,14 @@ export async function POST(req: NextRequest) {
     }
 
     const failed = (healthReport?.results ?? []).filter((r: any) => !r.passed);
+    const prompt = [
+      "Review the GTM health check and respond to the user's latest message.",
+      healthReport ? `Health check report:\n${JSON.stringify(healthReport)}` : "",
+      claudeText ? `Existing audit report:\n${claudeText}` : "",
+      `Conversation:\n${messages.map((message: any) => `${message.role}: ${message.content}`).join("\n")}`,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
 
     const { client, model } = await getClaude({ userApiKey: userApiKey ?? undefined });
     const response = await client.messages.create({
@@ -124,7 +129,7 @@ export async function POST(req: NextRequest) {
       .join("\n\n")
       .trim();
 
-    return NextResponse.json({ success: true, reply });
+    return NextResponse.json({ success: true, reply: resultText });
   } catch (error) {
     if (error instanceof ClaudeNotConfiguredError) {
       console.error("[claude] Not configured:", String(error));

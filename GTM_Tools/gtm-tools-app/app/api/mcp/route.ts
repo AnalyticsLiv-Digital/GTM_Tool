@@ -40,11 +40,11 @@ export async function POST(req: NextRequest) {
     return unauthorized(req, "The access token is invalid or expired.");
   }
 
-  const limit = rateLimit(`mcp:${clientIp(req)}`, 60, 60_000);
-  if (!limit.ok) {
-    return NextResponse.json(
-      { error: "Too many requests." },
-      { status: 429, headers: { ...CORS_HEADERS, "Retry-After": String(limit.retryAfterSec) } }
+  const allowed = rateLimit(`mcp:${clientIp(req)}`, 60, 60_000);
+if (!allowed) {
+  return NextResponse.json(
+    { error: "Too many requests." },
+    { status: 429, headers: { ...CORS_HEADERS, "Retry-After": "60" } }
     );
   }
 
