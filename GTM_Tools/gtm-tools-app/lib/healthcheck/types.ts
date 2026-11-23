@@ -33,6 +33,15 @@ export type HealthCheckResult = {
   unusedTriggers?: AffectedItem[];
   unusedVariables?: AffectedItem[];
 
+  passedTags?: AffectedItem[];
+  passedTriggers?: AffectedItem[];
+  passedVariables?: AffectedItem[];
+  passedCounts?: {
+    tags?: number;
+    triggers?: number;
+    variables?: number;
+  };
+
   summaryTable?: SummaryRow[];
 
   gtmLinks?: {
